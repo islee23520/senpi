@@ -74,28 +74,28 @@ describe("DEFAULT variant — per-section landmarks", () => {
 // Cardinal rules R1-R4 (4 tests, one each)
 // ============================================================================
 
-describe("DEFAULT variant — cardinal rules", () => {
+describe("SYSTEM block — cardinal rules", () => {
 	it("R1: quotes user requests and constraints verbatim", () => {
-		expect(MERGED_COMPACTION_PROMPT_USER).toContain(
+		expect(MERGED_COMPACTION_PROMPT_SYSTEM).toContain(
 			"R1. Quote user requests and constraints VERBATIM. Do not paraphrase.",
 		);
 	});
 
-	it("R2: preserves file paths and code references exactly", () => {
-		expect(MERGED_COMPACTION_PROMPT_USER).toContain(
-			"R2. Preserve file paths, function names, and code references EXACTLY as mentioned.",
+	it('R2: writes "None." for empty sections, never deletes a section', () => {
+		expect(MERGED_COMPACTION_PROMPT_SYSTEM).toContain(
+			'R2. If a section has no content, write "None." Never delete a section.',
 		);
 	});
 
 	it("R3: treats previous summary fields as immutable", () => {
-		expect(MERGED_COMPACTION_PROMPT_USER).toContain(
+		expect(MERGED_COMPACTION_PROMPT_SYSTEM).toContain(
 			"R3. Where a previous summary is supplied, treat its User Requests, Final Goal, and Constraints fields as IMMUTABLE. Append, never rewrite, those three sections.",
 		);
 	});
 
-	it("R4: resumes from where the conversation left off", () => {
-		expect(MERGED_COMPACTION_PROMPT_USER).toContain(
-			"R4. RESUME, DON'T RESTART. Continue the existing task. Do not suggest starting over.",
+	it("R4: preserves every session_id, file path, and identifier byte-for-byte", () => {
+		expect(MERGED_COMPACTION_PROMPT_SYSTEM).toContain(
+			"R4. Preserve every session_id, file path, and identifier byte-for-byte.",
 		);
 	});
 });
