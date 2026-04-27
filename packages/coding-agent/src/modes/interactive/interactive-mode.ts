@@ -1666,6 +1666,8 @@ export class InteractiveMode {
 					}
 				})();
 			},
+			getMessageRevision: () => this.session.getMessageRevision(),
+			applyCompaction: (precomputed, options) => this.session.applyCompaction(precomputed, options),
 			getSystemPrompt: () => this.session.systemPrompt,
 		});
 
@@ -2233,7 +2235,16 @@ export class InteractiveMode {
 
 			// If extending CustomEditor, copy app-level handlers
 			// Use duck typing since instanceof fails across jiti module boundaries
-			const customEditor = newEditor as unknown as Record<string, unknown>;
+			type CustomEditorLike = typeof newEditor & {
+				actionHandlers?: unknown;
+				onEscape?: () => void;
+				onCtrlD?: () => void;
+				onUp?: () => void;
+				onDown?: () => void;
+				onPasteImage?: () => void;
+				onExtensionShortcut?: (data: string) => boolean | undefined;
+			};
+			const customEditor: CustomEditorLike = newEditor;
 			if ("actionHandlers" in customEditor && customEditor.actionHandlers instanceof Map) {
 				if (!customEditor.onEscape) {
 					customEditor.onEscape = () => this.defaultEditor.onEscape?.();

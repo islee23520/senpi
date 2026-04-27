@@ -1,5 +1,13 @@
 # changes
 
+## Compaction Apply ExtensionContext API (2026-04-27)
+
+- Changed `src/core/agent-session.ts` so context-affecting message mutations advance an in-memory monotonic message revision, and added `getMessageRevision()` plus `applyCompaction(precomputed, { reason, expectedRevision })` for compare-and-apply speculative compaction.
+- Extended the unified `_executeCompaction()` pipeline to accept a precomputed `CompactionResult` while preserving overflow rejection, compaction append, context rebuild, and compaction event emission semantics.
+- This was changed in core because extensions cannot atomically append compaction entries, rebuild `agent.state.messages`, or guard precomputed summaries against stale message context from outside `AgentSession`.
+- Files modified: `agent-session.ts`, `extensions/types.ts`, `extensions/runner.ts`, `modes/interactive/interactive-mode.ts`.
+- Expected merge conflict zone on upstream sync: HIGH. Preserve the revision guard and keep `applyCompaction()` as a v2 prep API; the v1 builtin compaction extension must not consume it.
+
 ## Unified Compaction Pipeline (2026-04-27)
 
 - Changed `src/core/agent-session.ts` so manual, threshold, overflow, pre-prompt, and extension-triggered compaction routes share a private `_executeCompaction()` pipeline for preparation, extension hook execution, summary generation, pre-append token simulation, session append, context rebuild, and completion event emission.

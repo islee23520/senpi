@@ -72,7 +72,12 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.js";
 import { emitSessionShutdownEvent } from "./extensions/runner.js";
-import type { CompactionReason, CompactionRejectionCause } from "./extensions/types.js";
+import type {
+	ApplyCompactionOptions,
+	ApplyCompactionResult,
+	CompactionReason,
+	CompactionRejectionCause,
+} from "./extensions/types.js";
 import { type BashExecutionMessage, type CustomMessage, filterContextExcludedMessages } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
@@ -185,6 +190,7 @@ interface CompactionExecutionRequest {
 	willRetry: boolean;
 	skipAbortedCheck?: boolean;
 	lastAssistantMessage?: AgentMessage;
+	precomputed?: CompactionResult;
 }
 
 type CompactionExecutionResult =
@@ -302,6 +308,7 @@ export class AgentSession {
 	private _compactionAbortController: AbortController | undefined = undefined;
 	private _autoCompactionAbortController: AbortController | undefined = undefined;
 	private _overflowRecoveryAttempted = false;
+	private _messageRevision = 0;
 
 	// Branch summarization state
 	private _branchSummaryAbortController: AbortController | undefined = undefined;
@@ -490,6 +497,14 @@ export class AgentSession {
 		});
 	}
 
+	private _incrementMessageRevision(): void {
+		this._messageRevision++;
+	}
+
+	getMessageRevision(): number {
+		return this._messageRevision;
+	}
+
 	// Track last assistant message for auto-compaction check
 	private _lastAssistantMessage: AssistantMessage | undefined = undefined;
 
@@ -581,6 +596,7 @@ export class AgentSession {
 					event.message.display,
 					event.message.details,
 				);
+				this._incrementMessageRevision();
 			} else if (
 				event.message.role === "user" ||
 				event.message.role === "assistant" ||
@@ -588,6 +604,7 @@ export class AgentSession {
 			) {
 				// Regular LLM message - persist as SessionMessageEntry
 				this.sessionManager.appendMessage(event.message);
+				this._incrementMessageRevision();
 			}
 			// Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
 
@@ -1326,6 +1343,7 @@ export class AgentSession {
 				message.display,
 				message.details,
 			);
+			this._incrementMessageRevision();
 			this._emit({ type: "message_start", message: appMessage });
 			this._emit({ type: "message_end", message: appMessage });
 		}
@@ -1690,67 +1708,106 @@ export class AgentSession {
 		}
 	}
 
+	async applyCompaction(
+		precomputed: CompactionResult,
+		options: ApplyCompactionOptions,
+	): Promise<ApplyCompactionResult> {
+		if (options.expectedRevision !== undefined && options.expectedRevision !== this._messageRevision) {
+			return { applied: false, reason: "stale" };
+		}
+
+		this._compactionAbortController = new AbortController();
+		this._emit({ type: "compaction_start", reason: options.reason });
+
+		try {
+			const execution = await this._executeCompaction({
+				reason: options.reason,
+				willRetry: false,
+				precomputed,
+			});
+			if (!execution.accepted) {
+				return { applied: false, reason: "rejected" };
+			}
+			return { applied: true, reason: "ok" };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const aborted = message === "Compaction cancelled" || (error instanceof Error && error.name === "AbortError");
+			this._emit({
+				type: "compaction_end",
+				reason: options.reason,
+				result: undefined,
+				aborted,
+				willRetry: false,
+				errorMessage: aborted ? undefined : `Compaction failed: ${message}`,
+			});
+			return { applied: false, reason: "rejected" };
+		} finally {
+			this._compactionAbortController = undefined;
+		}
+	}
+
 	private async _executeCompaction(request: CompactionExecutionRequest): Promise<CompactionExecutionResult> {
 		if (!this.model) {
 			throw new Error(formatNoModelSelectedMessage());
 		}
 
 		const requestId = randomUUID();
-		const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(this.model);
 		const pathEntries = this.sessionManager.getBranch();
 		const settings = this.settingsManager.getCompactionSettings();
-		const preparation = prepareCompaction(pathEntries, settings);
-
-		if (!preparation) {
-			const lastEntry = pathEntries[pathEntries.length - 1];
-			if (lastEntry?.type === "compaction") {
-				throw new Error("Already compacted");
-			}
-			throw new Error("Nothing to compact (session too small)");
-		}
 
 		const signal = this._compactionAbortController?.signal ?? this._autoCompactionAbortController?.signal;
 		if (!signal) {
 			throw new Error("Compaction abort controller unavailable");
 		}
 
-		let extensionCompaction: CompactionResult | undefined;
-		let fromExtension = false;
+		let compactionResult = request.precomputed;
+		let fromExtension = request.precomputed !== undefined;
 
-		if (this._extensionRunner.hasHandlers("session_before_compact")) {
-			const extensionResult = (await this._extensionRunner.emit({
-				type: "session_before_compact",
-				reason: request.reason,
-				willRetry: request.willRetry,
-				requestId,
-				preparation,
-				branchEntries: pathEntries,
-				customInstructions: request.customInstructions,
-				signal,
-			})) as SessionBeforeCompactResult | undefined;
+		if (!compactionResult) {
+			const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(this.model);
+			const preparation = prepareCompaction(pathEntries, settings);
 
-			if (extensionResult?.cancel) {
-				return await this._rejectCompaction(request, requestId, "cancelled-by-extension", true);
+			if (!preparation) {
+				const lastEntry = pathEntries[pathEntries.length - 1];
+				if (lastEntry?.type === "compaction") {
+					throw new Error("Already compacted");
+				}
+				throw new Error("Nothing to compact (session too small)");
 			}
 
-			if (extensionResult?.compaction) {
-				extensionCompaction = extensionResult.compaction;
-				fromExtension = true;
-			}
-		}
-
-		const compactionResult = extensionCompaction
-			? extensionCompaction
-			: await compact(
+			if (this._extensionRunner.hasHandlers("session_before_compact")) {
+				const extensionResult = (await this._extensionRunner.emit({
+					type: "session_before_compact",
+					reason: request.reason,
+					willRetry: request.willRetry,
+					requestId,
 					preparation,
-					this.model,
-					apiKey,
-					headers,
-					request.customInstructions,
+					branchEntries: pathEntries,
+					customInstructions: request.customInstructions,
 					signal,
-					extraBody,
-					this.thinkingLevel,
-				);
+				})) as SessionBeforeCompactResult | undefined;
+
+				if (extensionResult?.cancel) {
+					return await this._rejectCompaction(request, requestId, "cancelled-by-extension", true);
+				}
+
+				if (extensionResult?.compaction) {
+					compactionResult = extensionResult.compaction;
+					fromExtension = true;
+				}
+			}
+
+			compactionResult ??= await compact(
+				preparation,
+				this.model,
+				apiKey,
+				headers,
+				request.customInstructions,
+				signal,
+				extraBody,
+				this.thinkingLevel,
+			);
+		}
 
 		if (signal.aborted) {
 			throw new Error("Compaction cancelled");
@@ -1774,6 +1831,7 @@ export class AgentSession {
 
 		const sessionContext = this.sessionManager.buildSessionContext();
 		this.agent.state.messages = sessionContext.messages;
+		this._incrementMessageRevision();
 
 		await this._extensionRunner.emit({
 			type: "session_compact",
@@ -1922,6 +1980,7 @@ export class AgentSession {
 			const messages = this.agent.state.messages;
 			if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
 				this.agent.state.messages = messages.slice(0, -1);
+				this._incrementMessageRevision();
 			}
 			if (requestReason) {
 				await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck);
@@ -2050,6 +2109,7 @@ export class AgentSession {
 				const lastMsg = messages[messages.length - 1];
 				if (lastMsg?.role === "assistant" && (lastMsg as AssistantMessage).stopReason === "error") {
 					this.agent.state.messages = messages.slice(0, -1);
+					this._incrementMessageRevision();
 				}
 
 				setTimeout(() => {
@@ -2311,6 +2371,8 @@ export class AgentSession {
 						}
 					})();
 				},
+				getMessageRevision: () => this.getMessageRevision(),
+				applyCompaction: (precomputed, options) => this.applyCompaction(precomputed, options),
 				getSystemPrompt: () => this.systemPrompt,
 			},
 			{
@@ -2564,6 +2626,7 @@ export class AgentSession {
 		const messages = this.agent.state.messages;
 		if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
 			this.agent.state.messages = messages.slice(0, -1);
+			this._incrementMessageRevision();
 		}
 
 		// Wait with exponential backoff (abortable)
@@ -2704,6 +2767,7 @@ export class AgentSession {
 
 			// Save to session
 			this.sessionManager.appendMessage(bashMessage);
+			this._incrementMessageRevision();
 		}
 	}
 
@@ -2737,6 +2801,7 @@ export class AgentSession {
 
 			// Save to session
 			this.sessionManager.appendMessage(bashMessage);
+			this._incrementMessageRevision();
 		}
 
 		this._pendingBashMessages = [];
@@ -2938,6 +3003,7 @@ export class AgentSession {
 			// Update agent state
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
+			this._incrementMessageRevision();
 
 			// Emit session_tree event
 			await this._extensionRunner.emit({

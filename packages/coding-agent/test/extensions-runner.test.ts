@@ -78,6 +78,8 @@ describe("ExtensionRunner", () => {
 		shutdown: () => {},
 		getContextUsage: () => undefined,
 		compact: () => {},
+		getMessageRevision: () => 0,
+		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
 		getSystemPrompt: () => "",
 	};
 
@@ -702,15 +704,12 @@ describe("ExtensionRunner", () => {
 	describe("provider registration", () => {
 		it("bindCore ignores invalid queued registrations and reports extension error", () => {
 			const runtime = createExtensionRuntime();
-			runtime.registerProvider(
-				"broken-provider",
-				{
-					streamSimple: (() => {
-						throw new Error("should not run");
-					}) as any,
+			const brokenProviderConfig: ProviderConfig = {
+				streamSimple: () => {
+					throw new Error("should not run");
 				},
-				"/tmp/broken-extension.ts",
-			);
+			};
+			runtime.registerProvider("broken-provider", brokenProviderConfig, "/tmp/broken-extension.ts");
 
 			const runner = new ExtensionRunner([], runtime, tempDir, sessionManager, modelRegistry);
 			const errors: string[] = [];
