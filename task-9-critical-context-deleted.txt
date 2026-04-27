@@ -1,0 +1,1 @@
+Negative test passes: DEFAULT variant does NOT contain '## Critical Context'
