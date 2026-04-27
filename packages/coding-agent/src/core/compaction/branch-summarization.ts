@@ -5,9 +5,12 @@
  * a summary of the branch being left so context isn't lost.
  */
 
+import { randomUUID } from "node:crypto";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { Model } from "@mariozechner/pi-ai";
 import { completeSimple } from "@mariozechner/pi-ai";
+import type { ExtensionRunner } from "../extensions/runner.js";
+import type { SessionBeforeCompactResult } from "../extensions/types.js";
 import {
 	convertToLlm,
 	createBranchSummaryMessage,
@@ -16,6 +19,7 @@ import {
 	isContextExcludedCustomMessage,
 } from "../messages.js";
 import type { ReadonlySessionManager, SessionEntry } from "../session-manager.js";
+import type { CompactionPreparation } from "./compaction.js";
 import { estimateTokens } from "./compaction.js";
 import {
 	computeFileLists,
@@ -80,6 +84,8 @@ export interface GenerateBranchSummaryOptions {
 	replaceInstructions?: boolean;
 	/** Tokens reserved for prompt + LLM response (default 16384) */
 	reserveTokens?: number;
+	/** Extension runner used to emit session_before_compact for branch summaries */
+	extensionRunner?: ExtensionRunner;
 }
 
 // ============================================================================
@@ -281,6 +287,28 @@ Use this EXACT format:
 
 Keep each section concise. Preserve exact file paths, function names, and error messages.`;
 
+function createBranchCompactionPreparation(
+	entries: SessionEntry[],
+	preparation: BranchPreparation,
+	reserveTokens: number,
+): CompactionPreparation {
+	const firstEntry = entries[0];
+
+	return {
+		firstKeptEntryId: firstEntry?.id ?? "",
+		messagesToSummarize: preparation.messages,
+		turnPrefixMessages: [],
+		isSplitTurn: false,
+		tokensBefore: preparation.totalTokens,
+		fileOps: preparation.fileOps,
+		settings: {
+			enabled: true,
+			reserveTokens,
+			keepRecentTokens: 0,
+		},
+	};
+}
+
 /**
  * Generate a summary of abandoned branch entries.
  *
@@ -300,16 +328,42 @@ export async function generateBranchSummary(
 		customInstructions,
 		replaceInstructions,
 		reserveTokens = 16384,
+		extensionRunner,
 	} = options;
 
 	// Token budget = context window minus reserved space for prompt + response
 	const contextWindow = model.contextWindow || 128000;
 	const tokenBudget = contextWindow - reserveTokens;
 
-	const { messages, fileOps } = prepareBranchEntries(entries, tokenBudget);
+	const branchPreparation = prepareBranchEntries(entries, tokenBudget);
+	const { messages, fileOps } = branchPreparation;
 
 	if (messages.length === 0) {
 		return { summary: "No content to summarize" };
+	}
+
+	if (extensionRunner?.hasHandlers("session_before_compact")) {
+		const preparation = createBranchCompactionPreparation(entries, branchPreparation, reserveTokens);
+		const result = (await extensionRunner.emit({
+			type: "session_before_compact",
+			reason: "branch",
+			willRetry: false,
+			requestId: randomUUID(),
+			preparation,
+			branchEntries: entries,
+			customInstructions,
+			signal,
+		})) as SessionBeforeCompactResult | undefined;
+
+		if (result?.cancel) {
+			return { aborted: true };
+		}
+
+		if (result?.compaction) {
+			return {
+				summary: result.compaction.summary,
+			};
+		}
 	}
 
 	// Transform to LLM-compatible messages, then serialize to text
