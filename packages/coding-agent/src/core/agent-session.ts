@@ -1764,7 +1764,6 @@ export class AgentSession {
 		let fromExtension = request.precomputed !== undefined;
 
 		if (!compactionResult) {
-			const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(this.model);
 			const preparation = prepareCompaction(pathEntries, settings);
 
 			if (!preparation) {
@@ -1797,16 +1796,19 @@ export class AgentSession {
 				}
 			}
 
-			compactionResult ??= await compact(
-				preparation,
-				this.model,
-				apiKey,
-				headers,
-				request.customInstructions,
-				signal,
-				extraBody,
-				this.thinkingLevel,
-			);
+			if (!compactionResult) {
+				const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(this.model);
+				compactionResult = await compact(
+					preparation,
+					this.model,
+					apiKey,
+					headers,
+					request.customInstructions,
+					signal,
+					extraBody,
+					this.thinkingLevel,
+				);
+			}
 		}
 
 		if (signal.aborted) {
