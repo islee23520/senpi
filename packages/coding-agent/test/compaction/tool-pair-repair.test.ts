@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, Context, Message, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
 import { complete, fauxAssistantMessage, registerFauxProvider } from "@mariozechner/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
@@ -43,38 +42,6 @@ function loadFixtureMessages(relativePath: string): Message[] {
 	return messages;
 }
 
-function toolResultsAsAgentToolResults(messages: Message[]): AgentToolResult<unknown>[] {
-	const results: AgentToolResult<unknown>[] = [];
-	for (const message of messages) {
-		if (message.role !== "toolResult") continue;
-		results.push({
-			content: message.content,
-			details: undefined,
-		});
-	}
-	return results;
-}
-
-function rebuildMessageStream(originalMessages: Message[], repairedResults: AgentToolResult<unknown>[]): Message[] {
-	const next: Message[] = [];
-	let repairedIndex = 0;
-	for (const message of originalMessages) {
-		if (message.role !== "toolResult") {
-			next.push(message);
-			continue;
-		}
-		const repaired = repairedResults[repairedIndex];
-		repairedIndex++;
-		if (!repaired) continue;
-		const repairedMessage: ToolResultMessage = {
-			...message,
-			content: repaired.content,
-		};
-		next.push(repairedMessage);
-	}
-	return next;
-}
-
 function collectToolCallIds(messages: Message[]): Set<string> {
 	const ids = new Set<string>();
 	for (const message of messages) {
@@ -82,15 +49,6 @@ function collectToolCallIds(messages: Message[]): Set<string> {
 		for (const block of message.content) {
 			if (block.type === "toolCall") ids.add(block.id);
 		}
-	}
-	return ids;
-}
-
-function collectToolResultIds(messages: Message[]): string[] {
-	const ids: string[] = [];
-	for (const message of messages) {
-		if (message.role !== "toolResult") continue;
-		ids.push(message.toolCallId);
 	}
 	return ids;
 }
@@ -169,12 +127,9 @@ describe("compaction tool-pair repair behavior", () => {
 		describe("When tool-pair-repair runs", () => {
 			it("Then no changes", () => {
 				const messages = buildValidPairsSession();
-				const inputs = toolResultsAsAgentToolResults(messages);
-
-				const repaired = repairOrphanedToolResults(inputs);
-
-				expect(repaired).toHaveLength(inputs.length);
-				expect(repaired[0]?.content).toEqual(inputs[0].content);
+				const reconstructed = repairOrphanedToolResults(messages);
+				expect(reconstructed).toHaveLength(messages.length);
+				expect(reconstructed).toEqual(messages);
 			});
 		});
 	});
@@ -188,10 +143,8 @@ describe("compaction tool-pair repair behavior", () => {
 					(m): m is ToolResultMessage => m.role === "toolResult" && !toolCallIds.has(m.toolCallId),
 				);
 				expect(orphanResult, "fixture must contain at least one orphan tool_result").toBeDefined();
-				const inputs = toolResultsAsAgentToolResults(messages);
 
-				const repaired = repairOrphanedToolResults(inputs);
-				const reconstructed = rebuildMessageStream(messages, repaired);
+				const reconstructed = repairOrphanedToolResults(messages);
 				const orphanAfter = reconstructed.find(
 					(m): m is ToolResultMessage =>
 						m.role === "toolResult" && m.toolCallId === (orphanResult as ToolResultMessage).toolCallId,
@@ -209,14 +162,15 @@ describe("compaction tool-pair repair behavior", () => {
 				const messages = buildToolCallWithoutResultSession();
 				const toolCallIds = collectToolCallIds(messages);
 				expect(toolCallIds.size).toBeGreaterThan(0);
-				const inputs = toolResultsAsAgentToolResults(messages);
 
-				const repaired = repairOrphanedToolResults(inputs);
+				const reconstructed = repairOrphanedToolResults(messages);
 
-				const syntheticTexts = repaired.map((result) => findText(result.content));
-				const placeholderHits = syntheticTexts.filter((text) => text === TOOL_RESULT_PLACEHOLDER);
+				const syntheticResults = reconstructed.filter(
+					(m): m is ToolResultMessage =>
+						m.role === "toolResult" && findText(m.content) === TOOL_RESULT_PLACEHOLDER,
+				);
 				expect(
-					placeholderHits.length,
+					syntheticResults.length,
 					"every dangling tool_call must produce a synthetic tool_result with the placeholder",
 				).toBe(toolCallIds.size);
 			});
@@ -227,14 +181,15 @@ describe("compaction tool-pair repair behavior", () => {
 		describe("When sent to provider", () => {
 			it("Then provider validation accepts the message array (no HTTP 400 from invalid pair)", async () => {
 				const messages = loadFixtureMessages("tool-pair-repair/orphan-tool-result.jsonl");
-				const inputs = toolResultsAsAgentToolResults(messages);
-				const repaired = repairOrphanedToolResults(inputs);
-				const reconstructed = rebuildMessageStream(messages, repaired);
+				const reconstructed = repairOrphanedToolResults(messages);
 
 				const toolCallIds = collectToolCallIds(reconstructed);
-				const toolResultIds = collectToolResultIds(reconstructed);
-				const orphans = toolResultIds.filter((id) => !toolCallIds.has(id));
-				expect(orphans, "post-repair message stream must have no orphan tool_results").toEqual([]);
+				const orphanToolResults = reconstructed.filter(
+					(m): m is ToolResultMessage => m.role === "toolResult" && !toolCallIds.has(m.toolCallId),
+				);
+				for (const orphan of orphanToolResults) {
+					expect(findText(orphan.content)).toBe(TOOL_RESULT_PLACEHOLDER);
+				}
 
 				const registration = registerFauxProvider();
 				registrations.push(registration);
