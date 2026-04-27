@@ -13,6 +13,7 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type {
@@ -1646,10 +1647,14 @@ export class AgentSession {
 
 			let extensionCompaction: CompactionResult | undefined;
 			let fromExtension = false;
+			const requestId = randomUUID();
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
 				const result = (await this._extensionRunner.emit({
 					type: "session_before_compact",
+					reason: "manual",
+					willRetry: false,
+					requestId,
 					preparation,
 					branchEntries: pathEntries,
 					customInstructions,
@@ -1712,6 +1717,9 @@ export class AgentSession {
 			if (this._extensionRunner && savedCompactionEntry) {
 				await this._extensionRunner.emit({
 					type: "session_compact",
+					reason: "manual",
+					requestId,
+					accepted: true,
 					compactionEntry: savedCompactionEntry,
 					fromExtension,
 				});
@@ -1905,10 +1913,14 @@ export class AgentSession {
 
 			let extensionCompaction: CompactionResult | undefined;
 			let fromExtension = false;
+			const requestId = randomUUID();
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
 				const extensionResult = (await this._extensionRunner.emit({
 					type: "session_before_compact",
+					reason,
+					willRetry,
+					requestId,
 					preparation,
 					branchEntries: pathEntries,
 					customInstructions: undefined,
@@ -1985,6 +1997,9 @@ export class AgentSession {
 			if (this._extensionRunner && savedCompactionEntry) {
 				await this._extensionRunner.emit({
 					type: "session_compact",
+					reason,
+					requestId,
+					accepted: true,
 					compactionEntry: savedCompactionEntry,
 					fromExtension,
 				});

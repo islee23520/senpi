@@ -83,6 +83,9 @@ export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
 
 export type ServiceTier = "auto" | "flex" | "priority";
+// biome-ignore format: keep literal union alias consistent with nearby ServiceTier style.
+export type CompactionReason = "manual" | "threshold" | "overflow" | "pre_prompt" | "branch" | "extension" | "speculative";
+export type CompactionRejectionCause = "cancelled-by-extension" | "would-overflow" | "circuit-breaker" | "per-turn-cap";
 
 // ============================================================================
 // UI Context
@@ -540,15 +543,33 @@ export interface SessionBeforeForkEvent {
 /** Fired before context compaction (can be cancelled or customized) */
 export interface SessionBeforeCompactEvent {
 	type: "session_before_compact";
+	/** Route source that requested compaction. This always preserves the source and is never used for rejection causes. */
+	reason: CompactionReason;
+	/** Whether the caller intends to retry the interrupted operation after compaction succeeds. */
+	willRetry: boolean;
+	/** Unique identifier tying before/after compaction events for one request. */
+	requestId: string;
 	preparation: CompactionPreparation;
 	branchEntries: SessionEntry[];
 	customInstructions?: string;
 	signal: AbortSignal;
 }
 
-/** Fired after context compaction */
+/** Fired after context compaction. Rejections keep `reason` as the route source and explain why via `rejectionCause`. */
 export interface SessionCompactEvent {
 	type: "session_compact";
+	/** Route source that requested compaction. Never source-swap this on rejection. */
+	reason: CompactionReason;
+	/** Unique identifier tying before/after compaction events for one request. */
+	requestId: string;
+	/** Whether the compaction result was accepted and appended to the session. */
+	accepted: boolean;
+	/**
+	 * Optional rejection explanation, only set when `accepted` is false.
+	 * Example: an extension cancelling manual compaction emits
+	 * `{ reason: "manual", accepted: false, rejectionCause: "cancelled-by-extension" }`, never `{ reason: "extension" }`.
+	 */
+	rejectionCause?: CompactionRejectionCause;
 	compactionEntry: CompactionEntry;
 	fromExtension: boolean;
 }
