@@ -296,6 +296,13 @@ export interface CompactOptions {
 	onError?: (error: Error) => void;
 }
 
+export interface ApplyCompactionOptions {
+	reason: CompactionReason;
+	expectedRevision?: number;
+}
+
+export type ApplyCompactionResult = { applied: true; reason: "ok" } | { applied: false; reason: "stale" | "rejected" };
+
 /**
  * Context passed to extension event handlers.
  */
@@ -328,6 +335,10 @@ export interface ExtensionContext {
 	getContextUsage(): ContextUsage | undefined;
 	/** Trigger compaction without awaiting completion. */
 	compact(options?: CompactOptions): void;
+	/** Get the current monotonic revision for context-affecting message mutations. */
+	getMessageRevision(): number;
+	/** Apply a precomputed compaction result if the optional expected revision is still current. */
+	applyCompaction(precomputed: CompactionResult, options: ApplyCompactionOptions): Promise<ApplyCompactionResult>;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
 }
@@ -1506,6 +1517,8 @@ export interface ExtensionContextActions {
 	shutdown: () => void;
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
+	getMessageRevision: () => number;
+	applyCompaction: (precomputed: CompactionResult, options: ApplyCompactionOptions) => Promise<ApplyCompactionResult>;
 	getSystemPrompt: () => string;
 }
 

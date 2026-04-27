@@ -1,5 +1,35 @@
 # Core Extensions Changes
 
+## 2026-04-27 - Seam 3: Compaction Apply Context API
+
+### What changed
+
+- `types.ts`: Added `ApplyCompactionOptions`, `ApplyCompactionResult`, `ExtensionContext.getMessageRevision()`, and `ExtensionContext.applyCompaction()`.
+- `runner.ts`: Wired the new context actions through `bindCore()` and `createContext()` so extensions can read the current message revision and apply a precomputed compaction result.
+- `interactive-mode.ts`: Added the same methods to the inline shortcut `ExtensionContext` literal.
+
+### Why
+
+- Speculative/v2 compaction needs a stable compare-and-apply seam: extensions can prepare a compaction summary against revision N and only apply it if no context-affecting message mutation has happened since.
+- `getMessageRevision()` is intentionally monotonic and in-memory only; it is a staleness guard, not persisted session data.
+- `applyCompaction()` returns explicit `ok`, `stale`, or `rejected` outcomes so extensions can avoid racing the live session.
+
+### Why extension system couldn't handle this alone
+
+Extensions can observe hooks and return summaries during a core-driven compaction, but they cannot append a compaction entry, rebuild agent context, emit core compaction events, or atomically guard against stale session context without a typed core API.
+
+### Files modified
+
+- `types.ts`
+- `runner.ts`
+- `interactive-mode.ts`
+- `agent-session.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- HIGH: `types.ts` and `runner.ts` around `ExtensionContext`/`ExtensionContextActions` definitions and context construction.
+- HIGH: `interactive-mode.ts` shortcut context literals must retain parity with `ExtensionRunner.createContext()`.
+
 ## 2026-04-27 - Seam 1: Compaction Event Metadata
 
 ### What changed
