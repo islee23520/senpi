@@ -1655,6 +1655,7 @@ export class InteractiveMode {
 				this.shutdownRequested = true;
 			},
 			getContextUsage: () => this.session.getContextUsage(),
+			getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
 			compact: (options) => {
 				void (async () => {
 					try {

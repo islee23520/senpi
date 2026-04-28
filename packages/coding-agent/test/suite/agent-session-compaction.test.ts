@@ -62,6 +62,7 @@ describe("AgentSession compaction characterization", () => {
 
 	it("manually compacts using an extension-provided summary", async () => {
 		const harness = await createHarness({
+			settings: { compaction: { keepRecentTokens: 1 } },
 			extensionFactories: [
 				(pi) => {
 					pi.on("session_before_compact", async (event) => ({
@@ -168,15 +169,45 @@ describe("AgentSession compaction characterization", () => {
 		await expect(harness.session.compact()).rejects.toThrow("No model selected");
 	});
 
-	it("throws when compacting without configured auth", async () => {
-		const harness = await createHarness({ withConfiguredAuth: false });
+	it("throws when manually compacting a session that fits within keepRecentTokens", async () => {
+		// given
+		const harness = await createHarness();
 		harnesses.push(harness);
+
+		await harness.session.prompt("hi");
+		await harness.session.prompt("who are you");
+
+		// when / then
+		await expect(harness.session.compact()).rejects.toThrow("Nothing to compact (session too small)");
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(compactionEntries).toHaveLength(0);
+	});
+
+	it("throws when compacting without configured auth", async () => {
+		const harness = await createHarness({
+			settings: { compaction: { keepRecentTokens: 1 } },
+			withConfiguredAuth: false,
+		});
+		harnesses.push(harness);
+
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "first user" }],
+			timestamp: Date.now() - 2000,
+		});
+		harness.sessionManager.appendMessage(createAssistant(harness, { text: "first assistant", totalTokens: 100 }));
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "second user" }],
+			timestamp: Date.now(),
+		});
 
 		await expect(harness.session.compact()).rejects.toThrow(`No API key found for ${harness.getModel().provider}.`);
 	});
 
 	it("cancels in-progress manual compaction when abortCompaction is called", async () => {
 		const harness = await createHarness({
+			settings: { compaction: { keepRecentTokens: 1 } },
 			extensionFactories: [
 				(pi) => {
 					pi.on("session_before_compact", async (event) => {

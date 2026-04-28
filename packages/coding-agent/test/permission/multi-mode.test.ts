@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
 import { createLocalEventEmitter } from "../../src/core/extensions/builtin/permission-system/events.js";
 import { handleNoUI } from "../../src/core/extensions/builtin/permission-system/non-interactive.js";
 import { PermissionService } from "../../src/core/extensions/builtin/permission-system/service.js";
@@ -78,6 +79,7 @@ function createMockContext(overrides: { hasUI?: boolean; ui?: ExtensionUIContext
 		compact: vi.fn(),
 		getMessageRevision: vi.fn().mockReturnValue(0),
 		applyCompaction: vi.fn().mockResolvedValue({ applied: false, reason: "rejected" }),
+		getCompactionSettings: vi.fn().mockReturnValue(DEFAULT_COMPACTION_SETTINGS),
 		getSystemPrompt: vi.fn().mockReturnValue(""),
 	};
 }

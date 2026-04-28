@@ -7,6 +7,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../../../src/core/auth-storage.js";
+import { DEFAULT_COMPACTION_SETTINGS } from "../../../src/core/compaction/index.js";
 import { ExtensionRunner } from "../../../src/core/extensions/runner.js";
 import type { ExtensionContextActions, ExtensionUIContext } from "../../../src/core/extensions/types.js";
 import { ModelRegistry } from "../../../src/core/model-registry.js";
@@ -93,6 +94,7 @@ function createRunnerContextActions(): ExtensionContextActions {
 		compact: () => {},
 		getMessageRevision: () => 0,
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
+		getCompactionSettings: () => DEFAULT_COMPACTION_SETTINGS,
 		getSystemPrompt: () => "",
 	};
 }

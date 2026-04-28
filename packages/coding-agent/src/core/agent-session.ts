@@ -2335,6 +2335,7 @@ export class AgentSession {
 					this._extensionShutdownHandler?.();
 				},
 				getContextUsage: () => this.getContextUsage(),
+				getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
 				compact: (options) => {
 					void (async () => {
 						this._disconnectFromAgent();

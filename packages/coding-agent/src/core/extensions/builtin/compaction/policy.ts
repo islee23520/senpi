@@ -3,10 +3,12 @@ import type { ContextUsage } from "../../types.js";
 
 const MIN_ADAPTIVE_THRESHOLD_RATIO = 0.4;
 const MAX_ADAPTIVE_THRESHOLD_RATIO = 0.7;
-const OMO_THRESHOLD_FLOOR_RATIO = 0.78;
 const HIGH_YIELD_SAVING_RATIO = 0.5;
 const LOW_YIELD_SAVING_RATIO = 0.1;
 const YIELD_ADJUSTMENT_RATIO = 0.05;
+const MIN_EFFECTIVE_KEEP_RECENT_TOKENS = 1024;
+
+export const SPECULATIVE_FRACTION = 0.75;
 
 export interface CompactionState {
 	lastFailureAt: number | null;
@@ -79,11 +81,44 @@ export function computeEffectiveThreshold(contextWindow: number, lastYield?: Com
 		return Math.max(contextWindow, lastYield);
 	}
 
-	let ratio = Math.max(computeAdaptiveThresholdRatio(contextWindow), OMO_THRESHOLD_FLOOR_RATIO);
+	let ratio = computeAdaptiveThresholdRatio(contextWindow);
 	if (lastYield) {
 		ratio = adjustEffectiveThresholdRatio(ratio, lastYield.savedTokens, lastYield.tokensBefore);
 	}
-	return ratio;
+	return clampThresholdRatio(ratio);
+}
+
+export function computeEffectiveKeepRecentTokens(
+	setting: number,
+	contextWindow: number,
+	thresholdRatio: number,
+	margin = 0.05,
+): number {
+	const capped = Math.floor(contextWindow * (1 - thresholdRatio - margin));
+	return Math.min(setting, Math.max(MIN_EFFECTIVE_KEEP_RECENT_TOKENS, capped));
+}
+
+export function shouldStartSpeculativeCompaction(
+	usage: ContextUsage,
+	contextWindow: number,
+	settings: CompactionSettings,
+	lastYield?: CompactionYield,
+): boolean {
+	if (settings.speculativeEnabled === false || usage.tokens === null || contextWindow <= 0) {
+		return false;
+	}
+
+	const fraction = settings.speculativeFraction ?? SPECULATIVE_FRACTION;
+	return usage.tokens >= contextWindow * computeEffectiveThreshold(contextWindow, lastYield) * fraction;
+}
+
+export function isAtHardLimit(
+	usage: ContextUsage,
+	contextWindow: number,
+	reserveTokens: number,
+	additionalTokens = 0,
+): boolean {
+	return usage.tokens !== null && usage.tokens + additionalTokens + reserveTokens >= contextWindow;
 }
 
 export function shouldTriggerCompaction(

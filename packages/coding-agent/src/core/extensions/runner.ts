@@ -234,6 +234,11 @@ export class ExtensionRunner {
 	private abortFn: () => void = () => {};
 	private hasPendingMessagesFn: () => boolean = () => false;
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
+	private getCompactionSettingsFn: ExtensionContextActions["getCompactionSettings"] = () => ({
+		enabled: true,
+		reserveTokens: 16384,
+		keepRecentTokens: 20000,
+	});
 	private compactFn: (options?: CompactOptions) => void = () => {};
 	private getMessageRevisionFn: () => number = () => 0;
 	private applyCompactionFn: ExtensionContextActions["applyCompaction"] = async () => ({
@@ -299,6 +304,7 @@ export class ExtensionRunner {
 		this.hasPendingMessagesFn = contextActions.hasPendingMessages;
 		this.shutdownHandler = contextActions.shutdown;
 		this.getContextUsageFn = contextActions.getContextUsage;
+		this.getCompactionSettingsFn = contextActions.getCompactionSettings;
 		this.compactFn = contextActions.compact;
 		this.getMessageRevisionFn = contextActions.getMessageRevision;
 		this.applyCompactionFn = contextActions.applyCompaction;
@@ -632,6 +638,10 @@ export class ExtensionRunner {
 			getContextUsage: () => {
 				runner.assertActive();
 				return runner.getContextUsageFn();
+			},
+			getCompactionSettings: () => {
+				runner.assertActive();
+				return runner.getCompactionSettingsFn();
 			},
 			compact: (options) => {
 				runner.assertActive();

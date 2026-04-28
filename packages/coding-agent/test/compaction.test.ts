@@ -1,8 +1,21 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage, Usage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Model, Usage } from "@mariozechner/pi-ai";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { completeMock } = vi.hoisted(() => ({
+	completeMock: vi.fn(),
+}));
+
+vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@mariozechner/pi-ai")>();
+	return {
+		...actual,
+		complete: completeMock,
+	};
+});
+
 import {
 	type CompactionSettings,
 	calculateContextTokens,
@@ -13,7 +26,9 @@ import {
 	prepareCompaction,
 	shouldCompact,
 } from "../src/core/compaction/index.js";
+import compactionExtension from "../src/core/extensions/builtin/compaction/index.js";
 import { SANEPI_SYSTEM_PREFIX } from "../src/core/extensions/builtin/system-messages.js";
+import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/index.js";
 import {
 	buildSessionContext,
 	type CompactionEntry,
@@ -77,6 +92,11 @@ function resetEntryCounter() {
 // Reset counter before each test to get predictable IDs
 beforeEach(() => {
 	resetEntryCounter();
+	completeMock.mockReset();
+	completeMock.mockResolvedValue({
+		role: "assistant",
+		content: [{ type: "text", text: "<summary>locked summary</summary>" }],
+	});
 });
 
 function createMessageEntry(message: AgentMessage): SessionMessageEntry {
@@ -147,6 +167,57 @@ function createCustomMessageEntry(customType: string, content: string): CustomMe
 	};
 	lastId = id;
 	return entry;
+}
+
+type BeforeAgentStartHandler = (
+	event: { type: "before_agent_start"; systemPrompt: string },
+	ctx: ExtensionContext,
+) => Promise<{ systemPrompt?: string } | undefined> | { systemPrompt?: string } | undefined;
+
+function captureBeforeAgentStartHandler(): BeforeAgentStartHandler {
+	let handler: BeforeAgentStartHandler | undefined;
+	const api: ExtensionAPI = Object.assign(Object.create(null), {
+		on: (event: string, currentHandler: BeforeAgentStartHandler) => {
+			if (event === "before_agent_start") {
+				handler = currentHandler;
+			}
+		},
+		appendEntry: vi.fn(),
+		getActiveTools: () => [],
+		getThinkingLevel: () => "off" as const,
+	});
+
+	compactionExtension(api);
+	if (!handler) {
+		throw new Error("before_agent_start handler was not registered");
+	}
+	return handler;
+}
+
+function createExtensionContext(overrides: Partial<ExtensionContext>): ExtensionContext {
+	return {
+		hasUI: false,
+		ui: {} as ExtensionContext["ui"],
+		cwd: process.cwd(),
+		sessionManager: Object.assign(Object.create(null), {
+			getEntries: () => [],
+		}) as ExtensionContext["sessionManager"],
+		modelRegistry: {} as ExtensionContext["modelRegistry"],
+		model: undefined,
+		serviceTier: undefined,
+		isIdle: () => true,
+		signal: undefined,
+		abort: vi.fn(),
+		hasPendingMessages: () => false,
+		shutdown: vi.fn(),
+		getContextUsage: () => undefined,
+		getCompactionSettings: () => DEFAULT_COMPACTION_SETTINGS,
+		compact: vi.fn(),
+		getMessageRevision: () => 0,
+		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
+		getSystemPrompt: () => "",
+		...overrides,
+	};
 }
 
 function extractText(messages: AgentMessage[]): string {
@@ -377,8 +448,11 @@ describe("buildSessionContext", () => {
 		const loaded = buildSessionContext(entries);
 		// summary + kept (u2, a2) + after (u3, a3) = 5
 		expect(loaded.messages.length).toBe(5);
-		expect(loaded.messages[0].role).toBe("compactionSummary");
-		expect((loaded.messages[0] as any).summary).toContain("Summary of 1,a,2,b");
+		const summaryMessage = loaded.messages[0];
+		if (summaryMessage.role !== "compactionSummary") {
+			throw new Error("Expected first message to be a compaction summary");
+		}
+		expect(summaryMessage.summary).toContain("Summary of 1,a,2,b");
 	});
 
 	it("should handle multiple compactions (only latest matters)", () => {
@@ -401,7 +475,11 @@ describe("buildSessionContext", () => {
 		const loaded = buildSessionContext(entries);
 		// summary + kept from u3 (u3, c) + after (u4, d) = 5
 		expect(loaded.messages.length).toBe(5);
-		expect((loaded.messages[0] as any).summary).toContain("Second summary");
+		const summaryMessage = loaded.messages[0];
+		if (summaryMessage.role !== "compactionSummary") {
+			throw new Error("Expected first message to be a compaction summary");
+		}
+		expect(summaryMessage.summary).toContain("Second summary");
 	});
 
 	it("should keep all messages when firstKeptEntryId is first entry", () => {
@@ -434,7 +512,8 @@ describe("buildSessionContext", () => {
 });
 
 describe("prepareCompaction with previous compaction", () => {
-	it("should preserve kept messages across repeated compactions when they still fit", () => {
+	it("returns undefined for a repeated compaction whose kept messages still fit within keepRecentTokens", () => {
+		// given
 		const u1 = createMessageEntry(createUserMessage("user msg 1 (summarized by compaction1)"));
 		const a1 = createMessageEntry(createAssistantMessage("assistant msg 1"));
 		const u2 = createMessageEntry(createUserMessage("user msg 2 - kept by compaction1"));
@@ -446,29 +525,16 @@ describe("prepareCompaction with previous compaction", () => {
 		const a4 = createMessageEntry(createAssistantMessage("assistant msg 4", createMockUsage(8000, 2000)));
 
 		const pathEntries = [u1, a1, u2, a2, u3, a3, compaction1, u4, a4];
-		const contextBefore = buildSessionContext(pathEntries);
+
+		// when
 		const preparation = prepareCompaction(pathEntries, DEFAULT_COMPACTION_SETTINGS);
 
-		expect(preparation).toBeDefined();
-		expect(preparation!.firstKeptEntryId).toBe(u2.id);
-		expect(preparation!.previousSummary).toBe("First summary");
-		expect(extractText(preparation!.messagesToSummarize)).not.toContain("First summary");
-		expect(preparation!.tokensBefore).toBe(estimateContextTokens(contextBefore.messages).tokens);
-
-		const compaction2: CompactionEntry = {
-			type: "compaction",
-			id: "compaction2-id",
-			parentId: a4.id,
-			timestamp: new Date().toISOString(),
-			summary: "Second summary",
-			firstKeptEntryId: preparation!.firstKeptEntryId,
-			tokensBefore: preparation!.tokensBefore,
-		};
-		const contextAfter = buildSessionContext([...pathEntries, compaction2]);
-		const contextAfterText = extractText(contextAfter.messages);
-
-		expect(contextAfterText).toContain("user msg 2 - kept by compaction1");
-		expect(contextAfterText).toContain("user msg 3 - kept by compaction1");
+		// then
+		expect(preparation).toBeUndefined();
+		const contextText = extractText(buildSessionContext(pathEntries).messages);
+		expect(contextText).toContain("user msg 2 - kept by compaction1");
+		expect(contextText).toContain("user msg 3 - kept by compaction1");
+		expect(contextText).toContain("user msg 4 (new after compaction1)");
 	});
 
 	it("should re-summarize previously kept messages when the recent window moves past them", () => {
@@ -541,24 +607,28 @@ describe("prepareCompaction with previous compaction", () => {
 		// given
 		const u1 = createMessageEntry(createUserMessage("summarized user 1"));
 		const a1 = createMessageEntry(createAssistantMessage("summarized assistant 1"));
-		const keptUser = createMessageEntry(createUserMessage("kept user after compaction"));
+		const keptUser = createMessageEntry(createUserMessage("kept user after compaction ".repeat(20)));
 		const keptAssistant = createMessageEntry(
-			createAssistantMessage("kept assistant after compaction", createMockUsage(3000, 500)),
+			createAssistantMessage("kept assistant after compaction ".repeat(20), createMockUsage(3000, 500)),
 		);
 		const compaction1 = createCompactionEntry("Previous summary", keptUser.id);
 		const reminder = createCustomMessageEntry(
 			"background-task.complete",
 			`${SANEPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
 		);
-		const latestUser = createMessageEntry(createUserMessage("latest user after reminder"));
+		const latestUser = createMessageEntry(createUserMessage("latest user after reminder ".repeat(20)));
 		const latestAssistant = createMessageEntry(
-			createAssistantMessage("latest assistant", createMockUsage(5000, 500)),
+			createAssistantMessage("latest assistant ".repeat(20), createMockUsage(5000, 500)),
 		);
 
 		const entries = [u1, a1, keptUser, keptAssistant, compaction1, reminder, latestUser, latestAssistant];
+		const settings: CompactionSettings = {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 60,
+		};
 
 		// when
-		const preparation = prepareCompaction(entries, DEFAULT_COMPACTION_SETTINGS);
+		const preparation = prepareCompaction(entries, settings);
 
 		// then
 		expect(preparation).toBeDefined();
@@ -566,6 +636,127 @@ describe("prepareCompaction with previous compaction", () => {
 			(message) => !(message.role === "custom" && message.customType === "background-task.complete"),
 		);
 		expect(preparation!.tokensBefore).toBe(estimateContextTokens(activeContext).tokens);
+	});
+});
+
+describe("prepareCompaction guards against empty summarization", () => {
+	it("returns undefined for a tiny senpi-style hello session whose entire history fits in keepRecentTokens", () => {
+		// given
+		const modelChange = createModelChangeEntry("apitopia", "kimi-k2p6-turbo");
+		const thinkingChange = createThinkingLevelEntry("minimal");
+		const u1 = createMessageEntry(createUserMessage("hi"));
+		const a1 = createMessageEntry(createAssistantMessage("Hello! How can I help you today?"));
+		const u2 = createMessageEntry(createUserMessage("who are you"));
+		const a2 = createMessageEntry(createAssistantMessage("I'm Kimi, an AI assistant created by Moonshot AI."));
+
+		// when
+		const preparation = prepareCompaction([modelChange, thinkingChange, u1, a1, u2, a2], DEFAULT_COMPACTION_SETTINGS);
+
+		// then
+		expect(preparation).toBeUndefined();
+	});
+
+	it("returns undefined when only non-message entries precede the kept window", () => {
+		// given
+		const modelChange = createModelChangeEntry("anthropic", "claude-sonnet-4-5");
+		const thinkingChange = createThinkingLevelEntry("medium");
+		const u1 = createMessageEntry(createUserMessage("first message"));
+		const settings: CompactionSettings = {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 10000,
+		};
+
+		// when
+		const preparation = prepareCompaction([modelChange, thinkingChange, u1], settings);
+
+		// then
+		expect(preparation).toBeUndefined();
+	});
+
+	it("still returns a preparation when the session is large enough to actually summarize", () => {
+		// given
+		const u1 = createMessageEntry(createUserMessage("first user message".repeat(20)));
+		const a1 = createMessageEntry(createAssistantMessage("first assistant".repeat(20), createMockUsage(2000, 500)));
+		const u2 = createMessageEntry(createUserMessage("second user message".repeat(20)));
+		const a2 = createMessageEntry(createAssistantMessage("second assistant".repeat(20), createMockUsage(3000, 800)));
+		const settings: CompactionSettings = {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 80,
+		};
+
+		// when
+		const preparation = prepareCompaction([u1, a1, u2, a2], settings);
+
+		// then
+		expect(preparation).toBeDefined();
+		expect(preparation!.messagesToSummarize.length).toBeGreaterThan(0);
+	});
+});
+
+describe("builtin compaction extension threshold regressions", () => {
+	it("does not trigger proactive compaction when resolved user settings disable compaction", async () => {
+		// given
+		const handler = captureBeforeAgentStartHandler();
+		const compact = vi.fn();
+		const ctx = createExtensionContext({
+			getContextUsage: () => ({ tokens: 190_000, contextWindow: 200_000, percent: 0.95 }),
+			getCompactionSettings: () => ({ ...DEFAULT_COMPACTION_SETTINGS, enabled: false }),
+			compact,
+		});
+
+		// when
+		await handler({ type: "before_agent_start", systemPrompt: "system" }, ctx);
+
+		// then
+		expect(compact).not.toHaveBeenCalled();
+	});
+
+	it("synchronously applies compaction via applyCompaction in before_agent_start when above threshold", async () => {
+		// given
+		const handler = captureBeforeAgentStartHandler();
+		const order: string[] = [];
+		const model: Model<"anthropic-messages"> = {
+			id: "claude-sonnet-4-5",
+			name: "Claude Sonnet 4.5",
+			api: "anthropic-messages",
+			provider: "anthropic",
+			baseUrl: "https://api.anthropic.com",
+			reasoning: false,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 200_000,
+			maxTokens: 8192,
+		};
+		const firstUser = createMessageEntry(createUserMessage("first request"));
+		const firstAssistant = createMessageEntry(createAssistantMessage("first answer", createMockUsage(4000, 500)));
+		const secondUser = createMessageEntry(createUserMessage("second request"));
+		const secondAssistant = createMessageEntry(createAssistantMessage("second answer", createMockUsage(5000, 500)));
+		const ctx = createExtensionContext({
+			model,
+			sessionManager: Object.assign(Object.create(null), {
+				getEntries: () => [firstUser, firstAssistant, secondUser, secondAssistant],
+				getBranch: () => [firstUser, firstAssistant, secondUser, secondAssistant],
+			}) as ExtensionContext["sessionManager"],
+			modelRegistry: Object.assign(Object.create(null), {
+				getApiKeyAndHeaders: async () => {
+					order.push("auth-start");
+					return { ok: true, apiKey: "test-key" };
+				},
+			}) as ExtensionContext["modelRegistry"],
+			applyCompaction: async () => {
+				order.push("apply-called");
+				return { applied: true, reason: "ok" };
+			},
+			getContextUsage: () => ({ tokens: 190_000, contextWindow: 200_000, percent: 0.95 }),
+			getCompactionSettings: () => ({ ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 }),
+		});
+
+		// when
+		await handler({ type: "before_agent_start", systemPrompt: "system" }, ctx);
+		order.push("hook-returned");
+
+		// then
+		expect(order).toEqual(["auth-start", "apply-called", "hook-returned"]);
 	});
 });
 

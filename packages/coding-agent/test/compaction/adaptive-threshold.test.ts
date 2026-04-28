@@ -2,15 +2,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerFauxProvider } from "@mariozechner/pi-ai";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
 import {
 	computeAdaptiveThresholdRatio,
+	computeEffectiveKeepRecentTokens,
 	computeEffectiveThreshold,
+	isAtHardLimit,
+	SPECULATIVE_FRACTION,
+	shouldStartSpeculativeCompaction,
 } from "../../src/core/extensions/builtin/compaction/policy.js";
 import { migrateSessionEntries, parseSessionEntries, type SessionEntry } from "../../src/core/session-manager.js";
 
 const HIGH_YIELD_SAVED_TOKENS = 9000;
 const LOW_YIELD_SAVED_TOKENS = 500;
-const OMO_FLOOR_RATIO = 0.78;
+const SPECULATIVE_THRESHOLD_FRACTION = 0.75;
 
 const registrations: Array<{ unregister: () => void }> = [];
 
@@ -141,9 +146,9 @@ describe("compaction policy: adaptive threshold ratio", () => {
 		});
 	});
 
-	describe("Given a base ratio of 0.50 and the omo 78% floor for a 32000 window", () => {
-		describe("When the effective threshold is computed against the floor", () => {
-			it("Then the floor wins and the effective threshold equals 0.78", () => {
+	describe("Given a 32000 context window", () => {
+		describe("When the effective threshold is computed", () => {
+			it("Then the adaptive threshold is used without an omo floor", () => {
 				const registration = registerFauxProvider({
 					models: [{ id: "faux-32k", contextWindow: 32000 }],
 				});
@@ -159,8 +164,7 @@ describe("compaction policy: adaptive threshold ratio", () => {
 
 				const effective = computeEffectiveThreshold(model.contextWindow);
 
-				expect(effective).toBe(OMO_FLOOR_RATIO);
-				expect(effective).toBe(Math.max(baseRatio, OMO_FLOOR_RATIO));
+				expect(effective).toBe(baseRatio);
 			});
 		});
 	});
@@ -212,8 +216,8 @@ describe("compaction policy: adaptive threshold ratio", () => {
 	});
 
 	describe("Given context window 32000 with a high-yield prior compaction", () => {
-		describe("When the effective threshold is computed after applying the omo floor", () => {
-			it("Then the yield adjustment remains observable below the floor", () => {
+		describe("When the effective threshold is computed", () => {
+			it("Then the threshold drops by 0.05 from the adaptive baseline", () => {
 				// given
 				const registration = registerFauxProvider({
 					models: [{ id: "faux-32k-effective-high-yield", contextWindow: 32000 }],
@@ -231,14 +235,14 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 
 				// then
-				expect(effective).toBe(OMO_FLOOR_RATIO - 0.05);
+				expect(effective).toBe(0.45);
 			});
 		});
 	});
 
 	describe("Given context window 32000 with a low-yield prior compaction", () => {
-		describe("When the effective threshold is computed after applying the omo floor", () => {
-			it("Then the yield adjustment remains observable above the floor", () => {
+		describe("When the effective threshold is computed", () => {
+			it("Then the threshold rises by 0.05 from the adaptive baseline", () => {
 				// given
 				const registration = registerFauxProvider({
 					models: [{ id: "faux-32k-effective-low-yield", contextWindow: 32000 }],
@@ -256,7 +260,77 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 
 				// then
-				expect(effective).toBe(OMO_FLOOR_RATIO + 0.05);
+				expect(effective).toBe(0.55);
+			});
+		});
+	});
+
+	describe("Given speculative compaction policy", () => {
+		describe("When the speculative fraction and threshold are evaluated", () => {
+			it("Then speculative starts at 75% of each adaptive threshold tier", () => {
+				// given
+				const cases = [
+					{ contextWindow: 16_000, adaptiveRatio: 0.45 },
+					{ contextWindow: 32_000, adaptiveRatio: 0.5 },
+					{ contextWindow: 64_000, adaptiveRatio: 0.55 },
+					{ contextWindow: 128_000, adaptiveRatio: 0.6 },
+					{ contextWindow: 200_000, adaptiveRatio: 0.65 },
+				];
+
+				// when / then
+				expect(SPECULATIVE_FRACTION).toBe(SPECULATIVE_THRESHOLD_FRACTION);
+				for (const currentCase of cases) {
+					const triggerTokens = currentCase.contextWindow * currentCase.adaptiveRatio * SPECULATIVE_FRACTION;
+					expect(
+						shouldStartSpeculativeCompaction(
+							{ tokens: triggerTokens - 1, contextWindow: currentCase.contextWindow, percent: null },
+							currentCase.contextWindow,
+							{ ...DEFAULT_COMPACTION_SETTINGS, speculativeEnabled: true },
+						),
+					).toBe(false);
+					expect(
+						shouldStartSpeculativeCompaction(
+							{ tokens: triggerTokens, contextWindow: currentCase.contextWindow, percent: null },
+							currentCase.contextWindow,
+							{ ...DEFAULT_COMPACTION_SETTINGS, speculativeEnabled: true },
+						),
+					).toBe(true);
+				}
+			});
+		});
+	});
+
+	describe("Given default keepRecentTokens exceeds a small context window", () => {
+		describe("When the effective keepRecentTokens cap is computed", () => {
+			it("Then the cap stays below the context remainder so preparation can summarize", () => {
+				// given
+				const contextWindow = 16_000;
+				const thresholdRatio = computeEffectiveThreshold(contextWindow);
+
+				// when
+				const keepRecentTokens = computeEffectiveKeepRecentTokens(
+					DEFAULT_COMPACTION_SETTINGS.keepRecentTokens,
+					contextWindow,
+					thresholdRatio,
+				);
+
+				// then
+				expect(keepRecentTokens).toBe(8000);
+				expect(keepRecentTokens).toBeLessThan(DEFAULT_COMPACTION_SETTINGS.keepRecentTokens);
+				expect(keepRecentTokens).toBeLessThanOrEqual(contextWindow * (1 - thresholdRatio));
+			});
+		});
+	});
+
+	describe("Given usage plus reserve reaches the model context window", () => {
+		describe("When hard limit policy is evaluated", () => {
+			it("Then hard limit is detected with optional additional tokens", () => {
+				// given
+				const usage = { tokens: 83_000, contextWindow: 100_000, percent: 0.83 };
+
+				// when / then
+				expect(isAtHardLimit(usage, 100_000, 16_384)).toBe(false);
+				expect(isAtHardLimit(usage, 100_000, 16_384, 616)).toBe(true);
 			});
 		});
 	});

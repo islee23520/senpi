@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
+import { DEFAULT_COMPACTION_SETTINGS } from "../src/core/compaction/index.js";
 import { createExtensionRuntime, discoverAndLoadExtensions } from "../src/core/extensions/loader.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
 import type { ExtensionActions, ExtensionContextActions, ProviderConfig } from "../src/core/extensions/types.js";
@@ -80,6 +81,7 @@ describe("ExtensionRunner", () => {
 		compact: () => {},
 		getMessageRevision: () => 0,
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
+		getCompactionSettings: () => DEFAULT_COMPACTION_SETTINGS,
 		getSystemPrompt: () => "",
 	};
 

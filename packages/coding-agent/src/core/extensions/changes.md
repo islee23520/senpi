@@ -1,5 +1,39 @@
 # Core Extensions Changes
 
+## 2026-04-28 - Compaction Settings Context API
+
+### What changed
+
+- `types.ts`: Added `ExtensionContext.getCompactionSettings()` and matching `ExtensionContextActions.getCompactionSettings`.
+- `runner.ts`: Wired the new context action through `bindCore()` and `createContext()`.
+- `agent-session.ts`: Bound the context action to `settingsManager.getCompactionSettings()`.
+- `interactive-mode.ts`: Added the same method to inline shortcut `ExtensionContext` construction.
+
+### Why
+
+- The builtin compaction extension previously used `DEFAULT_COMPACTION_SETTINGS`, which bypassed user/project settings such as `compaction.enabled: false`.
+- Plugsuit-style threshold realignment needs resolved settings for speculative toggles, cooldowns, keep-recent caps, and restoration budgets.
+
+### Why extension system couldn't handle this alone
+
+- Extensions receive `ExtensionContext`, not the core `SettingsManager`; without a typed context method, builtin extensions cannot read the already-merged global/project/user compaction settings.
+
+### Files modified
+
+- `types.ts`
+- `runner.ts`
+- `agent-session.ts`
+- `interactive-mode.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- HIGH: `types.ts` and `runner.ts` around `ExtensionContext`/`ExtensionContextActions` definitions and context construction.
+- HIGH: `interactive-mode.ts` shortcut context literals must retain parity with `ExtensionRunner.createContext()`.
+
+### Migration notes
+
+- If upstream adds settings access to `ExtensionContext`, keep this method or map the builtin compaction extension to the upstream equivalent. The required invariant is that compaction policy uses resolved settings, never hardcoded defaults.
+
 ## 2026-04-27 - Seam 3: Compaction Apply Context API
 
 ### What changed

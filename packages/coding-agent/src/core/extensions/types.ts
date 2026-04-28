@@ -333,6 +333,8 @@ export interface ExtensionContext {
 	shutdown(): void;
 	/** Get current context usage for the active model. */
 	getContextUsage(): ContextUsage | undefined;
+	/** Get resolved compaction settings from global/project/user overrides. */
+	getCompactionSettings(): CompactionPreparation["settings"];
 	/** Trigger compaction without awaiting completion. */
 	compact(options?: CompactOptions): void;
 	/** Get the current monotonic revision for context-affecting message mutations. */
@@ -1516,6 +1518,7 @@ export interface ExtensionContextActions {
 	hasPendingMessages: () => boolean;
 	shutdown: () => void;
 	getContextUsage: () => ContextUsage | undefined;
+	getCompactionSettings: () => CompactionPreparation["settings"];
 	compact: (options?: CompactOptions) => void;
 	getMessageRevision: () => number;
 	applyCompaction: (precomputed: CompactionResult, options: ApplyCompactionOptions) => Promise<ApplyCompactionResult>;
