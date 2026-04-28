@@ -18,6 +18,8 @@ function createContext(tokens: number | null, compact = vi.fn()): ExtensionConte
 		shutdown: vi.fn(),
 		getContextUsage: () => ({ tokens, contextWindow: 200_000, percent: tokens === null ? null : tokens / 2000 }),
 		compact,
+		getMessageRevision: () => 0,
+		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
 		getSystemPrompt: () => "",
 	};
 }
@@ -28,14 +30,14 @@ describe("trigger-compact example extension", () => {
 			| ((event: { type: "turn_end" }, ctx: ExtensionContext | ExtensionCommandContext) => void)
 			| undefined;
 
-		const api = {
+		const api: ExtensionAPI = Object.assign(Object.create(null), {
 			on: (event: string, handler: (event: { type: "turn_end" }, ctx: ExtensionContext) => void) => {
 				if (event === "turn_end") {
 					turnEndHandler = handler;
 				}
 			},
 			registerCommand: vi.fn(),
-		} as unknown as ExtensionAPI;
+		});
 
 		triggerCompactExtension(api);
 		expect(turnEndHandler).toBeDefined();

@@ -8,7 +8,7 @@ import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../../../src/core/auth-storage.js";
 import { ExtensionRunner } from "../../../src/core/extensions/runner.js";
-import type { ExtensionUIContext } from "../../../src/core/extensions/types.js";
+import type { ExtensionContextActions, ExtensionUIContext } from "../../../src/core/extensions/types.js";
 import { ModelRegistry } from "../../../src/core/model-registry.js";
 import { SessionManager } from "../../../src/core/session-manager.js";
 import { createSyntheticSourceInfo } from "../../../src/core/source-info.js";
@@ -80,7 +80,7 @@ function createRunnerActions(tools: AgentTool[]) {
 	};
 }
 
-function createRunnerContextActions() {
+function createRunnerContextActions(): ExtensionContextActions {
 	return {
 		getModel: () => undefined,
 		getServiceTier: () => undefined,
@@ -91,6 +91,8 @@ function createRunnerContextActions() {
 		shutdown: () => {},
 		getContextUsage: () => undefined,
 		compact: () => {},
+		getMessageRevision: () => 0,
+		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
 		getSystemPrompt: () => "",
 	};
 }

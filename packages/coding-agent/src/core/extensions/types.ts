@@ -83,6 +83,9 @@ export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
 
 export type ServiceTier = "auto" | "flex" | "priority";
+// biome-ignore format: keep literal union alias consistent with nearby ServiceTier style.
+export type CompactionReason = "manual" | "threshold" | "overflow" | "pre_prompt" | "branch" | "extension";
+export type CompactionRejectionCause = "cancelled-by-extension" | "would-overflow" | "circuit-breaker" | "per-turn-cap";
 
 // ============================================================================
 // UI Context
@@ -293,6 +296,13 @@ export interface CompactOptions {
 	onError?: (error: Error) => void;
 }
 
+export interface ApplyCompactionOptions {
+	reason: CompactionReason;
+	expectedRevision?: number;
+}
+
+export type ApplyCompactionResult = { applied: true; reason: "ok" } | { applied: false; reason: "stale" | "rejected" };
+
 /**
  * Context passed to extension event handlers.
  */
@@ -325,6 +335,10 @@ export interface ExtensionContext {
 	getContextUsage(): ContextUsage | undefined;
 	/** Trigger compaction without awaiting completion. */
 	compact(options?: CompactOptions): void;
+	/** Get the current monotonic revision for context-affecting message mutations. */
+	getMessageRevision(): number;
+	/** Apply a precomputed compaction result if the optional expected revision is still current. */
+	applyCompaction(precomputed: CompactionResult, options: ApplyCompactionOptions): Promise<ApplyCompactionResult>;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
 }
@@ -540,15 +554,33 @@ export interface SessionBeforeForkEvent {
 /** Fired before context compaction (can be cancelled or customized) */
 export interface SessionBeforeCompactEvent {
 	type: "session_before_compact";
+	/** Route source that requested compaction. This always preserves the source and is never used for rejection causes. */
+	reason: CompactionReason;
+	/** Whether the caller intends to retry the interrupted operation after compaction succeeds. */
+	willRetry: boolean;
+	/** Unique identifier tying before/after compaction events for one request. */
+	requestId: string;
 	preparation: CompactionPreparation;
 	branchEntries: SessionEntry[];
 	customInstructions?: string;
 	signal: AbortSignal;
 }
 
-/** Fired after context compaction */
+/** Fired after context compaction. Rejections keep `reason` as the route source and explain why via `rejectionCause`. */
 export interface SessionCompactEvent {
 	type: "session_compact";
+	/** Route source that requested compaction. Never source-swap this on rejection. */
+	reason: CompactionReason;
+	/** Unique identifier tying before/after compaction events for one request. */
+	requestId: string;
+	/** Whether the compaction result was accepted and appended to the session. */
+	accepted: boolean;
+	/**
+	 * Optional rejection explanation, only set when `accepted` is false.
+	 * Example: an extension cancelling manual compaction emits
+	 * `{ reason: "manual", accepted: false, rejectionCause: "cancelled-by-extension" }`, never `{ reason: "extension" }`.
+	 */
+	rejectionCause?: CompactionRejectionCause;
 	compactionEntry: CompactionEntry;
 	fromExtension: boolean;
 }
@@ -1485,6 +1517,8 @@ export interface ExtensionContextActions {
 	shutdown: () => void;
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
+	getMessageRevision: () => number;
+	applyCompaction: (precomputed: CompactionResult, options: ApplyCompactionOptions) => Promise<ApplyCompactionResult>;
 	getSystemPrompt: () => string;
 }
 

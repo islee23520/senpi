@@ -50,7 +50,7 @@ function createMockUI(overrides: Partial<ExtensionUIContext> = {}): ExtensionUIC
 		getEditorText: vi.fn().mockReturnValue(""),
 		editor: vi.fn().mockResolvedValue(undefined),
 		setEditorComponent: vi.fn(),
-		theme: {} as any,
+		theme: {} as ExtensionUIContext["theme"],
 		getAllThemes: vi.fn().mockReturnValue([]),
 		getTheme: vi.fn().mockReturnValue(undefined),
 		setTheme: vi.fn().mockReturnValue({ success: true }),
@@ -65,8 +65,8 @@ function createMockContext(overrides: { hasUI?: boolean; ui?: ExtensionUIContext
 		ui: overrides.ui ?? createMockUI(),
 		hasUI: overrides.hasUI ?? true,
 		cwd: "/tmp/test",
-		sessionManager: {} as any,
-		modelRegistry: {} as any,
+		sessionManager: {} as ExtensionContext["sessionManager"],
+		modelRegistry: {} as ExtensionContext["modelRegistry"],
 		model: undefined,
 		serviceTier: undefined,
 		isIdle: vi.fn().mockReturnValue(true),
@@ -76,6 +76,8 @@ function createMockContext(overrides: { hasUI?: boolean; ui?: ExtensionUIContext
 		shutdown: vi.fn(),
 		getContextUsage: vi.fn().mockReturnValue(undefined),
 		compact: vi.fn(),
+		getMessageRevision: vi.fn().mockReturnValue(0),
+		applyCompaction: vi.fn().mockResolvedValue({ applied: false, reason: "rejected" }),
 		getSystemPrompt: vi.fn().mockReturnValue(""),
 	};
 }

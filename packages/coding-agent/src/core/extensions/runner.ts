@@ -235,6 +235,11 @@ export class ExtensionRunner {
 	private hasPendingMessagesFn: () => boolean = () => false;
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
 	private compactFn: (options?: CompactOptions) => void = () => {};
+	private getMessageRevisionFn: () => number = () => 0;
+	private applyCompactionFn: ExtensionContextActions["applyCompaction"] = async () => ({
+		applied: false,
+		reason: "rejected",
+	});
 	private getSystemPromptFn: () => string = () => "";
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
 	private forkHandler: ForkHandler = async () => ({ cancelled: false });
@@ -295,6 +300,8 @@ export class ExtensionRunner {
 		this.shutdownHandler = contextActions.shutdown;
 		this.getContextUsageFn = contextActions.getContextUsage;
 		this.compactFn = contextActions.compact;
+		this.getMessageRevisionFn = contextActions.getMessageRevision;
+		this.applyCompactionFn = contextActions.applyCompaction;
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
 
 		// Flush provider registrations queued during extension loading
@@ -629,6 +636,14 @@ export class ExtensionRunner {
 			compact: (options) => {
 				runner.assertActive();
 				runner.compactFn(options);
+			},
+			getMessageRevision: () => {
+				runner.assertActive();
+				return runner.getMessageRevisionFn();
+			},
+			applyCompaction: (precomputed, options) => {
+				runner.assertActive();
+				return runner.applyCompactionFn(precomputed, options);
 			},
 			getSystemPrompt: () => {
 				runner.assertActive();
