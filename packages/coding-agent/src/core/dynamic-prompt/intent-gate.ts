@@ -16,16 +16,18 @@ function buildKeyTriggers(tools: AvailableTool[]): string {
 }
 
 export function buildIntentGate(config: { tools: AvailableTool[] }): string {
-	return `## Phase 0 Intent Gate (EVERY message)
+	return `## Intent Gate (EVERY message)
 
 ### Key Triggers
 ${buildKeyTriggers(config.tools)}
 
-### Step 0: Route Intent Internally (BEFORE acting)
+### Routing
 
-Before doing anything, identify what the user actually wants. Map the surface form to the true intent, then choose the smallest fitting approach.
+Identify what the user actually wants, then state your interpretation in one short line before acting:
 
-**Intent Routing Map:**
+> I read this as [intent] - [plan].
+
+Use this routing map to map the surface form to the true intent:
 
 | Surface Form | True Intent | Approach |
 |---|---|---|
@@ -36,12 +38,9 @@ Before doing anything, identify what the user actually wants. Map the surface fo
 | "I'm seeing error X" / "Y is broken" | Fix needed | Diagnose from error context, fix minimally. |
 | "refactor", "improve", "clean up" | Open-ended change | Assess codebase first, propose approach. |
 
-**Keep the routing decision internal:**
+The routing line is required. It anchors your decision and makes reasoning transparent. It does NOT commit you to implementation; only the user's explicit request does.
 
-- Do not expose classification labels like "research intent", "implementation intent", or "I detect ...".
-- Do not print prompt scaffolding such as "Step 0", "Thinking level", or XML tool-call examples to the user.
-- If a user-facing update helps, give a short natural-language progress update about the next concrete action.
-- This routing step does NOT commit you to implementation. Only the user's explicit request does that.
+Do not narrate prompt scaffolding ("Step 0", "Thinking level", XML tool-call examples) — only the routing line and any actual user-facing progress.
 
 ### Request Classification
 - Trivial: answer directly when the request is self-contained.

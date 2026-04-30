@@ -1,9 +1,14 @@
 import type { Skill } from "../skills.js";
 import { formatSkillsForPrompt } from "../skills.js";
+import { buildExplorationSection } from "./exploration.js";
+import { buildIdentitySection } from "./identity.js";
 import { buildIntentGate } from "./intent-gate.js";
+import { buildParallelToolsSection } from "./parallel-tools.js";
 import { buildPoliciesSection } from "./policies.js";
+import { buildStyleSection } from "./style.js";
 import { categorizeTools } from "./tool-categorization.js";
 import { buildToolSection } from "./tool-section.js";
+import { buildVerificationSection } from "./verification.js";
 
 export interface BuildDynamicSystemPromptOptions {
 	cwd: string;
@@ -12,6 +17,7 @@ export interface BuildDynamicSystemPromptOptions {
 	promptGuidelines: string[];
 	contextFiles: Array<{ path: string; content: string }>;
 	skills: Skill[];
+	tuningSection?: string;
 }
 
 function buildContextFilesSection(contextFiles: Array<{ path: string; content: string }>): string {
@@ -32,9 +38,15 @@ export function buildDynamicSystemPrompt(options: BuildDynamicSystemPromptOption
 	const date = new Date().toISOString().slice(0, 10);
 
 	const sections = [
-		"You are a helpful assistant.",
+		buildIdentitySection(),
 		"",
 		buildIntentGate({ tools }),
+		"",
+		buildParallelToolsSection(),
+		"",
+		buildExplorationSection(),
+		"",
+		buildVerificationSection(),
 		"",
 		buildToolSection({
 			tools,
@@ -43,7 +55,14 @@ export function buildDynamicSystemPrompt(options: BuildDynamicSystemPromptOption
 		}),
 		"",
 		buildPoliciesSection(),
+		"",
+		buildStyleSection(),
 	];
+
+	const tuning = options.tuningSection?.trim();
+	if (tuning) {
+		sections.push("", tuning);
+	}
 
 	const contextFilesSection = buildContextFilesSection(options.contextFiles);
 	if (contextFilesSection) {

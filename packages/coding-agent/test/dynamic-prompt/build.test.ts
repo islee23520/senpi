@@ -16,14 +16,42 @@ describe("buildDynamicSystemPrompt", () => {
 		skills: [],
 	};
 
-	test("includes intent gate section", () => {
+	test("includes senpi identity", () => {
+		const prompt = buildDynamicSystemPrompt(baseOptions);
+
+		expect(prompt).toContain("You are senpi");
+	});
+
+	test("includes intent gate section with mandatory verbalization", () => {
 		const prompt = buildDynamicSystemPrompt(baseOptions);
 
 		expect(prompt).toContain("Intent");
 		expect(prompt).toContain("Surface Form");
-		expect(prompt).toContain("Keep the routing decision internal");
-		expect(prompt).not.toContain("Verbalize before proceeding");
-		expect(prompt).not.toContain('> "I detect');
+		expect(prompt).toContain("I read this as");
+		expect(prompt).not.toContain("Keep the routing decision internal");
+	});
+
+	test("includes parallel tool calls section", () => {
+		const prompt = buildDynamicSystemPrompt(baseOptions);
+
+		expect(prompt).toContain("## Parallel Tool Calls");
+		expect(prompt).toContain("loosely relevant");
+	});
+
+	test("includes exploration section with stop conditions", () => {
+		const prompt = buildDynamicSystemPrompt(baseOptions);
+
+		expect(prompt).toContain("## Exploration");
+		expect(prompt).toContain("Stop searching when");
+	});
+
+	test("includes verification section with V1/V2/V3 tiers", () => {
+		const prompt = buildDynamicSystemPrompt(baseOptions);
+
+		expect(prompt).toContain("## Verification");
+		expect(prompt).toContain("V1");
+		expect(prompt).toContain("V2");
+		expect(prompt).toContain("V3");
 	});
 
 	test("includes tool section with categorized tools", () => {
@@ -46,6 +74,29 @@ describe("buildDynamicSystemPrompt", () => {
 
 		expect(prompt).not.toContain("as any");
 		expect(prompt).not.toContain("ts-ignore");
+	});
+
+	test("includes style section", () => {
+		const prompt = buildDynamicSystemPrompt(baseOptions);
+
+		expect(prompt).toContain("## Style");
+		expect(prompt).toContain("Smallest correct change");
+	});
+
+	test("does not include tuning section by default", () => {
+		const prompt = buildDynamicSystemPrompt(baseOptions);
+
+		expect(prompt).not.toContain("## Model Notes");
+	});
+
+	test("includes tuning section when provided", () => {
+		const prompt = buildDynamicSystemPrompt({
+			...baseOptions,
+			tuningSection: "## Model Notes (Test)\n\nCustom tuning content.",
+		});
+
+		expect(prompt).toContain("## Model Notes (Test)");
+		expect(prompt).toContain("Custom tuning content.");
 	});
 
 	test("includes current date", () => {

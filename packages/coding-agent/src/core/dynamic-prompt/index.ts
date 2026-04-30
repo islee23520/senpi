@@ -1,3 +1,12 @@
 export type { BuildDynamicSystemPromptOptions } from "./build.js";
 export { buildDynamicSystemPrompt } from "./build.js";
+export { buildExplorationSection } from "./exploration.js";
+export { buildIdentitySection } from "./identity.js";
+export { buildIntentGate } from "./intent-gate.js";
+export { buildParallelToolsSection } from "./parallel-tools.js";
+export { buildPoliciesSection } from "./policies.js";
+export { buildStyleSection } from "./style.js";
+export { categorizeTools } from "./tool-categorization.js";
+export { buildToolSection } from "./tool-section.js";
 export type { AvailableTool } from "./types.js";
+export { buildVerificationSection } from "./verification.js";

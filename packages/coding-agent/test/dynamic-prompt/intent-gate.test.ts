@@ -40,13 +40,13 @@ describe("buildIntentGate", () => {
 		expect(result).toContain("grep");
 	});
 
-	test("keeps intent routing internal instead of exposing scaffolding", () => {
+	test("forces intent verbalization with the routing line", () => {
 		const result = buildIntentGate({ tools: [] });
 
-		expect(result).toContain("Keep the routing decision internal");
-		expect(result).toContain("Do not expose classification labels");
-		expect(result).not.toContain("Verbalize before proceeding");
-		expect(result).not.toContain('> "I detect');
+		expect(result).toContain("I read this as");
+		expect(result).toContain("The routing line is required");
+		expect(result).not.toContain("Keep the routing decision internal");
+		expect(result).not.toContain("Do not expose classification labels");
 	});
 
 	test("includes routing map with surface form to approach mapping", () => {
