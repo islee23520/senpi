@@ -83,6 +83,28 @@ export interface ConvertResponsesToolsOptions {
 	strict?: boolean | null;
 }
 
+type ResponseCustomToolCallItem = {
+	type: "custom_tool_call";
+	call_id: string;
+	name: string;
+	input?: string;
+};
+
+type ResponseCustomToolCallOutputItem = {
+	type: "custom_tool_call_output";
+	call_id: string;
+	name: string;
+	output: string | ResponseFunctionCallOutputItemList;
+};
+
+type ResponseInputItem = ResponseInput[number] | ResponseCustomToolCallItem | ResponseCustomToolCallOutputItem;
+
+type ResponseFunctionTool = Extract<OpenAITool, { type: "function" }>;
+
+function isResponseCustomToolCallItem(item: { type?: string }): item is ResponseCustomToolCallItem {
+	return item.type === "custom_tool_call";
+}
+
 function isFreeformTool(tool: Tool): boolean {
 	return tool.freeform !== undefined;
 }
@@ -105,7 +127,7 @@ export function convertResponsesMessages<TApi extends Api>(
 	allowedToolCallProviders: ReadonlySet<string>,
 	options?: ConvertResponsesMessagesOptions,
 ): ResponseInput {
-	const messages: ResponseInput = [];
+	const messages: ResponseInputItem[] = [];
 
 	const normalizeIdPart = (part: string): string => {
 		const sanitized = part.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -172,7 +194,7 @@ export function convertResponsesMessages<TApi extends Api>(
 				});
 			}
 		} else if (msg.role === "assistant") {
-			const output: ResponseInput = [];
+			const output: ResponseInputItem[] = [];
 			const assistantMsg = msg as AssistantMessage;
 			const isDifferentModel =
 				assistantMsg.model !== model.id &&
@@ -221,7 +243,7 @@ export function convertResponsesMessages<TApi extends Api>(
 							call_id: callId,
 							name: toolCall.name,
 							input: getFreeformToolInput(toolCall.arguments),
-						} as any);
+						} satisfies ResponseCustomToolCallItem);
 					} else {
 						output.push({
 							type: "function_call",
@@ -276,7 +298,7 @@ export function convertResponsesMessages<TApi extends Api>(
 					call_id: callId,
 					name: msg.toolName,
 					output,
-				} as any);
+				} satisfies ResponseCustomToolCallOutputItem);
 			} else {
 				messages.push({
 					type: "function_call_output",
@@ -288,7 +310,7 @@ export function convertResponsesMessages<TApi extends Api>(
 		msgIndex++;
 	}
 
-	return messages;
+	return messages as ResponseInput;
 }
 
 // =============================================================================
@@ -311,7 +333,7 @@ export function convertResponsesTools(tools: Tool[], options?: ConvertResponsesT
 			type: "function",
 			name: tool.name,
 			description: tool.description,
-			parameters: tool.parameters as any, // TypeBox already generates JSON Schema
+			parameters: tool.parameters as ResponseFunctionTool["parameters"], // TypeBox already generates JSON Schema
 			strict,
 		} as OpenAITool;
 	});
@@ -328,7 +350,12 @@ export async function processResponsesStream<TApi extends Api>(
 	model: Model<TApi>,
 	options?: OpenAIResponsesStreamOptions,
 ): Promise<void> {
-	let currentItem: ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall | null = null;
+	let currentItem:
+		| ResponseReasoningItem
+		| ResponseOutputMessage
+		| ResponseFunctionToolCall
+		| ResponseCustomToolCallItem
+		| null = null;
 	let currentBlock: ThinkingContent | TextContent | (ToolCall & { partialJson: string }) | null = null;
 	const blocks = output.content;
 	const blockIndex = () => blocks.length - 1;
@@ -359,14 +386,15 @@ export async function processResponsesStream<TApi extends Api>(
 				};
 				output.content.push(currentBlock);
 				stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });
-			} else if ((item as any).type === "custom_tool_call") {
-				currentItem = item as any;
+			} else if (isResponseCustomToolCallItem(item)) {
+				currentItem = item;
+				const input = item.input || "";
 				currentBlock = {
 					type: "toolCall",
-					id: `${(item as any).call_id}|custom`,
-					name: (item as any).name,
-					arguments: { input: (item as any).input || "" },
-					partialJson: JSON.stringify({ input: (item as any).input || "" }),
+					id: `${item.call_id}|custom`,
+					name: item.name,
+					arguments: { input },
+					partialJson: JSON.stringify({ input }),
 				};
 				output.content.push(currentBlock);
 				stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });
@@ -524,14 +552,21 @@ export async function processResponsesStream<TApi extends Api>(
 
 				currentBlock = null;
 				stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
-			} else if ((item as any).type === "custom_tool_call") {
-				const input = typeof (item as any).input === "string" ? (item as any).input : "";
-				const toolCall: ToolCall = {
-					type: "toolCall",
-					id: `${(item as any).call_id}|custom`,
-					name: (item as any).name,
-					arguments: { input },
-				};
+			} else if (isResponseCustomToolCallItem(item)) {
+				const input = typeof item.input === "string" ? item.input : "";
+				let toolCall: ToolCall;
+				if (currentBlock?.type === "toolCall") {
+					currentBlock.arguments = { input };
+					delete (currentBlock as { partialJson?: string }).partialJson;
+					toolCall = currentBlock;
+				} else {
+					toolCall = {
+						type: "toolCall",
+						id: `${item.call_id}|custom`,
+						name: item.name,
+						arguments: { input },
+					};
+				}
 
 				currentBlock = null;
 				stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
