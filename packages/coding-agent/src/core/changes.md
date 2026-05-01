@@ -1,5 +1,23 @@
 # changes
 
+## Git package dependency repair on update (2026-05-02)
+
+### What changed
+
+- `src/core/package-manager.ts`: `updateGit()` now runs the package dependency install step even when the fetched git target already matches the local checkout.
+
+### Why
+
+- `senpi update` previously returned early for current git packages. If an extension checkout's `node_modules` was damaged or incomplete, the update command reported success but left runtime imports broken.
+
+### Why extension system couldn't handle this
+
+- Git package update and dependency installation are core package-manager responsibilities that run before extension loading.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `DefaultPackageManager.updateGit()` around the post-fetch current-HEAD branch.
+
 ## Model Switch System Prompt Change (2026-04-30)
 
 ### What changed

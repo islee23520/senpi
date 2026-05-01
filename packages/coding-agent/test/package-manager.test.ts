@@ -26,6 +26,12 @@ class MockSpawnedProcess extends EventEmitter {
 	}
 }
 
+interface PackageManagerInternals {
+	getLocalGitUpdateTarget(installedPath: string): Promise<{ ref: string; head: string; fetchArgs: string[] }>;
+	runCommand(command: string, args: string[], options?: { cwd?: string }): Promise<void>;
+	runCommandCapture(command: string, args: string[], options?: { cwd?: string; timeoutMs?: number }): Promise<string>;
+}
+
 // Helper to check if a resource is enabled
 const isEnabled = (r: ResolvedResource, pathMatch: string, matchFn: "endsWith" | "includes" = "endsWith") => {
 	const normalizedPath = normalizeForMatch(r.path);
@@ -1747,6 +1753,32 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(updateGitSpy).toHaveBeenCalledTimes(3);
 			expect(maxConcurrentNpmUpdates).toBeGreaterThan(1);
 			expect(maxConcurrentGitUpdates).toBeGreaterThan(1);
+		});
+
+		it("should reinstall git package dependencies when the checkout is already current", async () => {
+			const source = "git:github.com/user/repo";
+			const targetDir = join(agentDir, "git", "github.com", "user", "repo");
+			mkdirSync(targetDir, { recursive: true });
+			writeFileSync(join(targetDir, "package.json"), JSON.stringify({ name: "repo", version: "1.0.0" }));
+			settingsManager.setPackages([source]);
+
+			const managerWithInternals = Object.getPrototypeOf(packageManager) as PackageManagerInternals;
+			vi.spyOn(managerWithInternals, "getLocalGitUpdateTarget").mockResolvedValue({
+				ref: "origin/main",
+				head: "abc123",
+				fetchArgs: ["fetch", "--prune", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"],
+			});
+			const runCommandSpy = vi.spyOn(managerWithInternals, "runCommand").mockResolvedValue(undefined);
+			vi.spyOn(managerWithInternals, "runCommandCapture").mockResolvedValue("abc123");
+
+			await packageManager.update(source);
+
+			expect(runCommandSpy).toHaveBeenCalledWith(
+				"git",
+				["fetch", "--prune", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"],
+				{ cwd: targetDir },
+			);
+			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
 		});
 
 		it("should suggest npm source prefixes for update lookups", async () => {

@@ -1,6 +1,7 @@
+import { PACKAGE_NAME } from "../config.js";
 import { getPiUserAgent } from "./pi-user-agent.js";
 
-const LATEST_VERSION_URL = "https://pi.dev/api/latest-version";
+const LATEST_VERSION_URL = `https://registry.npmjs.org/${encodeURIComponent(PACKAGE_NAME)}/latest`;
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 
 interface ParsedVersion {

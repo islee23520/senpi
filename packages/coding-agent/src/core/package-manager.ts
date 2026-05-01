@@ -1748,7 +1748,11 @@ export class DefaultPackageManager implements PackageManager {
 			cwd: targetDir,
 			timeoutMs: NETWORK_TIMEOUT_MS,
 		});
+		const packageJsonPath = join(targetDir, "package.json");
 		if (localHead.trim() === refreshedTargetHead.trim()) {
+			if (existsSync(packageJsonPath)) {
+				await this.runNpmCommand(this.getGitDependencyInstallArgs(), { cwd: targetDir });
+			}
 			return;
 		}
 
@@ -1757,7 +1761,6 @@ export class DefaultPackageManager implements PackageManager {
 		// Clean untracked files (extensions should be pristine)
 		await this.runCommand("git", ["clean", "-fdx"], { cwd: targetDir });
 
-		const packageJsonPath = join(targetDir, "package.json");
 		if (existsSync(packageJsonPath)) {
 			await this.runNpmCommand(this.getGitDependencyInstallArgs(), { cwd: targetDir });
 		}
