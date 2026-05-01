@@ -1,6 +1,6 @@
 import { SettingsManager } from "../../../settings-manager.js";
 import type { ExtensionAPI } from "../../types.js";
-import { extractPatchedPaths } from "../gpt-apply-patch.js";
+import { extractPatchedPaths } from "../gpt-apply-patch/index.js";
 import { parsePermissionFlag } from "./cli.js";
 import { disabled } from "./config.js";
 import { createEventEmitter } from "./events.js";

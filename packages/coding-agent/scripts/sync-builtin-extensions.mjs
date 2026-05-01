@@ -65,11 +65,26 @@ const FILES = [
 				)
 				.replaceAll(": Theme", ": typeof ThemeInstance"),
 	},
+	{
+		source: "pi-apply-patch/src/index.ts",
+		target: "gpt-apply-patch/index.ts",
+		transform: (content) =>
+			content
+				.replace(
+					'import type { AgentToolResult } from "@mariozechner/pi-agent-core";',
+					'import type { AgentToolResult } from "../../types.js";',
+				)
+				.replace(
+					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "@mariozechner/pi-coding-agent";',
+					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
+				),
+	},
 ];
 
 const PACKAGES = [
 	{ id: "bash-timeout", packageDir: "pi-bash-timeout" },
 	{ id: "webfetch", packageDir: "pi-webfetch" },
+	{ id: "gpt-apply-patch", packageDir: "pi-apply-patch" },
 ];
 
 function readPackageMetadata(packageName) {

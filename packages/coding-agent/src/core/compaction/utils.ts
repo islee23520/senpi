@@ -4,7 +4,7 @@
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { Message } from "@mariozechner/pi-ai";
-import { extractPatchedPaths } from "../extensions/builtin/gpt-apply-patch.js";
+import { extractPatchedPaths } from "../extensions/builtin/gpt-apply-patch/index.js";
 
 // ============================================================================
 // File Operation Tracking

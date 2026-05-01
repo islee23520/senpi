@@ -360,7 +360,7 @@ The default export can also be `async`. pi waits for async extension factories b
 
 Place in `~/.senpi/agent/extensions/`, `.senpi/extensions/`, or a [senpi package](#pi-packages) to share with others. See [docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
 
-Builtin extensions ship inside senpi and load before user extensions. Configure them in `settings.json` with `enabledBuiltinExtensions` to allow only specific builtin ids, or `disabledBuiltinExtensions` to skip ids while keeping the default set. The `bash-timeout` and `webfetch` builtin snapshots are refreshed from the sibling `pi-extensions` checkout at build time when available, and their source versions are recorded in `src/core/extensions/builtin/external-versions.json`.
+Builtin extensions ship inside senpi and load before user extensions. Configure them in `settings.json` with `enabledBuiltinExtensions` to allow only specific builtin ids, or `disabledBuiltinExtensions` to skip ids while keeping the default set. The `bash-timeout`, `webfetch`, and `gpt-apply-patch` builtin snapshots are refreshed from the sibling `pi-extensions` checkout at build time when available, and their source versions are recorded in `src/core/extensions/builtin/external-versions.json`.
 
 ### Themes
 

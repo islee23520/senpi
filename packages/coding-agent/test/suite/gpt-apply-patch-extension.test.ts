@@ -7,7 +7,7 @@ import gptApplyPatchExtension, {
 	APPLY_PATCH_LARK_GRAMMAR,
 	createApplyPatchTool,
 	isOpenAIGptModel,
-} from "../../src/core/extensions/builtin/gpt-apply-patch.js";
+} from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
 import { createBuiltinParserRegistry } from "../../src/core/extensions/builtin/permission-system/parsers.js";
 import type { ToolDefinition } from "../../src/core/extensions/index.js";
 import type { Harness } from "./harness.js";

@@ -1,9 +1,9 @@
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { Model } from "@mariozechner/pi-ai";
 import { Type } from "typebox";
-import { defineTool, type ExtensionAPI, type ToolDefinition } from "../types.js";
+import type { AgentToolResult } from "../../types.js";
+import { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";
 
 const APPLY_PATCH_PARAMS = Type.Object({
 	input: Type.String({
@@ -23,6 +23,20 @@ type PatchChunk = {
 
 type BaselineState = {
 	nonGptToolNames: string[];
+};
+
+export type FreeformToolFormat = {
+	type: "grammar";
+	syntax: "lark";
+	definition: string;
+};
+
+type ApplyPatchToolDefinition = ToolDefinition<typeof APPLY_PATCH_PARAMS> & {
+	freeform: FreeformToolFormat;
+};
+
+export type ApplyPatchExtensionAPI = Pick<ExtensionAPI, "on" | "getActiveTools" | "setActiveTools"> & {
+	registerTool: (tool: ApplyPatchToolDefinition) => void;
 };
 
 type ApplyPatchParams = {
@@ -270,6 +284,19 @@ async function applyParsedPatch(cwd: string, hunks: ParsedPatch[]): Promise<stri
 	return summaries;
 }
 
+export async function applyPatch(cwd: string, patchText: string): Promise<string[]> {
+	const hunks = parsePatch(patchText);
+	if (hunks.length === 0) {
+		const normalized = normalizePatchText(patchText).trim();
+		if (normalized === "*** Begin Patch\n*** End Patch") {
+			throw new Error("patch rejected: empty patch");
+		}
+		throw new Error("apply_patch verification failed: no hunks found");
+	}
+
+	return applyParsedPatch(cwd, hunks);
+}
+
 function hasEditTools(toolNames: string[]): boolean {
 	return toolNames.some((toolName) => EDIT_TOOL_NAMES.has(toolName));
 }
@@ -333,43 +360,37 @@ function syncToolset(
 	pi.setActiveTools(state.nonGptToolNames);
 }
 
-export function createApplyPatchTool(): ToolDefinition<typeof APPLY_PATCH_PARAMS> {
-	return defineTool({
+export function createApplyPatchTool(): ApplyPatchToolDefinition {
+	const tool = defineTool({
 		name: "apply_patch",
 		label: "ApplyPatch",
 		description: APPLY_PATCH_FREEFORM_DESCRIPTION,
 		parameters: APPLY_PATCH_PARAMS,
 		prepareArguments: normalizeApplyPatchArguments,
-		freeform: {
-			type: "grammar",
-			syntax: "lark",
-			definition: APPLY_PATCH_LARK_GRAMMAR,
-		},
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx): Promise<AgentToolResult<unknown>> {
 			const normalizedParams = normalizeApplyPatchArguments(params);
 			if (!normalizedParams.input) {
 				throw new Error("input is required");
 			}
 
-			const hunks = parsePatch(normalizedParams.input);
-			if (hunks.length === 0) {
-				const normalized = normalizePatchText(normalizedParams.input).trim();
-				if (normalized === "*** Begin Patch\n*** End Patch") {
-					throw new Error("patch rejected: empty patch");
-				}
-				throw new Error("apply_patch verification failed: no hunks found");
-			}
-
-			const summaries = await applyParsedPatch(ctx.cwd, hunks);
+			const summaries = await applyPatch(ctx.cwd, normalizedParams.input);
 			return {
 				content: [{ type: "text", text: summaries.join("\n") }],
 				details: {},
 			};
 		},
 	});
+
+	return Object.assign(tool, {
+		freeform: {
+			type: "grammar",
+			syntax: "lark",
+			definition: APPLY_PATCH_LARK_GRAMMAR,
+		} satisfies FreeformToolFormat,
+	});
 }
 
-export default function gptApplyPatchExtension(pi: ExtensionAPI): void {
+export function registerApplyPatchExtension(pi: ApplyPatchExtensionAPI): void {
 	const state: BaselineState = {
 		nonGptToolNames: [],
 	};
@@ -384,3 +405,5 @@ export default function gptApplyPatchExtension(pi: ExtensionAPI): void {
 		syncToolset(pi, event.model, state);
 	});
 }
+
+export default registerApplyPatchExtension;

@@ -1,4 +1,4 @@
-import { extractPatchedPaths } from "../gpt-apply-patch.js";
+import { extractPatchedPaths } from "../gpt-apply-patch/index.js";
 import { BashArity } from "../permission-system/arity.js";
 import { extractExternalPaths } from "../permission-system/external-dir.js";
 import type { Request } from "../permission-system/types.js";

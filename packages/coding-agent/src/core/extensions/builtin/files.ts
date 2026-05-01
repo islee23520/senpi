@@ -8,7 +8,7 @@
 import { Container, Key, matchesKey, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 import { DynamicBorder } from "../../../modes/interactive/components/dynamic-border.js";
 import type { ExtensionAPI } from "../types.js";
-import { extractPatchedPaths } from "./gpt-apply-patch.js";
+import { extractPatchedPaths } from "./gpt-apply-patch/index.js";
 
 interface FileEntry {
 	path: string;

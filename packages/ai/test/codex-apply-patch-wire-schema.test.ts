@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	APPLY_PATCH_FREEFORM_DESCRIPTION,
 	APPLY_PATCH_LARK_GRAMMAR,
-} from "../../coding-agent/src/core/extensions/builtin/gpt-apply-patch.js";
+} from "../../coding-agent/src/core/extensions/builtin/gpt-apply-patch/index.js";
 import { convertResponsesTools } from "../src/providers/openai-responses-shared.js";
 import type { Tool } from "../src/types.js";
 

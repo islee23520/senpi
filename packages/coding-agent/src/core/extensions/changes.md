@@ -142,7 +142,7 @@ If upstream modifies compaction event definitions in `types.ts`, preserve the ad
 
 - `types.ts`
 - `builtin/index.ts`
-- `builtin/gpt-apply-patch.ts`
+- `builtin/gpt-apply-patch/index.ts` (vendored from `pi-apply-patch`)
 
 ### Why the extension system couldn't handle this alone
 
