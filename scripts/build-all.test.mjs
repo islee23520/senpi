@@ -29,12 +29,10 @@ describe("build-all", () => {
 			"packages/agent",
 			"packages/coding-agent",
 			"packages/web-ui",
-			"packages/pods",
-			"packages/mom",
 		]);
 		assert.ok(index("packages/agent") > index("packages/ai"));
 		assert.ok(index("packages/coding-agent") > index("packages/agent"));
-		assert.ok(index("packages/mom") > index("packages/coding-agent"));
+		assert.ok(index("packages/web-ui") > index("packages/agent"));
 	});
 
 	it("strips pnpm-only npm config from child environments", () => {
