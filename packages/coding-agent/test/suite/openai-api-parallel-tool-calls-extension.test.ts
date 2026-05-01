@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-	addParallelToolCallsToPayload,
+	addOpenAIApiParallelToolCallsToPayload,
 	PARALLEL_TOOL_CALLS_SECTION,
-} from "../../src/core/extensions/builtin/parallel-tool-calls.js";
+} from "../../src/core/extensions/builtin/openai-api-parallel-tool-calls.js";
 
 describe("PARALLEL_TOOL_CALLS_SECTION content", () => {
 	it("does not reference phantom lsp_* tools", () => {
@@ -38,14 +38,14 @@ describe("PARALLEL_TOOL_CALLS_SECTION content", () => {
 	});
 });
 
-describe("parallel-tool-calls builtin extension", () => {
+describe("openai-api-parallel-tool-calls builtin extension", () => {
 	it("adds parallel_tool_calls for openai completions payloads with tools", () => {
 		const payload = {
 			model: "gpt-4o-mini",
 			tools: [{ type: "function", function: { name: "ping" } }],
 		};
 
-		const result = addParallelToolCallsToPayload("openai-completions", payload) as {
+		const result = addOpenAIApiParallelToolCallsToPayload("openai-completions", payload) as {
 			parallel_tool_calls?: boolean;
 		};
 
@@ -58,7 +58,7 @@ describe("parallel-tool-calls builtin extension", () => {
 			tools: [{ type: "function", name: "ping", parameters: { type: "object" } }],
 		};
 
-		const result = addParallelToolCallsToPayload("openai-responses", payload) as {
+		const result = addOpenAIApiParallelToolCallsToPayload("openai-responses", payload) as {
 			parallel_tool_calls?: boolean;
 		};
 
@@ -71,7 +71,7 @@ describe("parallel-tool-calls builtin extension", () => {
 			tools: [{ name: "ping", input_schema: { type: "object" } }],
 		};
 
-		const result = addParallelToolCallsToPayload("anthropic-messages", payload);
+		const result = addOpenAIApiParallelToolCallsToPayload("anthropic-messages", payload);
 
 		expect(result).toBe(payload);
 	});
@@ -81,7 +81,7 @@ describe("parallel-tool-calls builtin extension", () => {
 			model: "gpt-4o-mini",
 		};
 
-		const result = addParallelToolCallsToPayload("openai-completions", payload);
+		const result = addOpenAIApiParallelToolCallsToPayload("openai-completions", payload);
 
 		expect(result).toBe(payload);
 	});
@@ -93,7 +93,7 @@ describe("parallel-tool-calls builtin extension", () => {
 			parallel_tool_calls: false,
 		};
 
-		const result = addParallelToolCallsToPayload("openai-completions", payload);
+		const result = addOpenAIApiParallelToolCallsToPayload("openai-completions", payload);
 
 		expect(result).toBe(payload);
 	});

@@ -4,7 +4,7 @@ import backgroundTaskExtension from "./background-task/index.js";
 import bashTimeoutExtension from "./bash-timeout.js";
 import compactionExtension from "./compaction/index.js";
 import gptApplyPatchExtension from "./gpt-apply-patch.js";
-import parallelToolCallsExtension from "./parallel-tool-calls.js";
+import openaiApiParallelToolCallsExtension from "./openai-api-parallel-tool-calls.js";
 import permissionSystemExtension from "./permission-system/index.js";
 import promptPresetExtension from "./prompt-preset/index.js";
 import redrawsExtension from "./redraws.js";
@@ -26,7 +26,7 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "prompt-preset", factory: promptPresetExtension },
 	{ id: "todowrite", factory: todowriteExtension },
 	{ id: "redraws", factory: redrawsExtension },
-	{ id: "parallel-tool-calls", factory: parallelToolCallsExtension },
+	{ id: "openai-api-parallel-tool-calls", factory: openaiApiParallelToolCallsExtension },
 	{ id: "service-tier", factory: serviceTierExtension },
 	{ id: "bash-timeout", factory: bashTimeoutExtension },
 	{ id: "compaction", factory: compactionExtension },

@@ -7,7 +7,7 @@ import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@mari
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../../src/config.js";
-import parallelToolCallsExtension from "../../src/core/extensions/builtin/parallel-tool-calls.js";
+import openaiApiParallelToolCallsExtension from "../../src/core/extensions/builtin/openai-api-parallel-tool-calls.js";
 import { resolveContinuationConfig } from "../../src/core/extensions/builtin/todotools/continuation/config.js";
 import { CONTINUATION_DIRECTIVE } from "../../src/core/extensions/builtin/todotools/continuation/prompt.js";
 import todotoolsExtension, {
@@ -370,11 +370,11 @@ describe("todotools continuation compatibility", () => {
 		expect(getInjectedContinuationMessages(harness)[1]).toContain("Alternate branch task");
 	});
 
-	it("fires continuation exactly once after a multi-tool turn when parallel-tool-calls is active", async () => {
+	it("fires continuation exactly once after a multi-tool turn when openai-api-parallel-tool-calls is active", async () => {
 		useIsolatedAgentDir();
 		const toolExecutions: string[] = [];
 		const { harness } = await createTodoHarness({
-			extensionFactories: [parallelToolCallsExtension, todotoolsExtension],
+			extensionFactories: [openaiApiParallelToolCallsExtension, todotoolsExtension],
 			tools: [createDelayedTool("slow", 25, toolExecutions)],
 		});
 		harness.setResponses([

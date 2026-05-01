@@ -18,7 +18,7 @@ function hasTools(payload: ProviderPayload): boolean {
 	return Array.isArray(payload.tools) && payload.tools.length > 0;
 }
 
-export function addParallelToolCallsToPayload(api: Api | undefined, payload: unknown): unknown {
+export function addOpenAIApiParallelToolCallsToPayload(api: Api | undefined, payload: unknown): unknown {
 	if (!api || !OPENAI_PARALLEL_TOOL_CALL_APIS.has(api)) {
 		return payload;
 	}
@@ -60,7 +60,7 @@ Multiple well-informed edits in one pass beats a cycle of edit-then-fix-then-fix
 
 export default function (pi: ExtensionAPI) {
 	pi.on("before_provider_request", (event, ctx) => {
-		return addParallelToolCallsToPayload(ctx.model?.api, event.payload);
+		return addOpenAIApiParallelToolCallsToPayload(ctx.model?.api, event.payload);
 	});
 
 	pi.on("before_agent_start", async (event) => {
