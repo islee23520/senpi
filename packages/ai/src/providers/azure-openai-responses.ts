@@ -1,7 +1,7 @@
 import { AzureOpenAI } from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
 import { getEnvApiKey } from "../env-api-keys.js";
-import { supportsXhigh } from "../models.js";
+import { clampThinkingLevel, supportsXhigh } from "../models.js";
 import type {
 	Api,
 	AssistantMessage,
@@ -18,7 +18,6 @@ import {
 	applyExtraBody,
 	buildBaseOptions,
 	clampMaxForOpenAI,
-	clampReasoning,
 	OPENAI_RESPONSES_RESERVED_BODY_KEYS,
 } from "./simple-options.js";
 
@@ -145,10 +144,9 @@ export const streamSimpleAzureOpenAIResponses: StreamFunction<"azure-openai-resp
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
-	const xhighSupported = supportsXhigh(model);
-	const reasoningEffort: AzureOpenAIResponsesOptions["reasoningEffort"] = xhighSupported
-		? clampMaxForOpenAI(options?.reasoning, true)
-		: clampReasoning(options?.reasoning);
+	const clampedReasoning = options?.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
+	const reasoningEffort =
+		clampedReasoning === "off" ? undefined : clampMaxForOpenAI(clampedReasoning, supportsXhigh(model));
 
 	return streamAzureOpenAIResponses(model, context, {
 		...base,
@@ -270,13 +268,18 @@ function buildParams(
 
 	if (model.reasoning) {
 		if (options?.reasoningEffort || options?.reasoningSummary) {
+			const effort = options?.reasoningEffort
+				? (model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort)
+				: "medium";
 			params.reasoning = {
-				effort: options?.reasoningEffort || "medium",
+				effort: effort as NonNullable<typeof params.reasoning>["effort"],
 				summary: options?.reasoningSummary || "auto",
 			};
 			params.include = ["reasoning.encrypted_content"];
-		} else {
-			params.reasoning = { effort: "none" };
+		} else if (model.thinkingLevelMap?.off !== null) {
+			params.reasoning = {
+				effort: (model.thinkingLevelMap?.off ?? "none") as NonNullable<typeof params.reasoning>["effort"],
+			};
 		}
 	}
 

@@ -12,6 +12,15 @@ Fork of [badlogic/pi-mono](https://github.com/badlogic/pi-mono). TypeScript mono
 
 This repo is a **fork** of `upstream` ([badlogic/pi-mono](https://github.com/badlogic/pi-mono)). All work must minimize merge conflict surface with upstream.
 
+- No `any` types unless absolutely necessary
+- Check node_modules for external API type definitions instead of guessing
+- **NEVER use inline imports** - no `await import("./foo.js")`, no `import("pkg").Type` in type positions, no dynamic imports for types. Always use standard top-level imports.
+- NEVER remove or downgrade code to fix type errors from outdated dependencies; upgrade the dependency instead
+- Always ask before removing functionality or code that appears to be intentional
+- Do not preserve backward compatibility unless the user explicitly asks for it
+- Never hardcode key checks with, eg. `matchesKey(keyData, "ctrl+x")`. All keybindings must be configurable. Add default to matching object (`DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS`)
+- NEVER modify `packages/ai/src/models.generated.ts` directly. Update `packages/ai/scripts/generate-models.ts` instead.
+
 ## Commands
 
 - After code changes (not documentation changes): `npm run check` (get full output, no tail). Fix all errors, warnings, and infos before committing.

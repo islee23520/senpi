@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming, ResponseStreamEvent } from "openai/resources/responses/responses.js";
 import { getEnvApiKey } from "../env-api-keys.js";
-import { supportsXhigh } from "../models.js";
+import { clampThinkingLevel, supportsXhigh } from "../models.js";
 import type {
 	Api,
 	AssistantMessage,
@@ -19,12 +19,7 @@ import { headersToRecord } from "../utils/headers.js";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.js";
-import {
-	buildBaseOptions,
-	clampMaxForOpenAI,
-	clampReasoning,
-	OPENAI_RESPONSES_RESERVED_BODY_KEYS,
-} from "./simple-options.js";
+import { buildBaseOptions, clampMaxForOpenAI, OPENAI_RESPONSES_RESERVED_BODY_KEYS } from "./simple-options.js";
 
 const OPENAI_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 const OPENAI_BETA_RESPONSES_WEBSOCKETS = "responses_websockets=2026-02-06";
@@ -212,10 +207,9 @@ export const streamSimpleOpenAIResponses: StreamFunction<"openai-responses", Sim
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
-	const xhighSupported = supportsXhigh(model);
-	const reasoningEffort: OpenAIResponsesOptions["reasoningEffort"] = xhighSupported
-		? clampMaxForOpenAI(options?.reasoning, true)
-		: clampReasoning(options?.reasoning);
+	const clampedReasoning = options?.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
+	const reasoningEffort =
+		clampedReasoning === "off" ? undefined : clampMaxForOpenAI(clampedReasoning, supportsXhigh(model));
 
 	return streamOpenAIResponses(model, context, {
 		...base,
@@ -311,13 +305,18 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 	if (model.reasoning) {
 		if (options?.reasoningEffort || options?.reasoningSummary) {
+			const effort = options?.reasoningEffort
+				? (model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort)
+				: "medium";
 			params.reasoning = {
-				effort: options?.reasoningEffort || "medium",
+				effort: effort as NonNullable<typeof params.reasoning>["effort"],
 				summary: options?.reasoningSummary || "auto",
 			};
 			params.include = ["reasoning.encrypted_content"];
-		} else if (model.provider !== "github-copilot") {
-			params.reasoning = { effort: "none" };
+		} else if (model.provider !== "github-copilot" && model.thinkingLevelMap?.off !== null) {
+			params.reasoning = {
+				effort: (model.thinkingLevelMap?.off ?? "none") as NonNullable<typeof params.reasoning>["effort"],
+			};
 		}
 	}
 

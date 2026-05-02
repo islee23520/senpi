@@ -278,12 +278,6 @@ interface ToolDefinitionEntry {
 // Constants
 // ============================================================================
 
-/** Standard thinking levels */
-const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
-
-/** Thinking levels up through xhigh (GPT-5.x codex-max, Opus 4.6/4.7). */
-const THINKING_LEVELS_WITH_XHIGH: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
-
 /** Thinking levels including native max (Opus 4.6 legacy / Opus 4.7 native). */
 const THINKING_LEVELS_WITH_MAX: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -691,11 +685,10 @@ export class AgentSession {
 			return;
 		}
 
-		const targetRecord = target as unknown as Record<string, unknown>;
-		for (const key of Object.keys(targetRecord)) {
-			delete targetRecord[key];
+		for (const key of Object.keys(target)) {
+			Reflect.deleteProperty(target, key);
 		}
-		Object.assign(targetRecord, replacement);
+		Object.assign(target, replacement);
 	}
 
 	/** Emit extension events based on agent events */
@@ -1655,10 +1648,12 @@ export class AgentSession {
 	 * The provider will clamp to what the specific model supports internally.
 	 */
 	getAvailableThinkingLevels(): ThinkingLevel[] {
-		if (!this.supportsThinking()) return ["off"];
-		if (this.supportsMaxThinking()) return THINKING_LEVELS_WITH_MAX;
-		if (this.supportsXhighThinking()) return THINKING_LEVELS_WITH_XHIGH;
-		return THINKING_LEVELS;
+		const model = this.model;
+		if (!model?.reasoning) return ["off"];
+
+		if (supportsMax(model)) return THINKING_LEVELS_WITH_MAX;
+		if (supportsXhigh(model)) return ["off", "minimal", "low", "medium", "high", "xhigh"];
+		return ["off", "minimal", "low", "medium", "high"];
 	}
 
 	/**
@@ -1694,19 +1689,17 @@ export class AgentSession {
 	}
 
 	private _clampThinkingLevel(level: ThinkingLevel, availableLevels: ThinkingLevel[]): ThinkingLevel {
-		const ordered = THINKING_LEVELS_WITH_MAX;
 		const available = new Set(availableLevels);
-		const requestedIndex = ordered.indexOf(level);
-		if (requestedIndex === -1) {
-			return availableLevels[0] ?? "off";
+		const requestedIndex = THINKING_LEVELS_WITH_MAX.indexOf(level);
+		if (requestedIndex === -1) return availableLevels[0] ?? "off";
+
+		for (let index = requestedIndex; index < THINKING_LEVELS_WITH_MAX.length; index++) {
+			const candidate = THINKING_LEVELS_WITH_MAX[index];
+			if (candidate && available.has(candidate)) return candidate;
 		}
-		for (let i = requestedIndex; i >= 0; i--) {
-			const candidate = ordered[i];
-			if (available.has(candidate)) return candidate;
-		}
-		for (let i = requestedIndex + 1; i < ordered.length; i++) {
-			const candidate = ordered[i];
-			if (available.has(candidate)) return candidate;
+		for (let index = requestedIndex - 1; index >= 0; index--) {
+			const candidate = THINKING_LEVELS_WITH_MAX[index];
+			if (candidate && available.has(candidate)) return candidate;
 		}
 		return availableLevels[0] ?? "off";
 	}

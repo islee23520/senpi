@@ -31,6 +31,10 @@ import {
 	withFileMutationQueue,
 } from "./tools/index.js";
 
+type ModelWithThinkingLevelMap = Model<Api> & {
+	thinkingLevelMap?: Partial<Record<ThinkingLevel, string | null>>;
+};
+
 export interface CreateAgentSessionOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
@@ -262,6 +266,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
 	}
 
+	// Clamp to model capabilities
 	thinkingLevel = clampThinkingLevelToModel(thinkingLevel, model);
 
 	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
@@ -414,6 +419,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
  *
  * Capability tiers:
  * - Non-reasoning model: everything collapses to "off".
+ * - Model metadata can disable individual levels via thinkingLevelMap.
  * - No xhigh support:   xhigh and max both collapse to "high".
  * - xhigh but no max:   max collapses to "xhigh" (currently GPT-5.2/5.3/5.4).
  * - Native max support: xhigh and max are both preserved (Opus 4.6 / 4.7).
@@ -426,9 +432,39 @@ export function clampThinkingLevelToModel(
 	model: Model<Api> | undefined,
 ): ThinkingLevel {
 	if (!model || !model.reasoning) return "off";
-	if (level === "max" && !supportsMax(model)) {
-		return supportsXhigh(model) ? "xhigh" : "high";
+
+	const requestedLevel = level ?? "off";
+	const availableLevels = getSupportedThinkingLevels(model);
+	if (availableLevels.includes(requestedLevel)) return requestedLevel;
+
+	const clampedLevels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+	const requestedIndex = clampedLevels.indexOf(requestedLevel === "max" ? "xhigh" : requestedLevel);
+	if (requestedIndex === -1) return availableLevels[0] ?? "off";
+
+	for (let index = requestedIndex; index < clampedLevels.length; index++) {
+		const candidate = clampedLevels[index];
+		if (candidate && availableLevels.includes(candidate)) return candidate;
 	}
-	if (level === "xhigh" && !supportsXhigh(model)) return "high";
-	return level ?? "off";
+	for (let index = requestedIndex - 1; index >= 0; index--) {
+		const candidate = clampedLevels[index];
+		if (candidate && availableLevels.includes(candidate)) return candidate;
+	}
+	return availableLevels[0] ?? "off";
+}
+
+function getSupportedThinkingLevels(model: Model<Api>): ThinkingLevel[] {
+	const modelWithThinkingLevelMap = model as ModelWithThinkingLevelMap;
+	const levels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+	const supportedLevels = levels.filter((level) => {
+		const mappedLevel = modelWithThinkingLevelMap.thinkingLevelMap?.[level];
+		if (mappedLevel === null) return false;
+		if (level === "xhigh") return mappedLevel !== undefined || supportsXhigh(model);
+		return true;
+	});
+
+	if (supportsMax(model)) {
+		supportedLevels.push("max");
+	}
+
+	return supportedLevels;
 }

@@ -80,20 +80,22 @@ const VercelGatewayRoutingSchema = Type.Object({
 	order: Type.Optional(Type.Array(Type.String())),
 });
 
-// Schema for OpenAI compatibility settings
-const ReasoningEffortMapSchema = Type.Object({
-	minimal: Type.Optional(Type.String()),
-	low: Type.Optional(Type.String()),
-	medium: Type.Optional(Type.String()),
-	high: Type.Optional(Type.String()),
-	xhigh: Type.Optional(Type.String()),
+// Schema for thinking level support and provider-specific values
+const ThinkingLevelMapValueSchema = Type.Union([Type.String(), Type.Null()]);
+const ThinkingLevelMapSchema = Type.Object({
+	off: Type.Optional(ThinkingLevelMapValueSchema),
+	minimal: Type.Optional(ThinkingLevelMapValueSchema),
+	low: Type.Optional(ThinkingLevelMapValueSchema),
+	medium: Type.Optional(ThinkingLevelMapValueSchema),
+	high: Type.Optional(ThinkingLevelMapValueSchema),
+	xhigh: Type.Optional(ThinkingLevelMapValueSchema),
+	max: Type.Optional(ThinkingLevelMapValueSchema),
 });
 
 const OpenAICompletionsCompatSchema = Type.Object({
 	supportsStore: Type.Optional(Type.Boolean()),
 	supportsDeveloperRole: Type.Optional(Type.Boolean()),
 	supportsReasoningEffort: Type.Optional(Type.Boolean()),
-	reasoningEffortMap: Type.Optional(ReasoningEffortMapSchema),
 	supportsUsageInStreaming: Type.Optional(Type.Boolean()),
 	maxTokensField: Type.Optional(Type.Union([Type.Literal("max_completion_tokens"), Type.Literal("max_tokens")])),
 	requiresToolResultName: Type.Optional(Type.Boolean()),
@@ -152,6 +154,7 @@ const ModelDefinitionSchema = Type.Object({
 	api: Type.Optional(Type.String({ minLength: 1 })),
 	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
+	thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
 	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image"), Type.Literal("video")]))),
 	cost: Type.Optional(
 		Type.Object({
@@ -172,6 +175,7 @@ const ModelDefinitionSchema = Type.Object({
 const ModelOverrideSchema = Type.Object({
 	name: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
+	thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
 	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image"), Type.Literal("video")]))),
 	cost: Type.Optional(
 		Type.Object({
@@ -189,6 +193,8 @@ const ModelOverrideSchema = Type.Object({
 });
 
 type ModelOverride = Static<typeof ModelOverrideSchema>;
+type ThinkingLevelMap = Static<typeof ThinkingLevelMapSchema>;
+type ModelWithThinkingLevelMap = Model<Api> & { thinkingLevelMap?: ThinkingLevelMap };
 
 const ProviderConfigSchema = Type.Object({
 	name: Type.Optional(Type.String({ minLength: 1 })),
@@ -299,12 +305,16 @@ function mergeCompat(
  * Handles nested objects (cost, compat) by merging rather than replacing.
  */
 function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<Api> {
-	const result = { ...model };
+	const modelWithThinkingLevelMap = model as ModelWithThinkingLevelMap;
+	const result: ModelWithThinkingLevelMap = { ...modelWithThinkingLevelMap };
 
 	// Simple field overrides
 	if (override.name !== undefined) result.name = override.name;
 	if (override.reasoning !== undefined) result.reasoning = override.reasoning;
-	if (override.input !== undefined) result.input = override.input as ("text" | "image")[];
+	if (override.thinkingLevelMap !== undefined) {
+		result.thinkingLevelMap = { ...modelWithThinkingLevelMap.thinkingLevelMap, ...override.thinkingLevelMap };
+	}
+	if (override.input !== undefined) result.input = override.input as Model<Api>["input"];
 	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
 	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
 
@@ -462,7 +472,7 @@ export class ModelRegistry {
 
 		try {
 			const content = readFileSync(modelsJsonPath, "utf-8");
-			const parsed = JSON.parse(content) as unknown;
+			const parsed: unknown = JSON.parse(content);
 
 			if (!validateModelsConfig.Check(parsed)) {
 				const errors =
@@ -607,7 +617,8 @@ export class ModelRegistry {
 					provider: providerName,
 					baseUrl,
 					reasoning: modelDef.reasoning ?? false,
-					input: (modelDef.input ?? ["text"]) as ("text" | "image")[],
+					thinkingLevelMap: modelDef.thinkingLevelMap,
+					input: (modelDef.input ?? ["text"]) as Model<Api>["input"],
 					cost: modelDef.cost ?? defaultCost,
 					contextWindow: modelDef.contextWindow ?? 128000,
 					maxTokens: modelDef.maxTokens ?? 16384,
@@ -920,9 +931,10 @@ export class ModelRegistry {
 					name: modelDef.name,
 					api: api as Api,
 					provider: providerName,
-					baseUrl: config.baseUrl!,
+					baseUrl: modelDef.baseUrl ?? config.baseUrl!,
 					reasoning: modelDef.reasoning,
-					input: modelDef.input as ("text" | "image")[],
+					thinkingLevelMap: modelDef.thinkingLevelMap,
+					input: modelDef.input as Model<Api>["input"],
 					cost: modelDef.cost,
 					contextWindow: modelDef.contextWindow,
 					maxTokens: modelDef.maxTokens,
@@ -971,7 +983,8 @@ export interface ProviderConfigInput {
 		api?: Api;
 		baseUrl?: string;
 		reasoning: boolean;
-		input: ("text" | "image")[];
+		thinkingLevelMap?: ThinkingLevelMap;
+		input: Model<Api>["input"];
 		cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 		contextWindow: number;
 		maxTokens: number;

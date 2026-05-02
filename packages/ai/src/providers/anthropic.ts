@@ -701,12 +701,15 @@ function isOpus47(modelId: string): boolean {
  * - Opus 4.6: supports "low" | "medium" | "high" | "max" ("xhigh" maps to "max")
  * - Sonnet 4.6 and other adaptive models: "low" | "medium" | "high" ("xhigh"/"max" clamp to "high")
  */
-function mapThinkingLevelToEffort(level: SimpleStreamOptions["reasoning"] | "off", modelId: string): AnthropicEffort {
+function mapThinkingLevelToEffort(
+	model: Model<"anthropic-messages">,
+	level: SimpleStreamOptions["reasoning"],
+): AnthropicEffort {
+	const mapped = level ? model.thinkingLevelMap?.[level] : undefined;
+	if (typeof mapped === "string") return mapped as AnthropicEffort;
+
 	switch (level) {
-		case "off":
-			return "low";
 		case "minimal":
-			return "low";
 		case "low":
 			return "low";
 		case "medium":
@@ -714,11 +717,11 @@ function mapThinkingLevelToEffort(level: SimpleStreamOptions["reasoning"] | "off
 		case "high":
 			return "high";
 		case "xhigh":
-			if (isOpus47(modelId)) return "xhigh";
-			if (isOpus46(modelId)) return "max";
+			if (isOpus47(model.id)) return "xhigh";
+			if (isOpus46(model.id)) return "max";
 			return "high";
 		case "max":
-			if (isOpus47(modelId) || isOpus46(modelId)) return "max";
+			if (isOpus47(model.id) || isOpus46(model.id)) return "max";
 			return "high";
 		default:
 			return "high";
@@ -743,7 +746,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 	// For Opus 4.6 and Sonnet 4.6: use adaptive thinking with effort level
 	// For older models: use budget-based thinking
 	if (supportsAdaptiveThinking(model.id)) {
-		const effort = mapThinkingLevelToEffort(options.reasoning, model.id);
+		const effort = mapThinkingLevelToEffort(model, options.reasoning);
 		return streamAnthropic(model, context, {
 			...base,
 			thinkingEnabled: true,
