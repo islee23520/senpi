@@ -58,10 +58,15 @@ const FILES = [
 		source: "pi-webfetch/src/webfetch/tool.ts",
 		target: "webfetch/tool.ts",
 		transform: (content) =>
-			content.replace(
-				'import { defineTool } from "@mariozechner/pi-coding-agent";',
-				'import { defineTool } from "../../types.js";',
-			),
+			content
+				.replace(
+					'import { defineTool } from "@mariozechner/pi-coding-agent";',
+					'import { defineTool } from "../../types.js";',
+				)
+				.replace(
+					'import { StringEnum } from "@mariozechner/pi-ai";\nimport { defineTool } from "../../types.js";\nimport { Type } from "typebox";',
+					'import { StringEnum } from "@mariozechner/pi-ai";\nimport { Type } from "typebox";\nimport { defineTool } from "../../types.js";',
+				),
 	},
 	{
 		source: "pi-webfetch/src/webfetch/renderers.ts",
@@ -71,6 +76,10 @@ const FILES = [
 				.replace(
 					'import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent";',
 					'import type { ToolRenderResultOptions } from "../../types.js";\nimport type { theme as ThemeInstance } from "../../../../modes/interactive/theme/theme.js";',
+				)
+				.replace(
+					'import type { ToolRenderResultOptions } from "../../types.js";\nimport type { theme as ThemeInstance } from "../../../../modes/interactive/theme/theme.js";\nimport { Text, truncateToWidth } from "@mariozechner/pi-tui";',
+					'import { Text, truncateToWidth } from "@mariozechner/pi-tui";\nimport type { theme as ThemeInstance } from "../../../../modes/interactive/theme/theme.js";\nimport type { ToolRenderResultOptions } from "../../types.js";',
 				)
 				.replaceAll(": Theme", ": typeof ThemeInstance"),
 	},
@@ -86,6 +95,10 @@ const FILES = [
 				.replace(
 					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "@mariozechner/pi-coding-agent";',
 					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
+				)
+				.replace(
+					'import type { AgentToolResult } from "../../types.js";\nimport type { Model } from "@mariozechner/pi-ai";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";\nimport { Type } from "typebox";',
+					'import type { Model } from "@mariozechner/pi-ai";\nimport { Type } from "typebox";\nimport type { AgentToolResult } from "../../types.js";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
 				),
 	},
 ];
