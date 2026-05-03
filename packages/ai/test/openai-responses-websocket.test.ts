@@ -4,6 +4,7 @@ import { type OpenAIResponsesOptions, streamOpenAIResponses } from "../src/provi
 import type { Context, Model, Tool } from "../src/types.js";
 
 const sentFrames: string[] = [];
+const constructedUrls: string[] = [];
 
 type WebSocketEventType = "open" | "message" | "error" | "close";
 type WebSocketListener = (event: unknown) => void;
@@ -12,7 +13,8 @@ class FakeWebSocket {
 	private readonly listeners = new Map<WebSocketEventType, Set<WebSocketListener>>();
 	readyState = 1;
 
-	constructor(_url: string, _protocols?: string | string[] | { headers?: Record<string, string> }) {
+	constructor(url: string, _protocols?: string | string[] | { headers?: Record<string, string> }) {
+		constructedUrls.push(url);
 		queueMicrotask(() => this.emit("open", {}));
 	}
 
@@ -73,9 +75,12 @@ function parseSentFrame(): Record<string, unknown> {
 
 describe("OpenAI Responses websocket transport", () => {
 	const originalWebSocket = globalThis.WebSocket;
+	const originalFetch = globalThis.fetch;
 
 	afterEach(() => {
 		sentFrames.length = 0;
+		constructedUrls.length = 0;
+		globalThis.fetch = originalFetch;
 		Object.defineProperty(globalThis, "WebSocket", {
 			configurable: true,
 			writable: true,
@@ -95,7 +100,7 @@ describe("OpenAI Responses websocket transport", () => {
 			name: "GPT-5.5",
 			api: "openai-responses",
 			provider: "openai",
-			baseUrl: "https://api.openai.test/v1",
+			baseUrl: "https://api.openai.com/v1",
 			reasoning: true,
 			input: ["text"],
 			contextWindow: 128000,
@@ -135,5 +140,56 @@ describe("OpenAI Responses websocket transport", () => {
 		expect(result.stopReason).toBe("stop");
 		expect(frame.type).toBe("response.create");
 		expect(frame.parallel_tool_calls).toBe(true);
+	});
+
+	it("uses SSE when the Responses websocket transport is disabled for a proxy", async () => {
+		Object.defineProperty(globalThis, "WebSocket", {
+			configurable: true,
+			writable: true,
+			value: FakeWebSocket,
+		});
+
+		globalThis.fetch = async () =>
+			new Response(
+				`data: ${JSON.stringify({
+					type: "response.completed",
+					response: {
+						id: "resp_test",
+						status: "completed",
+						usage: {
+							input_tokens: 1,
+							output_tokens: 1,
+							total_tokens: 2,
+							input_tokens_details: { cached_tokens: 0 },
+						},
+					},
+				})}\n\n`,
+				{ status: 200, headers: { "content-type": "text/event-stream" } },
+			);
+
+		const model = {
+			id: "gpt-5.5",
+			name: "GPT-5.5 via proxy",
+			api: "openai-responses",
+			provider: "openai",
+			baseUrl: "https://proxy.example.com/v1",
+			reasoning: true,
+			input: ["text"],
+			contextWindow: 128000,
+			maxTokens: 4096,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: { supportsWebSocket: false },
+		} satisfies Model<"openai-responses">;
+		const context = {
+			systemPrompt: "You are a test assistant.",
+			messages: [{ role: "user", content: "Say pong.", timestamp: Date.now() }],
+		} satisfies Context;
+
+		const stream = streamOpenAIResponses(model, context, { apiKey: "test-key", transport: "websocket" });
+		const result = await stream.result();
+
+		expect(result.stopReason).toBe("stop");
+		expect(constructedUrls).toEqual([]);
+		expect(sentFrames).toEqual([]);
 	});
 });

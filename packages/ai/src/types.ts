@@ -342,6 +342,8 @@ export interface OpenAIResponsesCompat {
 	sendSessionIdHeader?: boolean;
 	/** Whether the provider supports `prompt_cache_retention: "24h"`. Default: true. */
 	supportsLongCacheRetention?: boolean;
+	/** Whether the provider supports the OpenAI Responses WebSocket transport. Default: true for api.openai.com only. */
+	supportsWebSocket?: boolean;
 }
 
 /** Compatibility settings for Anthropic Messages-compatible APIs. */

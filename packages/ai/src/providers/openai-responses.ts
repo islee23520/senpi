@@ -66,7 +66,17 @@ function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCo
 	return {
 		sendSessionIdHeader: model.compat?.sendSessionIdHeader ?? true,
 		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? true,
+		supportsWebSocket: model.compat?.supportsWebSocket ?? isOpenAIResponsesWebSocketEndpoint(model),
 	};
+}
+
+function isOpenAIResponsesWebSocketEndpoint(model: Model<"openai-responses">): boolean {
+	const baseUrl = isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model) : model.baseUrl;
+	try {
+		return new URL(baseUrl || "https://api.openai.com/v1").hostname === "api.openai.com";
+	} catch {
+		return false;
+	}
 }
 
 function getPromptCacheRetention(
@@ -124,8 +134,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 				params = nextParams as ResponseCreateParamsStreaming;
 			}
 
+			const compat = getCompat(model);
 			const transport = options?.transport ?? "sse";
-			if (transport !== "sse") {
+			if (transport !== "sse" && compat.supportsWebSocket) {
 				let websocketStarted = false;
 				try {
 					await processWebSocketStream(
