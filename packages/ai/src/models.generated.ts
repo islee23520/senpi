@@ -8772,7 +8772,7 @@ export const MODELS = {
 				cacheWrite: 3.75,
 			},
 			contextWindow: 200000,
-			maxTokens: 128000,
+			maxTokens: 64000,
 		} satisfies Model<"openai-completions">,
 		"anthropic/claude-3.7-sonnet:thinking": {
 			id: "anthropic/claude-3.7-sonnet:thinking",
@@ -9351,13 +9351,13 @@ export const MODELS = {
 			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"max"},
 			input: ["text"],
 			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
+				input: 0.435,
+				output: 0.87,
+				cacheRead: 0.003625,
 				cacheWrite: 0,
 			},
-			contextWindow: 131000,
-			maxTokens: 131000,
+			contextWindow: 1048576,
+			maxTokens: 384000,
 		} satisfies Model<"openai-completions">,
 		"essentialai/rnj-1-instruct": {
 			id: "essentialai/rnj-1-instruct",
@@ -10173,6 +10173,23 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 131072,
+			maxTokens: 4096,
+		} satisfies Model<"openai-completions">,
+		"mistralai/mistral-medium-3-5": {
+			id: "mistralai/mistral-medium-3-5",
+			name: "Mistral: Mistral Medium 3.5",
+			api: "openai-completions",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 1.5,
+				output: 7.5,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 262144,
 			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"mistralai/mistral-medium-3.1": {
@@ -11325,6 +11342,23 @@ export const MODELS = {
 			},
 			contextWindow: 128000,
 			maxTokens: 16384,
+		} satisfies Model<"openai-completions">,
+		"openai/gpt-chat-latest": {
+			id: "openai/gpt-chat-latest",
+			name: "OpenAI: GPT Chat Latest",
+			api: "openai-completions",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			reasoning: false,
+			input: ["text", "image"],
+			cost: {
+				input: 5,
+				output: 30,
+				cacheRead: 0.5,
+				cacheWrite: 0,
+			},
+			contextWindow: 400000,
+			maxTokens: 128000,
 		} satisfies Model<"openai-completions">,
 		"openai/gpt-oss-120b": {
 			id: "openai/gpt-oss-120b",
@@ -13075,7 +13109,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 202752,
-			maxTokens: 16384,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"z-ai/glm-5-turbo": {
 			id: "z-ai/glm-5-turbo",
@@ -16521,7 +16555,7 @@ export const MODELS = {
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text"],
+			input: ["text", "image"],
 			cost: {
 				input: 0.4,
 				output: 2,
@@ -16538,7 +16572,7 @@ export const MODELS = {
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 1,
 				output: 3,
@@ -16608,7 +16642,7 @@ export const MODELS = {
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text"],
+			input: ["text", "image"],
 			cost: {
 				input: 0.4,
 				output: 2,
@@ -16625,7 +16659,7 @@ export const MODELS = {
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 1,
 				output: 3,
@@ -16695,7 +16729,7 @@ export const MODELS = {
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text"],
+			input: ["text", "image"],
 			cost: {
 				input: 0.4,
 				output: 2,
@@ -16712,7 +16746,7 @@ export const MODELS = {
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 1,
 				output: 3,
@@ -16782,7 +16816,7 @@ export const MODELS = {
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text"],
+			input: ["text", "image"],
 			cost: {
 				input: 0.4,
 				output: 2,
@@ -16799,7 +16833,7 @@ export const MODELS = {
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
 			reasoning: true,
-			input: ["text", "image"],
+			input: ["text"],
 			cost: {
 				input: 1,
 				output: 3,
