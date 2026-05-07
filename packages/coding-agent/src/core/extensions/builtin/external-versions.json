@@ -20,6 +20,11 @@
 			"version": "0.1.0",
 			"source": "../pi-extensions/pi-google-code-execution"
 		},
+		"google-url-context": {
+			"packageName": "pi-google-url-context",
+			"version": "0.1.0",
+			"source": "../pi-extensions/pi-google-url-context"
+		},
 		"webfetch": {
 			"packageName": "pi-webfetch",
 			"version": "0.1.0",

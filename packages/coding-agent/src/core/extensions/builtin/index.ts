@@ -9,6 +9,7 @@ import bashTimeoutExtension from "./bash-timeout/index.js";
 import compactionExtension from "./compaction/index.js";
 import googleCodeExecutionExtension from "./google-code-execution/index.js";
 import googleGoogleSearchExtension from "./google-google-search/index.js";
+import googleUrlContextExtension from "./google-url-context/index.js";
 import gptApplyPatchExtension from "./gpt-apply-patch/index.js";
 import openaiApiParallelToolCallsExtension from "./openai-api-parallel-tool-calls/index.js";
 import openaiCodeInterpreterExtension from "./openai-code-interpreter/index.js";
@@ -44,6 +45,7 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "openai-code-interpreter", factory: openaiCodeInterpreterExtension },
 	{ id: "google-google-search", factory: googleGoogleSearchExtension },
 	{ id: "google-code-execution", factory: googleCodeExecutionExtension },
+	{ id: "google-url-context", factory: googleUrlContextExtension },
 	{ id: "openai-api-parallel-tool-calls", factory: openaiApiParallelToolCallsExtension },
 	{ id: "service-tier", factory: serviceTierExtension },
 	{ id: "bash-timeout", factory: bashTimeoutExtension },
