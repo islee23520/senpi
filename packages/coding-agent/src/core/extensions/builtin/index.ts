@@ -7,6 +7,7 @@ import anthropicWebSearchExtension from "./anthropic-web-search/index.js";
 import backgroundTaskExtension from "./background-task/index.js";
 import bashTimeoutExtension from "./bash-timeout/index.js";
 import compactionExtension from "./compaction/index.js";
+import googleGoogleSearchExtension from "./google-google-search/index.js";
 import gptApplyPatchExtension from "./gpt-apply-patch/index.js";
 import openaiApiParallelToolCallsExtension from "./openai-api-parallel-tool-calls/index.js";
 import openaiCodeInterpreterExtension from "./openai-code-interpreter/index.js";
@@ -40,6 +41,7 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "anthropic-code-execution", factory: anthropicCodeExecutionExtension },
 	{ id: "openai-web-search", factory: openaiWebSearchExtension },
 	{ id: "openai-code-interpreter", factory: openaiCodeInterpreterExtension },
+	{ id: "google-google-search", factory: googleGoogleSearchExtension },
 	{ id: "openai-api-parallel-tool-calls", factory: openaiApiParallelToolCallsExtension },
 	{ id: "service-tier", factory: serviceTierExtension },
 	{ id: "bash-timeout", factory: bashTimeoutExtension },

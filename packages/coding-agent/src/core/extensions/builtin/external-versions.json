@@ -10,6 +10,11 @@
 			"version": "0.1.0",
 			"source": "../pi-extensions/pi-bash-timeout"
 		},
+		"google-google-search": {
+			"packageName": "pi-google-google-search",
+			"version": "0.1.0",
+			"source": "../pi-extensions/pi-google-google-search"
+		},
 		"webfetch": {
 			"packageName": "pi-webfetch",
 			"version": "0.1.0",
