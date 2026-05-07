@@ -1,5 +1,6 @@
 import type { ExtensionFactory } from "../types.js";
 import agentSystemExtension from "./agent-system/index.js";
+import anthropicWebSearchExtension from "./anthropic-web-search/index.js";
 import backgroundTaskExtension from "./background-task/index.js";
 import bashTimeoutExtension from "./bash-timeout/index.js";
 import compactionExtension from "./compaction/index.js";
@@ -28,6 +29,7 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "prompt-preset", factory: promptPresetExtension },
 	{ id: "todowrite", factory: todowriteExtension },
 	{ id: "redraws", factory: redrawsExtension },
+	{ id: "anthropic-web-search", factory: anthropicWebSearchExtension },
 	{ id: "openai-api-parallel-tool-calls", factory: openaiApiParallelToolCallsExtension },
 	{ id: "service-tier", factory: serviceTierExtension },
 	{ id: "bash-timeout", factory: bashTimeoutExtension },
