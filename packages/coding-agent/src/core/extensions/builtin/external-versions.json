@@ -55,6 +55,11 @@
 			"version": "0.1.0",
 			"source": "../pi-extensions/pi-anthropic-code-execution"
 		},
+		"anthropic-bash": {
+			"packageName": "pi-anthropic-bash",
+			"version": "0.1.0",
+			"source": "../pi-extensions/pi-anthropic-bash"
+		},
 		"openai-web-search": {
 			"packageName": "pi-openai-web-search",
 			"version": "0.1.0",
