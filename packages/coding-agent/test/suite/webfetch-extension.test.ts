@@ -1,11 +1,14 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Static } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import webfetchExtension, { isWebfetchEnabled } from "../../src/core/extensions/builtin/webfetch/index.js";
 import { webfetch } from "../../src/core/extensions/builtin/webfetch/tool.js";
+import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 
 type RouteHandler = (request: IncomingMessage, response: ServerResponse) => void;
 
 const servers: Server[] = [];
+const ENABLE_ENV = "PI_WEBFETCH";
 
 async function createFixtureServer(handler: RouteHandler): Promise<{ baseUrl: string; server: Server }> {
 	const server = createServer(handler);
@@ -33,6 +36,7 @@ function textContent(result: Awaited<ReturnType<typeof executeWebfetch>>): strin
 }
 
 afterEach(async () => {
+	delete process.env[ENABLE_ENV];
 	await Promise.all(servers.splice(0).map(closeServer));
 });
 
@@ -155,5 +159,45 @@ describe("webfetch builtin extension", () => {
 		expect(textContent(result)).toBe("retried");
 		expect(requests).toBe(2);
 		expect(challengeClosed).toBe(true);
+	});
+});
+
+describe("webfetch builtin extension toggle", () => {
+	it("returns true when PI_WEBFETCH is unset", () => {
+		expect(isWebfetchEnabled()).toBe(true);
+	});
+
+	it.each(["1", "true", "yes", "on", " TRUE ", "\tYeS\n"])(
+		"returns true for truthy PI_WEBFETCH value %s",
+		(envValue) => {
+			process.env[ENABLE_ENV] = envValue;
+			expect(isWebfetchEnabled()).toBe(true);
+		},
+	);
+
+	it.each(["0", "false", "no", "off", " OFF ", "\nNo\t"])(
+		"returns false for falsy PI_WEBFETCH value %s",
+		(envValue) => {
+			process.env[ENABLE_ENV] = envValue;
+			expect(isWebfetchEnabled()).toBe(false);
+		},
+	);
+
+	it("returns true for unknown PI_WEBFETCH values", () => {
+		process.env[ENABLE_ENV] = "definitely";
+		expect(isWebfetchEnabled()).toBe(true);
+	});
+
+	it("is a no-op when PI_WEBFETCH is disabled", () => {
+		process.env[ENABLE_ENV] = "0";
+		const registerTool = vi.fn();
+		webfetchExtension({ registerTool } as unknown as ExtensionAPI);
+		expect(registerTool).not.toHaveBeenCalled();
+	});
+
+	it("registers the webfetch tool when PI_WEBFETCH is unset", () => {
+		const registerTool = vi.fn();
+		webfetchExtension({ registerTool } as unknown as ExtensionAPI);
+		expect(registerTool).toHaveBeenCalledTimes(1);
 	});
 });
