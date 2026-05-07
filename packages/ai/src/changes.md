@@ -1,5 +1,20 @@
 # AI Source Changes
 
+## 2026-05-07 - Shared tool pair repair utility for compaction-safe histories
+
+### What changed and why
+- Added `utils/tool-pair-repair.ts` to centralize bidirectional `tool_use`/`tool_result` pairing repair in `pi-ai`.
+- This supports both coding-agent builtin extensions and external `pi-ai` consumers that do not load coding-agent extensions.
+
+### Files modified
+- `utils/tool-pair-repair.ts`
+
+### Why the higher-level extension system couldn't handle this alone
+- Extension code alone is not available to standalone `pi-ai` consumers, so this shared history repair logic must live in `pi-ai`.
+
+### Expected merge conflict zones
+- None expected; this is a new additive utility file.
+
 ## 2026-04-13 - OpenAI Responses custom tool support for apply_patch
 
 ### What changed and why
@@ -81,4 +96,3 @@
 - `src/types.ts` `ThinkingLevel` union.
 - Each provider's `streamSimple<Provider>` reasoning mapping block.
 - `src/providers/simple-options.ts` exported reserved-key sets.
-
