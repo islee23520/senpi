@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultRoot = dirname(__dirname);
 
-export function shouldWriteGlobalShim(root = defaultRoot) {
+export function shouldWriteGlobalShim(root = defaultRoot, environment = process.env) {
+	if (environment.CI) {
+		return false;
+	}
 	return existsSync(join(root, ".git"));
 }
 
