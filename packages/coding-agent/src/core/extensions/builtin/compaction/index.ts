@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import { repairOrphanedToolResults } from "@mariozechner/pi-ai";
 import { type CompactionResult, DEFAULT_COMPACTION_SETTINGS } from "../../../compaction/index.js";
 import { convertToLlm } from "../../../messages.js";
 import type { CompactionEntry } from "../../../session-manager.js";
@@ -27,7 +28,6 @@ import {
 } from "./speculative.js";
 import { type CompactionExtensionState, createInitialState, resetTurnCounter } from "./state.js";
 import * as todoBridge from "./todo-bridge.js";
-import { repairOrphanedToolResults } from "./tool-pair-repair.js";
 import * as truncation from "./tool-truncation.js";
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
