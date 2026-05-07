@@ -7,6 +7,7 @@
 - Added builtin `tool-pair-guard` extension to sanitize Anthropic request payloads by removing orphan `tool_result` blocks before provider calls.
 - Added core fallback rendering for assistant `providerNative` content blocks across interactive surfaces and HTML export, including expandable summaries and truncated JSON previews so provider-native server outputs are visible.
 - Added builtin `anthropic-web-search` extension that injects Anthropic's native `web_search_20250305` tool for `anthropic-messages` requests, strips duplicate function-style `web_search` tool entries, and supports `PI_ANTHROPIC_WEB_SEARCH_MAX_USES` override.
+- Added builtin `anthropic-web-fetch` extension that injects Anthropic's native `web_fetch_20260309` tool for `anthropic-messages` requests, strips duplicate function-style `webfetch`/`web_fetch` tool entries, and supports optional `PI_ANTHROPIC_WEB_FETCH_MAX_USES` override.
 
 ### Fixed
 
