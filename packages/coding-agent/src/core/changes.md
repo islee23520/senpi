@@ -1,5 +1,24 @@
 # changes
 
+## Generated default extension fast path (2026-05-08)
+
+### What changed
+
+- `src/core/resource-loader.ts`: Unchanged generated global default extension shims are now recognized by path and exact generated content, then resolved to the known in-process extension factory before the generic jiti loader runs.
+- `src/core/resource-loader.ts`: User-edited or replacement files with the same default names still load through the normal extension import path.
+
+### Why
+
+- Clean-profile startup was spending several seconds loading deterministic generated shim files through jiti even though core already knows the matching default extension factories.
+
+### Why extension system couldn't handle this
+
+- Generated default shims are discovered and loaded by core resource bootstrap before extension code can run. Extensions cannot replace the loader's import strategy for their own files.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `resource-loader.ts` around generated global default extension path/content checks and the `loadExtensions()` call.
+
 ## Dist-backed default extension shims (2026-05-08)
 
 ### What changed

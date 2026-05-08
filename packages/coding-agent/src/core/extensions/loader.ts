@@ -142,6 +142,7 @@ function resolvePath(extPath: string, cwd: string): string {
 
 type HandlerFn = (...args: unknown[]) => Promise<unknown>;
 type ExtensionModuleImporter = ReturnType<typeof createJiti>;
+export type ExtensionFactoryResolver = (extensionPath: string, resolvedPath: string) => ExtensionFactory | undefined;
 
 /**
  * Create a runtime with throwing stubs for action methods.
@@ -398,12 +399,14 @@ async function loadExtension(
 	cwd: string,
 	eventBus: EventBus,
 	runtime: ExtensionRuntime,
-	importer: ExtensionModuleImporter,
+	getImporter: () => ExtensionModuleImporter,
+	factoryResolver?: ExtensionFactoryResolver,
 ): Promise<{ extension: Extension | null; error: string | null }> {
 	const resolvedPath = resolvePath(extensionPath, cwd);
 
 	try {
-		const factory = await loadExtensionModule(resolvedPath, importer);
+		const factory =
+			factoryResolver?.(extensionPath, resolvedPath) ?? (await loadExtensionModule(resolvedPath, getImporter()));
 		if (!factory) {
 			return { extension: null, error: `Extension does not export a valid factory function: ${extensionPath}` };
 		}
@@ -438,15 +441,31 @@ export async function loadExtensionFromFactory(
 /**
  * Load extensions from paths.
  */
-export async function loadExtensions(paths: string[], cwd: string, eventBus?: EventBus): Promise<LoadExtensionsResult> {
+export async function loadExtensions(
+	paths: string[],
+	cwd: string,
+	eventBus?: EventBus,
+	options?: { factoryResolver?: ExtensionFactoryResolver },
+): Promise<LoadExtensionsResult> {
 	const extensions: Extension[] = [];
 	const errors: Array<{ path: string; error: string }> = [];
 	const resolvedEventBus = eventBus ?? createEventBus();
 	const runtime = createExtensionRuntime();
-	const importer = createExtensionModuleImporter();
+	let importer: ExtensionModuleImporter | undefined;
+	const getImporter = () => {
+		importer ??= createExtensionModuleImporter();
+		return importer;
+	};
 
 	for (const extPath of paths) {
-		const { extension, error } = await loadExtension(extPath, cwd, resolvedEventBus, runtime, importer);
+		const { extension, error } = await loadExtension(
+			extPath,
+			cwd,
+			resolvedEventBus,
+			runtime,
+			getImporter,
+			options?.factoryResolver,
+		);
 
 		if (error) {
 			errors.push({ path: extPath, error });

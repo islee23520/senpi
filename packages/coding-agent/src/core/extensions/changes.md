@@ -1,5 +1,30 @@
 # Core Extensions Changes
 
+## 2026-05-08 - Generated Default Extension Factory Resolver
+
+### What changed
+
+- `loader.ts`: `loadExtensions()` now accepts an optional factory resolver and creates the jiti importer lazily only when an extension path is not resolved to a known factory.
+- `builtin/index.ts`: Exposes a keyed map for the four global default extension factories used by generated shims.
+
+### Why
+
+- The default global extension shim files are deterministic. Letting core resolve those shims to known factories avoids the jiti import path without changing extension order, source paths, or behavior for custom extension files.
+
+### Why extension system couldn't handle this alone
+
+- Extension loading is core infrastructure; extensions cannot intercept the module importer before their factories have been loaded.
+
+### Files modified
+
+- `loader.ts`
+- `builtin/index.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- MEDIUM: `loader.ts` around `loadExtension()` and `loadExtensions()` signatures/importer construction.
+- LOW: `builtin/index.ts` around global default extension registration.
+
 ## 2026-05-08 - Shared Jiti Extension Importer
 
 ### What changed

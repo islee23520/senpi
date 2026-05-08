@@ -14,6 +14,7 @@
 ### Fixed
 
 - Fixed model catalog narrowing so `--models` / `enabledModels` constrain startup and selectors separately from Ctrl+P `favoriteModels`, preserve exact model IDs ending in `-fast`, and filter `/favorite-models` by canonical `provider/model` IDs without writing resolver warnings into the active TUI.
+- Fixed clean-profile startup spending seconds importing generated default global extension shims through jiti by loading unchanged generated shims from known factories while preserving custom-edited shim behavior.
 
 ### Removed
 
