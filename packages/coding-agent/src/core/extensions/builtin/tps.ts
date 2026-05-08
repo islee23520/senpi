@@ -1,25 +1,62 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "../types.js";
 
-function isAssistantMessage(message: unknown): message is AssistantMessage {
+type AssistantMessageLike = {
+	role: "assistant";
+	usage?: {
+		input?: number;
+		output?: number;
+		cacheRead?: number;
+		cacheWrite?: number;
+		totalTokens?: number;
+	};
+};
+
+function isAssistantMessage(message: unknown): message is AssistantMessageLike {
 	if (!message || typeof message !== "object") return false;
 	const role = (message as { role?: unknown }).role;
 	return role === "assistant";
 }
 
 export default function (pi: ExtensionAPI) {
-	let agentStartMs: number | null = null;
+	let activeAssistantStartMs: number | null = null;
+	let assistantElapsedMs = 0;
+
+	const finishActiveAssistantTiming = () => {
+		if (activeAssistantStartMs === null) return;
+
+		const elapsedMs = Date.now() - activeAssistantStartMs;
+		if (elapsedMs > 0) {
+			assistantElapsedMs += elapsedMs;
+		}
+		activeAssistantStartMs = null;
+	};
 
 	pi.on("agent_start", () => {
-		agentStartMs = Date.now();
+		activeAssistantStartMs = null;
+		assistantElapsedMs = 0;
+	});
+
+	pi.on("message_start", (event) => {
+		if (!isAssistantMessage(event.message)) return;
+
+		finishActiveAssistantTiming();
+		activeAssistantStartMs = Date.now();
+	});
+
+	pi.on("message_end", (event) => {
+		if (!isAssistantMessage(event.message)) return;
+
+		finishActiveAssistantTiming();
 	});
 
 	pi.on("agent_end", (event, ctx) => {
-		if (!ctx.hasUI) return;
-		if (agentStartMs === null) return;
+		finishActiveAssistantTiming();
 
-		const elapsedMs = Date.now() - agentStartMs;
-		agentStartMs = null;
+		const elapsedMs = assistantElapsedMs;
+		activeAssistantStartMs = null;
+		assistantElapsedMs = 0;
+
+		if (!ctx.hasUI) return;
 		if (elapsedMs <= 0) return;
 
 		let input = 0;
@@ -30,11 +67,11 @@ export default function (pi: ExtensionAPI) {
 
 		for (const message of event.messages) {
 			if (!isAssistantMessage(message)) continue;
-			input += message.usage.input || 0;
-			output += message.usage.output || 0;
-			cacheRead += message.usage.cacheRead || 0;
-			cacheWrite += message.usage.cacheWrite || 0;
-			totalTokens += message.usage.totalTokens || 0;
+			input += message.usage?.input ?? 0;
+			output += message.usage?.output ?? 0;
+			cacheRead += message.usage?.cacheRead ?? 0;
+			cacheWrite += message.usage?.cacheWrite ?? 0;
+			totalTokens += message.usage?.totalTokens ?? 0;
 		}
 
 		if (output <= 0) return;
