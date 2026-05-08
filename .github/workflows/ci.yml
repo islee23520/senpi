@@ -43,9 +43,22 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
-          sudo ln -s $(which fdfind) /usr/local/bin/fd
+          apt_retry() {
+            for attempt in 1 2 3; do
+              if timeout 300s "$@"; then
+                return 0
+              fi
+              if [ "$attempt" = "3" ]; then
+                return 1
+              fi
+              sleep 10
+            done
+          }
+
+          apt_retry sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update
+          apt_retry sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
+          sudo ln -sf "$(which fdfind)" /usr/local/bin/fd
 
       - name: Install dependencies
         run: |
