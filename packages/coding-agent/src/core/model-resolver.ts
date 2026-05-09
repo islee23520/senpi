@@ -50,7 +50,7 @@ export interface ScopedModel {
 	model: Model<Api>;
 	/** Thinking level if explicitly specified in pattern (e.g., "model:high"), undefined otherwise */
 	thinkingLevel?: ThinkingLevel;
-	/** Service tier if explicitly specified via -fast suffix (e.g., "model-fast"), undefined otherwise */
+	/** Service tier selected by configuration or caller-provided scoped model metadata. */
 	serviceTier?: ServiceTier;
 }
 
@@ -205,25 +205,13 @@ export function parseModelPattern(
 		return { model: fullMatch, thinkingLevel: undefined, serviceTier: undefined, warning: undefined };
 	}
 
-	let serviceTier: ServiceTier | undefined;
-	let effectivePattern = pattern;
-	if (pattern.endsWith("-fast")) {
-		serviceTier = "priority";
-		effectivePattern = pattern.slice(0, -5);
-	}
-
-	const exactMatch = tryMatchModel(effectivePattern, availableModels);
-	if (exactMatch) {
-		return { model: exactMatch, thinkingLevel: undefined, serviceTier, warning: undefined };
-	}
-
-	const lastColonIndex = effectivePattern.lastIndexOf(":");
+	const lastColonIndex = pattern.lastIndexOf(":");
 	if (lastColonIndex === -1) {
-		return { model: undefined, thinkingLevel: undefined, serviceTier, warning: undefined };
+		return { model: undefined, thinkingLevel: undefined, serviceTier: undefined, warning: undefined };
 	}
 
-	const prefix = effectivePattern.substring(0, lastColonIndex);
-	const suffix = effectivePattern.substring(lastColonIndex + 1);
+	const prefix = pattern.substring(0, lastColonIndex);
+	const suffix = pattern.substring(lastColonIndex + 1);
 
 	if (isValidThinkingLevel(suffix)) {
 		const result = parseModelPattern(prefix, availableModels, options);
@@ -231,15 +219,15 @@ export function parseModelPattern(
 			return {
 				model: result.model,
 				thinkingLevel: result.warning ? undefined : suffix,
-				serviceTier: serviceTier ?? result.serviceTier,
+				serviceTier: result.serviceTier,
 				warning: result.warning,
 			};
 		}
-		return { ...result, serviceTier: serviceTier ?? result.serviceTier };
+		return result;
 	} else {
 		const allowFallback = options?.allowInvalidThinkingLevelFallback ?? true;
 		if (!allowFallback) {
-			return { model: undefined, thinkingLevel: undefined, serviceTier, warning: undefined };
+			return { model: undefined, thinkingLevel: undefined, serviceTier: undefined, warning: undefined };
 		}
 
 		const result = parseModelPattern(prefix, availableModels, options);
@@ -247,11 +235,11 @@ export function parseModelPattern(
 			return {
 				model: result.model,
 				thinkingLevel: undefined,
-				serviceTier: serviceTier ?? result.serviceTier,
-				warning: `Invalid thinking level "${suffix}" in pattern "${effectivePattern}". Using default instead.`,
+				serviceTier: result.serviceTier,
+				warning: `Invalid thinking level "${suffix}" in pattern "${pattern}". Using default instead.`,
 			};
 		}
-		return { ...result, serviceTier: serviceTier ?? result.serviceTier };
+		return result;
 	}
 }
 
@@ -286,12 +274,6 @@ export async function resolveModelScope(
 			const colonIdx = pattern.lastIndexOf(":");
 			let globPattern = pattern;
 			let thinkingLevel: ThinkingLevel | undefined;
-			let serviceTier: ServiceTier | undefined;
-
-			if (globPattern.endsWith("-fast")) {
-				serviceTier = "priority";
-				globPattern = globPattern.slice(0, -5);
-			}
 
 			if (colonIdx !== -1) {
 				const suffix = pattern.substring(colonIdx + 1);
@@ -313,7 +295,7 @@ export async function resolveModelScope(
 
 			for (const model of matchingModels) {
 				if (!scopedModels.find((sm) => modelsAreEqual(sm.model, model))) {
-					scopedModels.push({ model, thinkingLevel, serviceTier });
+					scopedModels.push({ model, thinkingLevel });
 				}
 			}
 			continue;
