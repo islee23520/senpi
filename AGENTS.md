@@ -26,7 +26,8 @@ This repo is a **fork** of `upstream` ([badlogic/pi-mono](https://github.com/cod
 
 - After code changes (not documentation changes): `npm run check` (get full output, no tail). Fix all errors, warnings, and infos before committing.
 - Note: `npm run check` does not run tests.
-- NEVER run: `npm run dev`, `npm run build`, `npm test`
+- `npm run build` is allowed and is sometimes required: `npm run check` needs `npm run build` first because the web-ui package's `tsc` step depends on compiled `.d.ts` files from its workspace dependencies.
+- NEVER run: `npm run dev`, `npm test`
 - Only run specific tests if user instructs: `npx tsx ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts`
 - Run tests from the package root, not the repo root.
 - If you create or modify a test file, you MUST run that test file and iterate until it passes.
@@ -300,7 +301,7 @@ Build dependency order: `tui` -> `ai` -> `agent` -> `coding-agent` -> `mom` -> `
 - `git add -A` / `git add .` (multi-agent safety: only add YOUR files)
 - `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash` (destroys other agents' work)
 - `git commit --no-verify` (never allowed)
-- Running `npm run dev`, `npm run build`, `npm test` directly
+- Running `npm run dev` or `npm test` directly (`npm run build` is allowed and is required as a prerequisite for `npm run check`)
 - `sed`/`cat` to read files (use read tool with offset + limit)
 - Committing without user request
 - Emojis in commits, issues, PR comments, or code
