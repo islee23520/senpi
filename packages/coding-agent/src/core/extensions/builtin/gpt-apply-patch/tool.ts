@@ -73,16 +73,23 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 			onUpdate?.({ content: [{ type: "text", text: pendingUpdate.text }], details: pendingUpdate.details });
 			const result = await applyPatchDetailed(ctx.cwd, normalizedParams.input);
 			if (result.failures.length > 0) {
+				if (result.appliedFiles.length === 0) {
+					const firstFailure = result.failures[0];
+					if (firstFailure) throw new Error(firstFailure.message);
+				}
 				return { content: [{ type: "text", text: buildPartialFailureText(result) }], details: { result } };
 			}
-			return { content: [{ type: "text", text: result.summaries.join("\n") }], details: { result } };
+			return {
+				content: [{ type: "text", text: result.summaries.join("\n") }],
+				details: { ...pendingUpdate.details, result },
+			};
 		},
 		renderCall(args, theme, context: ToolRenderContext<ApplyPatchRenderState, { input: string }>) {
-			if (!context.argsComplete) return new Text(theme.fg("toolTitle", theme.bold("apply_patch: Patching")), 0, 0);
 			if (!context.executionStarted) {
 				const streaming = renderStreamingPatchCall(normalizeApplyPatchArguments(args), theme, context.state);
 				if (streaming) return streaming;
 			}
+			if (!context.argsComplete) return new Text(theme.fg("toolTitle", theme.bold("apply_patch: Patching")), 0, 0);
 			const normalizedArgs = normalizeApplyPatchArguments(args);
 			const renderState = getApplyPatchRenderState(context.toolCallId, context.cwd, normalizedArgs.input);
 			const text = renderState.callText?.length ? `apply_patch: ${renderState.callText}` : "apply_patch";
@@ -90,7 +97,7 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 		},
 		renderResult(result, options, theme, context) {
 			if (result.details?.preview) {
-				const expanded = options.isPartial ? true : (options.expanded ?? true);
+				const expanded = true;
 				return renderPreviewBox(
 					options.isPartial ? "Applying patch" : "Applied patch",
 					result.details,

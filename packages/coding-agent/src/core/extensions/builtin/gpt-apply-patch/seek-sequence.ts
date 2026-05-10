@@ -7,7 +7,7 @@ function normalizeSeekLine(line: string): string {
 		.replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
 }
 
-export function seekSequence(
+export function seekSequenceWithFuzz(
 	lines: string[],
 	pattern: string[],
 	start: number,
@@ -48,4 +48,8 @@ export function seekSequence(
 	}
 
 	return undefined;
+}
+
+export function seekSequence(lines: string[], pattern: string[], start: number, eof: boolean): number | undefined {
+	return seekSequenceWithFuzz(lines, pattern, start, eof)?.index;
 }

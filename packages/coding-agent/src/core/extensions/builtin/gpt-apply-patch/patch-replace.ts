@@ -1,4 +1,4 @@
-import { seekSequence } from "./seek-sequence.js";
+import { seekSequenceWithFuzz } from "./seek-sequence.js";
 import { normalizePatchText } from "./text.js";
 import type { PatchChunk } from "./types.js";
 
@@ -22,7 +22,7 @@ export function replaceChunks(
 
 	for (const chunk of chunks) {
 		for (const changeContext of chunk.changeContexts) {
-			const contextIndex = seekSequence(originalLines, [changeContext], lineIndex, false);
+			const contextIndex = seekSequenceWithFuzz(originalLines, [changeContext], lineIndex, false);
 			if (contextIndex === undefined) throw new Error(`Failed to find context '${changeContext}' in ${filePath}`);
 			fuzz += contextIndex.fuzz;
 			lineIndex = contextIndex.index + 1;
@@ -37,11 +37,11 @@ export function replaceChunks(
 
 		let pattern = chunk.oldLines;
 		let newLines = chunk.newLines;
-		let foundAt = seekSequence(originalLines, pattern, lineIndex, chunk.isEndOfFile);
+		let foundAt = seekSequenceWithFuzz(originalLines, pattern, lineIndex, chunk.isEndOfFile);
 		if (foundAt === undefined && pattern[pattern.length - 1] === "") {
 			pattern = pattern.slice(0, -1);
 			if (newLines[newLines.length - 1] === "") newLines = newLines.slice(0, -1);
-			foundAt = seekSequence(originalLines, pattern, lineIndex, chunk.isEndOfFile);
+			foundAt = seekSequenceWithFuzz(originalLines, pattern, lineIndex, chunk.isEndOfFile);
 		}
 
 		if (foundAt === undefined)
