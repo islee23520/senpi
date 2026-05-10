@@ -9,6 +9,7 @@
 - OpenAI Responses now preserves unknown `response.output_item.added` variants (for example `web_search_call`, `file_search_call`, `image_generation_call`, `code_interpreter_call`, `computer_call`, MCP calls, local shell calls, and future item types) as `ProviderNativeContent` and skips them when replaying assistant history.
 - Google AI Studio and Vertex now surface `executableCode` / `codeExecutionResult` parts and candidate-level `groundingMetadata` / `urlContextMetadata` as `ProviderNativeContent`, with replay conversion explicitly skipping provider-native blocks.
 - Added `repairOrphanedToolResults` and `TOOL_RESULT_PLACEHOLDER` in `pi-ai` utilities for bidirectional tool pair repair across consumers.
+- Added Together AI as a built-in OpenAI-compatible provider with generated model metadata and `TOGETHER_API_KEY` authentication ([#3624](https://github.com/earendil-works/pi-mono/pull/3624) by [@Nutlope](https://github.com/Nutlope)).
 
 ### Fixed
 

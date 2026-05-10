@@ -9,12 +9,15 @@
 - Added builtin `anthropic-web-search` extension that injects Anthropic's native `web_search_20250305` tool for `anthropic-messages` requests, strips duplicate function-style `web_search` tool entries, and supports `PI_ANTHROPIC_WEB_SEARCH_MAX_USES` override.
 - Added builtin `anthropic-tool-search` extension that opt-in injects Anthropic native `tool_search_tool_regex_20251119` and/or `tool_search_tool_bm25_20251119` tools for `anthropic-messages` requests when `PI_ANTHROPIC_TOOL_SEARCH` is set to `regex`, `bm25`, or `both`.
 - Added builtin `openai-web-search` extension that injects OpenAI Responses native `web_search_preview` for `openai-responses`/`azure-openai-responses` requests and strips duplicate function-style `web_search` tool entries so the native tool is used.
+- Added Together AI to built-in provider setup, `/login` API-key auth, and default model resolution ([#3624](https://github.com/earendil-works/pi-mono/pull/3624) by [@Nutlope](https://github.com/Nutlope)).
 
 ### Fixed
 
 - Fixed model catalog narrowing so `--models` / `enabledModels` constrain startup and selectors separately from Ctrl+P `favoriteModels`, preserve exact model IDs ending in `-fast`, and filter `/favorite-models` by canonical `provider/model` IDs without writing resolver warnings into the active TUI.
 - Fixed clean-profile startup spending seconds importing generated default global extension shims through jiti by loading unchanged generated shims from known factories while preserving custom-edited shim behavior.
 - Fixed OpenAI Responses request validation failures by using the `web_search_preview` native tool type and stripping leaked Anthropic native `web_search_*` / `web_fetch_*` tool descriptors from OpenAI payloads.
+- Fixed keybinding hints to show Option instead of Alt on macOS ([#4289](https://github.com/earendil-works/pi/issues/4289)).
+- Fixed the interactive update notification to render the changelog as an OSC 8 hyperlink when the terminal supports hyperlinks ([#4280](https://github.com/earendil-works/pi/issues/4280)).
 
 ### Removed
 

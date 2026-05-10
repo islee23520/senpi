@@ -33,6 +33,8 @@ import {
 	type Component,
 	Container,
 	fuzzyFilter,
+	getCapabilities,
+	hyperlink,
 	Loader,
 	type LoaderIndicatorOptions,
 	Markdown,
@@ -104,7 +106,7 @@ import { ExtensionInputComponent } from "./components/extension-input.js";
 import { ExtensionSelectorComponent } from "./components/extension-selector.js";
 import { FavoriteModelsSelectorComponent } from "./components/favorite-models-selector.js";
 import { FooterComponent } from "./components/footer.js";
-import { keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.js";
+import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.js";
 import { LoginDialogComponent } from "./components/login-dialog.js";
 import { ModelSelectorComponent } from "./components/model-selector.js";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.js";
@@ -3559,11 +3561,11 @@ export class InteractiveMode {
 	showNewVersionNotification(newVersion: string): void {
 		const action = theme.fg("accent", `${APP_NAME} update`);
 		const updateInstruction = theme.fg("muted", `New version ${newVersion} is available. Run `) + action;
-		const changelogUrl = theme.fg(
-			"accent",
-			"https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md",
-		);
-		const changelogLine = theme.fg("muted", "Changelog: ") + changelogUrl;
+		const changelogUrl = "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md";
+		const changelogLink = getCapabilities().hyperlinks
+			? hyperlink(theme.fg("accent", "open changelog"), changelogUrl)
+			: theme.fg("accent", changelogUrl);
+		const changelogLine = theme.fg("muted", "Changelog: ") + changelogLink;
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
@@ -5198,32 +5200,17 @@ export class InteractiveMode {
 	}
 
 	/**
-	 * Capitalize keybinding for display (e.g., "ctrl+c" -> "Ctrl+C").
-	 */
-	private capitalizeKey(key: string): string {
-		return key
-			.split("/")
-			.map((k) =>
-				k
-					.split("+")
-					.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-					.join("+"),
-			)
-			.join("/");
-	}
-
-	/**
 	 * Get capitalized display string for an app keybinding action.
 	 */
 	private getAppKeyDisplay(action: AppKeybinding): string {
-		return this.capitalizeKey(keyText(action));
+		return keyDisplayText(action);
 	}
 
 	/**
 	 * Get capitalized display string for an editor keybinding action.
 	 */
 	private getEditorKeyDisplay(action: Keybinding): string {
-		return this.capitalizeKey(keyText(action));
+		return keyDisplayText(action);
 	}
 
 	private handleHotkeysCommand(): void {
@@ -5327,7 +5314,7 @@ export class InteractiveMode {
 `;
 			for (const [key, shortcut] of shortcuts) {
 				const description = shortcut.description ?? shortcut.extensionPath;
-				const keyDisplay = key.replace(/\b\w/g, (c) => c.toUpperCase());
+				const keyDisplay = formatKeyText(key, { capitalize: true });
 				hotkeys += `| \`${keyDisplay}\` | ${description} |\n`;
 			}
 		}

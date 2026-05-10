@@ -120,6 +120,7 @@ For each built-in provider, senpi maintains a list of tool-capable models, updat
 - OpenCode Go
 - Hugging Face
 - Fireworks
+- Together AI
 - Kimi For Coding
 - MiniMax
 - Xiaomi MiMo

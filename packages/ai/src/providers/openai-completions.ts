@@ -585,6 +585,15 @@ function buildParams(
 		} else if (model.thinkingLevelMap?.off !== null) {
 			openRouterParams.reasoning = { effort: model.thinkingLevelMap?.off ?? "none" };
 		}
+	} else if (compat.thinkingFormat === "together" && model.reasoning) {
+		const togetherParams = params as Omit<typeof params, "reasoning_effort"> & {
+			reasoning?: { enabled: boolean };
+			reasoning_effort?: string;
+		};
+		togetherParams.reasoning = { enabled: !!options?.reasoningEffort };
+		if (options?.reasoningEffort && compat.supportsReasoningEffort) {
+			togetherParams.reasoning_effort = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+		}
 	} else if (options?.reasoningEffort && model.reasoning && compat.supportsReasoningEffort) {
 		// OpenAI-style reasoning_effort
 		(params as any).reasoning_effort = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
@@ -1072,6 +1081,8 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 	const baseUrl = model.baseUrl;
 
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
+	const isTogether =
+		provider === "together" || baseUrl.includes("api.together.ai") || baseUrl.includes("api.together.xyz");
 	const isMoonshot = provider === "moonshotai" || provider === "moonshotai-cn" || baseUrl.includes("api.moonshot.");
 	const isCloudflareWorkersAI = provider === "cloudflare-workers-ai" || baseUrl.includes("api.cloudflare.com");
 	const isCloudflareAiGateway = provider === "cloudflare-ai-gateway" || baseUrl.includes("gateway.ai.cloudflare.com");
@@ -1081,6 +1092,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		baseUrl.includes("cerebras.ai") ||
 		provider === "xai" ||
 		baseUrl.includes("api.x.ai") ||
+		isTogether ||
 		baseUrl.includes("chutes.ai") ||
 		baseUrl.includes("deepseek.com") ||
 		isZai ||
@@ -1090,7 +1102,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		isCloudflareWorkersAI ||
 		isCloudflareAiGateway;
 
-	const useMaxTokens = baseUrl.includes("chutes.ai") || isMoonshot || isCloudflareAiGateway;
+	const useMaxTokens = baseUrl.includes("chutes.ai") || isMoonshot || isCloudflareAiGateway || isTogether;
 
 	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
 	const isDeepSeek = provider === "deepseek" || baseUrl.includes("deepseek.com");
@@ -1099,7 +1111,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 	return {
 		supportsStore: !isNonStandard,
 		supportsDeveloperRole: !isNonStandard,
-		supportsReasoningEffort: !isGrok && !isZai && !isMoonshot && !isCloudflareAiGateway,
+		supportsReasoningEffort: !isGrok && !isZai && !isMoonshot && !isTogether && !isCloudflareAiGateway,
 		supportsUsageInStreaming: true,
 		maxTokensField: useMaxTokens ? "max_tokens" : "max_completion_tokens",
 		requiresToolResultName: false,
@@ -1110,17 +1122,19 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 			? "deepseek"
 			: isZai
 				? "zai"
-				: provider === "openrouter" || baseUrl.includes("openrouter.ai")
-					? "openrouter"
-					: "openai",
+				: isTogether
+					? "together"
+					: provider === "openrouter" || baseUrl.includes("openrouter.ai")
+						? "openrouter"
+						: "openai",
 		openRouterRouting: {},
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
-		supportsStrictMode: !isMoonshot && !isCloudflareAiGateway,
+		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway,
 		toolCallFormat: undefined,
 		cacheControlFormat,
 		sendSessionAffinityHeaders: false,
-		supportsLongCacheRetention: !(isCloudflareWorkersAI || isCloudflareAiGateway),
+		supportsLongCacheRetention: !(isTogether || isCloudflareWorkersAI || isCloudflareAiGateway),
 	};
 }
 
