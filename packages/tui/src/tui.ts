@@ -1149,6 +1149,40 @@ export class TUI extends Container {
 				viewportTop = Math.min(maxViewportTop, prevViewportTop + lineCountDelta);
 			}
 
+			// Transcript growth above the viewport can remap logical rows while keeping the
+			// same physical viewport. Avoid fullRender(true) replay by repainting only the
+			// current visible viewport rows in place.
+			if (viewportTop !== prevViewportTop) {
+				const previousViewportBottom = Math.min(this.previousLines.length - 1, prevViewportTop + height - 1);
+				let buffer = "\x1b[?2026h";
+				buffer += this.deleteChangedKittyImages(prevViewportTop, previousViewportBottom);
+
+				const currentScreenRow = Math.max(0, Math.min(height - 1, hardwareCursorRow - prevViewportTop));
+				if (currentScreenRow > 0) {
+					buffer += `\x1b[${currentScreenRow}A`;
+				}
+
+				for (let row = 0; row < height; row++) {
+					if (row > 0) buffer += "\r\n";
+					buffer += "\r\x1b[2K";
+					buffer += newLines[viewportTop + row] ?? "";
+				}
+
+				buffer += "\x1b[?2026l";
+				this.terminal.write(buffer);
+
+				this.cursorRow = Math.max(0, newLines.length - 1);
+				this.hardwareCursorRow = viewportTop + Math.max(0, height - 1);
+				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
+				this.previousViewportTop = viewportTop;
+				this.positionHardwareCursor(cursorPos, newLines.length);
+				this.previousLines = newLines;
+				this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+				this.previousWidth = width;
+				this.previousHeight = height;
+				return;
+			}
+
 			let firstVisibleChanged = -1;
 			let lastVisibleChanged = -1;
 			for (let row = 0; row < height; row++) {
@@ -1172,14 +1206,8 @@ export class TUI extends Container {
 				return;
 			}
 
-			if (viewportTop !== prevViewportTop) {
-				logRedraw(`growth changed visible viewport (${prevViewportTop} -> ${viewportTop})`);
-				fullRender(true);
-				return;
-			}
-
-			firstChanged = prevViewportTop + firstVisibleChanged;
-			lastChanged = Math.min(newLines.length - 1, prevViewportTop + lastVisibleChanged);
+			firstChanged = viewportTop + firstVisibleChanged;
+			lastChanged = Math.min(newLines.length - 1, viewportTop + lastVisibleChanged);
 		}
 
 		// Render from first changed line to end

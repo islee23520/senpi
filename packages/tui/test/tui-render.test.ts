@@ -28,6 +28,26 @@ class StreamingBudgetComponent implements Component {
 	invalidate(): void {}
 }
 
+class ExpandableTranscriptComponent implements Component {
+	private expanded = false;
+	readonly tail = Array.from({ length: 6 }, (_, index) => `tail row ${index}`);
+
+	setExpanded(expanded: boolean): void {
+		this.expanded = expanded;
+	}
+
+	render(_width: number): string[] {
+		const prefix = ["session title", "tools"];
+		if (!this.expanded) {
+			return [...prefix, ...this.tail];
+		}
+		const inserted = Array.from({ length: 16 }, (_, index) => `expanded tool detail ${index}`);
+		return [...prefix, ...inserted, ...this.tail];
+	}
+
+	invalidate(): void {}
+}
+
 class LoggingVirtualTerminal extends VirtualTerminal {
 	private writes: string[] = [];
 
@@ -363,6 +383,43 @@ describe("flicker budget under streaming", () => {
 
 		// then
 		assert.strictEqual(metrics.fullRenderTrueAfterInit, 0, "Streaming should not call fullRender(true) after init");
+	});
+});
+
+describe("TUI viewport remap for above-viewport growth", () => {
+	it("does not clear or full-redraw when expansion grows above viewport", async () => {
+		const terminal = new LoggingVirtualTerminal(72, 6);
+		const tui = new TUI(terminal);
+		const component = new ExpandableTranscriptComponent();
+		tui.addChild(component);
+
+		component.setExpanded(false);
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		const initialFullRedraws = tui.fullRedraws;
+
+		component.setExpanded(true);
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		const writes = terminal.getWrites();
+		assert.strictEqual(tui.fullRedraws, initialFullRedraws, "Expansion should stay on differential renderer");
+		assert.ok(!writes.includes("\x1b[2J"), "Expansion should not clear the viewport");
+		assert.ok(!writes.includes("\x1b[3J"), "Expansion should not clear scrollback");
+		assert.ok(!writes.includes("\x1b[2J\x1b[H\x1b[3J"), "Expansion should not clear screen or scrollback");
+		assert.strictEqual(
+			countOccurrences(writes, "\x1b[?2026h"),
+			countOccurrences(writes, "\x1b[?2026l"),
+			"Expansion should keep DECSET 2026 begin/end balanced",
+		);
+		assert.ok(writes.includes("expanded tool detail 15"), "Expanded rows should be repainted into visible viewport");
+
+		const viewport = terminal.getViewport();
+		assert.ok(viewport.join("\n").includes("tail row 5"), "Viewport should still show newest tail rows");
+
+		tui.stop();
 	});
 });
 
