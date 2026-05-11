@@ -85,16 +85,19 @@ export type FileErrorCode =
 
 /** Error thrown by {@link ExecutionEnv} file operations. */
 export class FileError extends Error {
+	readonly cause?: unknown;
+
 	constructor(
 		/** Backend-independent error code. */
 		public code: FileErrorCode,
 		message: string,
 		/** Absolute addressed path associated with the failure, when available. */
 		public path?: string,
-		options?: ErrorOptions,
+		options?: { cause?: unknown },
 	) {
-		super(message, options);
+		super(message);
 		this.name = "FileError";
+		if (options && "cause" in options) this.cause = options.cause;
 	}
 }
 

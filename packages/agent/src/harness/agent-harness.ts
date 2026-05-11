@@ -116,6 +116,20 @@ interface AgentHarnessTurnState<
 	activeTools: TTool[];
 }
 
+type AgentHarnessHookHandler<
+	TSkill extends Skill,
+	TPromptTemplate extends PromptTemplate,
+	TType extends keyof AgentHarnessEventResultMap,
+> = (
+	event: Extract<AgentHarnessOwnEvent<TSkill, TPromptTemplate>, { type: TType }>,
+) => Promise<AgentHarnessEventResultMap[TType]> | AgentHarnessEventResultMap[TType];
+
+type AgentHarnessStoredHook<TSkill extends Skill, TPromptTemplate extends PromptTemplate> = (
+	event: AgentHarnessOwnEvent<TSkill, TPromptTemplate>,
+) =>
+	| Promise<AgentHarnessEventResultMap[keyof AgentHarnessEventResultMap]>
+	| AgentHarnessEventResultMap[keyof AgentHarnessEventResultMap];
+
 export class AgentHarness<
 	TSkill extends Skill = Skill,
 	TPromptTemplate extends PromptTemplate = PromptTemplate,
@@ -142,7 +156,7 @@ export class AgentHarness<
 	private listeners = new Set<
 		(event: AgentHarnessEvent<TSkill, TPromptTemplate>, signal?: AbortSignal) => Promise<void> | void
 	>();
-	private hooks = new Map<keyof AgentHarnessEventResultMap, Set<(event: any) => Promise<any> | any>>();
+	private hooks = new Map<keyof AgentHarnessEventResultMap, Set<AgentHarnessStoredHook<TSkill, TPromptTemplate>>>();
 
 	constructor(options: AgentHarnessOptions<TSkill, TPromptTemplate, TTool>) {
 		this.agent = new Agent({
@@ -260,9 +274,11 @@ export class AgentHarness<
 	}
 
 	private async emitHook<TType extends keyof AgentHarnessEventResultMap>(
-		event: Extract<AgentHarnessOwnEvent, { type: TType }>,
+		event: Extract<AgentHarnessOwnEvent<TSkill, TPromptTemplate>, { type: TType }>,
 	): Promise<AgentHarnessEventResultMap[TType] | undefined> {
-		const handlers = this.hooks.get(event.type as TType);
+		const handlers = this.hooks.get(event.type) as
+			| Set<AgentHarnessHookHandler<TSkill, TPromptTemplate, TType>>
+			| undefined;
 		if (!handlers || handlers.size === 0) return undefined;
 		let lastResult: AgentHarnessEventResultMap[TType] | undefined;
 		for (const handler of handlers) {
@@ -279,7 +295,9 @@ export class AgentHarness<
 		sessionId: string,
 		streamOptions: AgentHarnessStreamOptions,
 	): Promise<AgentHarnessStreamOptions> {
-		const handlers = this.hooks.get("before_provider_request");
+		const handlers = this.hooks.get("before_provider_request") as
+			| Set<AgentHarnessHookHandler<TSkill, TPromptTemplate, "before_provider_request">>
+			| undefined;
 		let current = cloneStreamOptions(streamOptions);
 		if (!handlers || handlers.size === 0) return current;
 		for (const handler of handlers) {
@@ -297,7 +315,9 @@ export class AgentHarness<
 	}
 
 	private async emitBeforeProviderPayload(model: Model<any>, payload: unknown): Promise<unknown> {
-		const handlers = this.hooks.get("before_provider_payload");
+		const handlers = this.hooks.get("before_provider_payload") as
+			| Set<AgentHarnessHookHandler<TSkill, TPromptTemplate, "before_provider_payload">>
+			| undefined;
 		let current = payload;
 		if (!handlers || handlers.size === 0) return current;
 		for (const handler of handlers) {
@@ -802,7 +822,7 @@ export class AgentHarness<
 	on<TType extends keyof AgentHarnessEventResultMap>(
 		type: TType,
 		handler: (
-			event: Extract<AgentHarnessOwnEvent, { type: TType }>,
+			event: Extract<AgentHarnessOwnEvent<TSkill, TPromptTemplate>, { type: TType }>,
 		) => Promise<AgentHarnessEventResultMap[TType]> | AgentHarnessEventResultMap[TType],
 	): () => void {
 		let handlers = this.hooks.get(type);
@@ -810,7 +830,11 @@ export class AgentHarness<
 			handlers = new Set();
 			this.hooks.set(type, handlers);
 		}
-		handlers.add(handler as any);
-		return () => handlers!.delete(handler as any);
+		const storedHandler: AgentHarnessStoredHook<TSkill, TPromptTemplate> = (event) => {
+			if (event.type !== type) return undefined;
+			return handler(event as Extract<AgentHarnessOwnEvent<TSkill, TPromptTemplate>, { type: TType }>);
+		};
+		handlers.add(storedHandler);
+		return () => handlers.delete(storedHandler);
 	}
 }

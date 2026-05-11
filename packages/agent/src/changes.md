@@ -47,3 +47,28 @@
 
 - `packages/agent/src/harness/session/repo/shared.ts` around session id creation.
 - `packages/agent/src/harness/session/storage/memory.ts` around default metadata initialization.
+
+## 2026-05-11 - Harness ES2021 diagnostic compatibility
+
+### What changed and why
+
+- Replaced `ErrorOptions`/two-argument `Error` construction in `FileError` with an equivalent local `{ cause }`
+  option stored on the class.
+- Replaced `Object.hasOwn` with `Object.prototype.hasOwnProperty.call` in the stream option patch helper.
+- This keeps the upstream harness behavior intact while avoiding diagnostics in environments that type-check the package with
+  ES2021 library declarations.
+
+### Files modified
+
+- `packages/agent/src/harness/types.ts`
+- `packages/agent/src/harness/agent-harness.ts`
+
+### Why the extension system could not handle this
+
+- These are type-level compatibility fixes in exported harness primitives and internal option-merging code that run before
+  coding-agent extensions are involved.
+
+### Expected merge conflict zones on next upstream sync
+
+- `packages/agent/src/harness/types.ts` around `FileError` construction.
+- `packages/agent/src/harness/agent-harness.ts` around `hasOwn()`.
