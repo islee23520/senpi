@@ -2166,6 +2166,13 @@ export class DefaultPackageManager implements PackageManager {
 			prompts: join(projectBaseDir, "prompts"),
 			themes: join(projectBaseDir, "themes"),
 		};
+		const legacyProjectBaseDir = join(this.cwd, ".pi");
+		const legacyProjectDirs = {
+			extensions: join(legacyProjectBaseDir, "extensions"),
+			skills: join(legacyProjectBaseDir, "skills"),
+			prompts: join(legacyProjectBaseDir, "prompts"),
+			themes: join(legacyProjectBaseDir, "themes"),
+		};
 		const userAgentsSkillsDir = join(getHomeDir(), ".agents", "skills");
 		const projectAgentsSkillDirs = collectAncestorAgentsSkillDirs(this.cwd).filter(
 			(dir) => resolve(dir) !== resolve(userAgentsSkillsDir),
@@ -2233,6 +2240,42 @@ export class DefaultPackageManager implements PackageManager {
 			projectOverrides.themes,
 			projectBaseDir,
 		);
+
+		if (resolve(legacyProjectBaseDir) !== resolve(projectBaseDir)) {
+			const legacyProjectMetadata: PathMetadata = {
+				...projectMetadata,
+				baseDir: legacyProjectBaseDir,
+			};
+
+			addResources(
+				"extensions",
+				collectAutoExtensionEntries(legacyProjectDirs.extensions),
+				legacyProjectMetadata,
+				projectOverrides.extensions,
+				legacyProjectBaseDir,
+			);
+			addResources(
+				"skills",
+				collectAutoSkillEntries(legacyProjectDirs.skills, "pi"),
+				legacyProjectMetadata,
+				projectOverrides.skills,
+				legacyProjectBaseDir,
+			);
+			addResources(
+				"prompts",
+				collectAutoPromptEntries(legacyProjectDirs.prompts),
+				legacyProjectMetadata,
+				projectOverrides.prompts,
+				legacyProjectBaseDir,
+			);
+			addResources(
+				"themes",
+				collectAutoThemeEntries(legacyProjectDirs.themes),
+				legacyProjectMetadata,
+				projectOverrides.themes,
+				legacyProjectBaseDir,
+			);
+		}
 
 		// User extensions from ~/.pi/agent/
 		addResources(

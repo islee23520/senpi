@@ -1,4 +1,4 @@
-import { seekSequence } from "./seek-sequence.js";
+import { seekSequenceWithFuzz } from "./seek-sequence.js";
 import { normalizePatchText } from "./text.js";
 import type { PatchChunk } from "./types.js";
 
@@ -10,16 +10,22 @@ function splitFileLines(content: string): string[] {
 	return lines;
 }
 
-export function replaceChunks(content: string, filePath: string, chunks: PatchChunk[]): string {
+export function replaceChunks(
+	content: string,
+	filePath: string,
+	chunks: PatchChunk[],
+): { content: string; fuzz: number } {
 	const originalLines = splitFileLines(content);
 	const replacements: { start: number; oldLength: number; newLines: string[] }[] = [];
 	let lineIndex = 0;
+	let fuzz = 0;
 
 	for (const chunk of chunks) {
 		for (const changeContext of chunk.changeContexts) {
-			const contextIndex = seekSequence(originalLines, [changeContext], lineIndex, false);
+			const contextIndex = seekSequenceWithFuzz(originalLines, [changeContext], lineIndex, false);
 			if (contextIndex === undefined) throw new Error(`Failed to find context '${changeContext}' in ${filePath}`);
-			lineIndex = contextIndex + 1;
+			fuzz += contextIndex.fuzz;
+			lineIndex = contextIndex.index + 1;
 		}
 
 		if (chunk.oldLines.length === 0) {
@@ -31,17 +37,18 @@ export function replaceChunks(content: string, filePath: string, chunks: PatchCh
 
 		let pattern = chunk.oldLines;
 		let newLines = chunk.newLines;
-		let foundAt = seekSequence(originalLines, pattern, lineIndex, chunk.isEndOfFile);
+		let foundAt = seekSequenceWithFuzz(originalLines, pattern, lineIndex, chunk.isEndOfFile);
 		if (foundAt === undefined && pattern[pattern.length - 1] === "") {
 			pattern = pattern.slice(0, -1);
 			if (newLines[newLines.length - 1] === "") newLines = newLines.slice(0, -1);
-			foundAt = seekSequence(originalLines, pattern, lineIndex, chunk.isEndOfFile);
+			foundAt = seekSequenceWithFuzz(originalLines, pattern, lineIndex, chunk.isEndOfFile);
 		}
 
 		if (foundAt === undefined)
 			throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.oldLines.join("\n")}`);
-		replacements.push({ start: foundAt, oldLength: pattern.length, newLines });
-		lineIndex = foundAt + pattern.length;
+		fuzz += foundAt.fuzz;
+		replacements.push({ start: foundAt.index, oldLength: pattern.length, newLines });
+		lineIndex = foundAt.index + pattern.length;
 	}
 
 	const nextLines = [...originalLines];
@@ -49,5 +56,5 @@ export function replaceChunks(content: string, filePath: string, chunks: PatchCh
 		nextLines.splice(replacement.start, replacement.oldLength, ...replacement.newLines);
 	}
 	nextLines.push("");
-	return nextLines.join("\n");
+	return { content: nextLines.join("\n"), fuzz };
 }
