@@ -199,6 +199,8 @@ export interface AgentSessionConfig {
 	sessionStartEvent?: SessionStartEvent;
 }
 
+type SessionModelEntry = { model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier };
+
 interface CompactionExecutionRequest {
 	reason: CompactionReason;
 	customInstructions?: string;
@@ -301,8 +303,8 @@ export class AgentSession {
 	readonly sessionManager: SessionManager;
 	readonly settingsManager: SettingsManager;
 
-	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
-	private _favoriteModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
+	private _scopedModels: SessionModelEntry[];
+	private _favoriteModels: SessionModelEntry[];
 
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
@@ -971,7 +973,7 @@ export class AgentSession {
 		thinkingLevel?: ThinkingLevel;
 		serviceTier?: ServiceTier;
 	}> {
-		return this._favoriteModels;
+		return this._getCurrentFavoriteModels();
 	}
 
 	/** Update favorite models for Ctrl+P cycling */
@@ -979,6 +981,36 @@ export class AgentSession {
 		favoriteModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>,
 	): void {
 		this._favoriteModels = favoriteModels;
+	}
+
+	private _getCurrentFavoriteModels(): SessionModelEntry[] {
+		const availableById = new Map(
+			this._modelRegistry.getAvailable().map((model) => [`${model.provider}/${model.id}`, model]),
+		);
+		const narrowedModelIds =
+			this._scopedModels.length > 0
+				? new Set(this._scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`))
+				: undefined;
+		const seenModelIds = new Set<string>();
+		const favoriteModels: SessionModelEntry[] = [];
+
+		for (const favorite of this._favoriteModels) {
+			const modelId = `${favorite.model.provider}/${favorite.model.id}`;
+			if (seenModelIds.has(modelId)) continue;
+
+			const model = availableById.get(modelId);
+			if (!model) continue;
+			if (narrowedModelIds && !narrowedModelIds.has(modelId)) continue;
+
+			seenModelIds.add(modelId);
+			favoriteModels.push({
+				model,
+				thinkingLevel: favorite.thinkingLevel,
+				serviceTier: favorite.serviceTier,
+			});
+		}
+
+		return favoriteModels;
 	}
 
 	/** File-based prompt templates */
@@ -1556,22 +1588,17 @@ export class AgentSession {
 	 * @returns The new model info, or undefined if only one model available
 	 */
 	async cycleModel(direction: "forward" | "backward" = "forward"): Promise<ModelCycleResult | undefined> {
-		if (this._favoriteModels.length > 0) {
-			return this._cycleFavoriteModel(direction);
+		const favoriteModels = this._getCurrentFavoriteModels();
+		if (favoriteModels.length > 0) {
+			return this._cycleFavoriteModel(direction, favoriteModels);
 		}
 		return undefined;
 	}
 
-	private async _cycleFavoriteModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const narrowedModelIds =
-			this._scopedModels.length > 0
-				? new Set(this._scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`))
-				: undefined;
-		const favoriteModels = this._favoriteModels.filter((favorite) => {
-			if (!this._modelRegistry.hasConfiguredAuth(favorite.model)) return false;
-			if (!narrowedModelIds) return true;
-			return narrowedModelIds.has(`${favorite.model.provider}/${favorite.model.id}`);
-		});
+	private async _cycleFavoriteModel(
+		direction: "forward" | "backward",
+		favoriteModels: SessionModelEntry[],
+	): Promise<ModelCycleResult | undefined> {
 		if (favoriteModels.length <= 1) return undefined;
 
 		const currentModel = this.model;

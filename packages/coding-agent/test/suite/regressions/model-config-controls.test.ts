@@ -32,6 +32,29 @@ function registerOpenAiModels(registry: ModelRegistry, ids: string[]): void {
 	});
 }
 
+function registerCustomModels(registry: ModelRegistry, provider: string, ids: string[]): void {
+	registry.registerProvider(provider, {
+		baseUrl: "https://example.test/v1",
+		apiKey: `test-${provider}-key`,
+		api: "openai-responses",
+		models: ids.map((id) => ({
+			id,
+			name: id,
+			api: "openai-responses",
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 1,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 128000,
+			maxTokens: 8192,
+		})),
+	});
+}
+
 describe("model configuration controls", () => {
 	let tempDir: string;
 	let agentDir: string;
@@ -189,6 +212,58 @@ describe("model configuration controls", () => {
 		]);
 		expect(session.favoriteModels).toEqual([]);
 		expect(await session.cycleModel()).toBeUndefined();
+	});
+
+	it("treats favorite models as a filter over the narrowed available models", async () => {
+		const authStorage = AuthStorage.inMemory({ openai: { type: "api_key", key: "test-openai-key" } });
+		const modelRegistry = ModelRegistry.inMemory(authStorage);
+		registerOpenAiModels(modelRegistry, ["gpt-a", "gpt-b", "gpt-c"]);
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			modelRegistry,
+			settingsManager: SettingsManager.inMemory({
+				enabledModels: ["openai/gpt-c"],
+				favoriteModels: ["openai/gpt-a", "openai/gpt-b"],
+			}),
+		});
+
+		expect(session.scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`)).toEqual([
+			"openai/gpt-c",
+		]);
+		expect(session.favoriteModels).toEqual([]);
+		expect(await session.cycleModel()).toBeUndefined();
+	});
+
+	it("does not cycle stale favorite models that left the registry", async () => {
+		const authStorage = AuthStorage.inMemory({ custom: { type: "api_key", key: "test-custom-key" } });
+		const modelRegistry = ModelRegistry.inMemory(authStorage);
+		registerCustomModels(modelRegistry, "custom", ["one", "two"]);
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			modelRegistry,
+			settingsManager: SettingsManager.inMemory({
+				favoriteModels: ["custom/one", "custom/two"],
+			}),
+		});
+
+		modelRegistry.unregisterProvider("custom");
+
+		expect(modelRegistry.find("custom", "one")).toBeUndefined();
+		expect(session.favoriteModels).toEqual([]);
+		expect(await session.cycleModel()).toBeUndefined();
+	});
+
+	it("matches slash-qualified globs only against canonical provider model ids", async () => {
+		const authStorage = AuthStorage.inMemory({ openai: { type: "api_key", key: "test-openai-key" } });
+		const modelRegistry = ModelRegistry.inMemory(authStorage);
+		registerOpenAiModels(modelRegistry, ["gpt-a"]);
+		registerCustomModels(modelRegistry, "router", ["openai/leaked"]);
+
+		const scopedModels = await resolveModelScope(["openai/*"], modelRegistry);
+
+		expect(scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`)).toEqual(["openai/gpt-a"]);
 	});
 
 	it("uses cli patterns before legacy model narrowing settings", () => {

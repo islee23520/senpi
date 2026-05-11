@@ -284,9 +284,13 @@ export async function resolveModelScope(
 				}
 			}
 
+			const isCanonicalPattern = globPattern.includes("/");
 			const matchingModels = availableModels.filter((m) => {
 				const fullId = `${m.provider}/${m.id}`;
-				return minimatch(fullId, globPattern, { nocase: true }) || minimatch(m.id, globPattern, { nocase: true });
+				return (
+					minimatch(fullId, globPattern, { nocase: true }) ||
+					(!isCanonicalPattern && minimatch(m.id, globPattern, { nocase: true }))
+				);
 			});
 
 			if (matchingModels.length === 0) {

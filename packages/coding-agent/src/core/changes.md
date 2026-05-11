@@ -81,6 +81,26 @@
 
 - `enabledModels` remains readable as global model narrowing, but Ctrl+P favorites are persisted through `favoriteModels`.
 
+## Favorite model filter hardening (2026-05-11)
+
+### What changed
+
+- `src/core/agent-session.ts`: favorite models now act as a filter over the current available model list and current global narrowing before being exposed or cycled, so stale cached model objects cannot be selected after a provider/model leaves the registry.
+- `src/core/model-resolver.ts`: slash-qualified glob patterns now match canonical `provider/model` ids only, preventing patterns like `openai/*` from also matching raw model ids such as `openai/gpt-*` under another provider.
+
+### Why
+
+- Favorite cycling should only choose models that are still present in the current model catalog. This matches opencode's validity filter behavior and avoids switching to stale favorites after provider/model changes.
+
+### Why extension system couldn't handle this
+
+- Favorite model resolution and Ctrl+P cycling are core `AgentSession` behavior, and glob pattern matching is shared by core startup/reload model resolution before extensions can safely override it.
+
+### Expected merge conflict zones on next upstream sync
+
+- `src/core/agent-session.ts` around favorite model getters and `cycleModel()`.
+- `src/core/model-resolver.ts` around glob pattern matching in `resolveModelScope()`.
+
 ## Git package dependency repair on update (2026-05-02)
 
 ### What changed
