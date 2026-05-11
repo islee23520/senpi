@@ -96,9 +96,6 @@
 		"url": "git+https://github.com/code-yeongyu/senpi.git",
 		"directory": "packages/coding-agent"
 	},
-	"publishConfig": {
-		"access": "public"
-	},
 	"engines": {
 		"node": ">=20.6.0"
 	}
