@@ -111,7 +111,7 @@ npm run release:patch    # node scripts/release.mjs patch
 ## NOTES
 
 - **CLI binaries**: build emits `senpi` and `pi` from `packages/coding-agent/dist/`. `scripts/create-root-senpi-wrapper.mjs` plants a callable `senpi` shim in npm's global `bin/` after a root build so `which senpi` resolves.
-- **Self-update**: `senpi update senpi` queries `code-yeongyu/senpi-mono` releases (NOT upstream). See `packages/coding-agent/src/changes.md`.
+- **Self-update**: `senpi update senpi` queries `code-yeongyu/senpi` releases (NOT upstream). See `packages/coding-agent/src/changes.md`.
 - **Empty packages**: `packages/mom/` and `packages/pods/` have no source — placeholders. The `.gitignore` keeps stub `dist/main.js` / `dist/cli.js` files committed so `npm install` does not warn about missing bin targets.
 - **Live test gating**: many `packages/ai/test/*.test.ts` are gated by env (`PI_ENABLE_*`, `OPENROUTER_API_KEY`, AWS creds, etc.). The default `npm test` MUST pass without any of them set; failures there are real bugs.
 - **TUI flicker budget**: `packages/tui/test/tui-render.test.ts` enforces "no full-clear after init" + "DECSET 2026 balanced" — see `packages/tui/AGENTS.md` before touching `doRender()`.

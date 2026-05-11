@@ -5,8 +5,8 @@ See [AGENTS.md](../../../AGENTS.md) at the monorepo root for fork-specific guide
 ## Setup
 
 ```bash
-git clone https://github.com/code-yeongyu/senpi-mono
-cd senpi-mono
+git clone https://github.com/code-yeongyu/senpi
+cd senpi
 npm install
 npm run build
 ```
@@ -14,7 +14,7 @@ npm run build
 Run from source:
 
 ```bash
-/path/to/senpi-mono/pi-test.sh
+/path/to/senpi/pi-test.sh
 ```
 
 The script can be run from any directory. Senpi keeps the caller's current working directory.

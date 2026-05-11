@@ -8,7 +8,7 @@ senpi is an opinionated fork of [badlogic/pi-mono](https://github.com/badlogic/p
 
 Using AI to write code is fine. Submitting AI-generated slop without understanding it is not.
 
-If you use an agent, run it from the `senpi-mono` root directory so it picks up `AGENTS.md` automatically. Your agent must follow the rules and guidelines in that file and in the nearest subdirectory `AGENTS.md`.
+If you use an agent, run it from the senpi repo root directory so it picks up `AGENTS.md` automatically. Your agent must follow the rules and guidelines in that file and in the nearest subdirectory `AGENTS.md`.
 
 ## Fork Strategy (READ BEFORE EDITING `src/`)
 
@@ -61,5 +61,5 @@ PRs that bloat the core or skip `changes.md` will be asked to convert to an exte
 
 ## Communication
 
-- Issue and PR discussion happens on GitHub: <https://github.com/code-yeongyu/senpi-mono>.
+- Issue and PR discussion happens on GitHub: <https://github.com/code-yeongyu/senpi>.
 - Upstream pi-mono discussions: <https://discord.com/invite/3cU7Bz4UPx>.
