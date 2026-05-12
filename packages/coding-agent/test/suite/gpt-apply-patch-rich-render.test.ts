@@ -106,6 +106,40 @@ describe("gpt apply_patch rich TUI rendering", () => {
 		expect(rendered).toContain("+1 after");
 	});
 
+	it("keeps the changed hunk visible when the applied diff is large", async () => {
+		initTheme("dark");
+		const harness = await createHarness();
+		harnesses.push(harness);
+		const original = `${Array.from({ length: 40 }, (_, index) => `line-${index + 1}`).join("\n")}\n`;
+		await writeFile(path.join(harness.tempDir, "large.txt"), original, "utf-8");
+		const args = {
+			input: `*** Begin Patch
+*** Update File: large.txt
+@@
+-line-30
++line-30 updated
+*** End Patch`,
+		};
+		const tool = createApplyPatchTool();
+
+		const result = await tool.execute("call-large-rich-result", args, undefined, undefined, {
+			cwd: harness.tempDir,
+		} as Parameters<ApplyPatchTool["execute"]>[4]);
+		const component = tool.renderResult?.(
+			result,
+			{ expanded: true, isPartial: false },
+			theme,
+			createRenderContext(harness.tempDir, args, { executionStarted: true, argsComplete: true, isPartial: false }),
+		);
+		const rendered = stripAnsi(component?.render(120).join("\n") ?? "");
+
+		expect(await readFile(path.join(harness.tempDir, "large.txt"), "utf-8")).toContain("line-30 updated");
+		expect(rendered).toContain("large.txt (+1 -1)");
+		expect(rendered).toContain("-30 line-30");
+		expect(rendered).toContain("+30 line-30 updated");
+		expect(rendered).not.toContain(" 1 line-1");
+	});
+
 	it("renders expanded patch previews with OpenCode-like highlighted diff rows", () => {
 		const rendered = renderPatchPreview(
 			{
