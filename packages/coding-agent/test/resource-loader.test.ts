@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.js";
+import { createAgentSessionServices } from "../src/core/agent-session-services.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
@@ -732,6 +733,91 @@ export default function(pi: ExtensionAPI) {
 			).toHaveLength(1);
 		});
 
+		it("should shadow installed packages that are already shipped as active builtins", async () => {
+			const packageName = "pi-todotools";
+			const packageDir = join(agentDir, "extensions", packageName);
+			const extensionPath = join(packageDir, "src", "index.ts");
+			mkdirSync(join(packageDir, "src"), { recursive: true });
+			writeFileSync(
+				join(packageDir, "package.json"),
+				JSON.stringify({ name: packageName, pi: { extensions: ["./src/index.ts"] } }),
+			);
+			writeFileSync(
+				extensionPath,
+				`export default function(pi) {
+  pi.registerCommand("external-todo", {
+    description: "external todo",
+    handler: async () => {},
+  });
+}`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const extensionPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+			expect(extensionPaths).toContain("<builtin:todowrite>");
+			expect(extensionPaths).not.toContain(extensionPath);
+		});
+
+		it("should load a vendored package when its matching builtin is disabled", async () => {
+			const packageName = "pi-todotools";
+			const packageDir = join(agentDir, "extensions", packageName);
+			const extensionPath = join(packageDir, "src", "index.ts");
+			mkdirSync(join(packageDir, "src"), { recursive: true });
+			writeFileSync(
+				join(packageDir, "package.json"),
+				JSON.stringify({ name: packageName, pi: { extensions: ["./src/index.ts"] } }),
+			);
+			writeFileSync(
+				extensionPath,
+				`export default function(pi) {
+  pi.registerCommand("external-todo", {
+    description: "external todo",
+    handler: async () => {},
+  });
+}`,
+			);
+
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager: SettingsManager.inMemory({ disabledBuiltinExtensions: ["todowrite"] }),
+			});
+			await loader.reload();
+
+			const extensionPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+			expect(extensionPaths).not.toContain("<builtin:todowrite>");
+			expect(extensionPaths).toContain(extensionPath);
+		});
+
+		it("should keep explicit CLI vendored packages even when matching builtins are active", async () => {
+			const packageName = "pi-apply-patch";
+			const packageDir = join(tempDir, packageName);
+			const extensionPath = join(packageDir, "src", "index.ts");
+			mkdirSync(join(packageDir, "src"), { recursive: true });
+			writeFileSync(
+				join(packageDir, "package.json"),
+				JSON.stringify({ name: packageName, pi: { extensions: ["./src/index.ts"] } }),
+			);
+			writeFileSync(
+				extensionPath,
+				`export default function(pi) {
+  pi.registerCommand("explicit-apply-patch", {
+    description: "explicit apply patch",
+    handler: async () => {},
+  });
+}`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir, additionalExtensionPaths: [packageDir] });
+			await loader.reload();
+
+			const extensionPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+			expect(extensionPaths).toContain("<builtin:gpt-apply-patch>");
+			expect(extensionPaths).toContain(extensionPath);
+		});
+
 		it("should keep distinct extension entries from the same package", async () => {
 			const packageDir = join(tempDir, "multi-extension-package");
 			const extensionsDir = join(packageDir, "extensions");
@@ -799,6 +885,68 @@ export default function(pi: ExtensionAPI) {
 			);
 
 			expect(runner.getToolDefinition("apply_patch")?.description).not.toBe("External apply patch");
+		});
+
+		it("should keep builtin flag defaults ahead of external duplicate flags", async () => {
+			const externalExtDir = join(agentDir, "extensions", "external-flags");
+			mkdirSync(externalExtDir, { recursive: true });
+			writeFileSync(
+				join(externalExtDir, "index.ts"),
+				`
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+export default function(pi: ExtensionAPI) {
+  pi.registerFlag("disable-todo-continuation", {
+    type: "boolean",
+    default: true,
+    description: "External continuation override",
+  });
+  pi.registerFlag("permission", {
+    type: "boolean",
+    default: true,
+    description: "External permission override",
+  });
+}`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const extensionsResult = loader.getExtensions();
+			expect(extensionsResult.errors.some((error) => error.error.includes('Flag "--permission" conflicts'))).toBe(
+				false,
+			);
+			expect(extensionsResult.runtime.flagValues.get("disable-todo-continuation")).toBe(false);
+			expect(extensionsResult.runtime.flagValues.has("permission")).toBe(false);
+		});
+
+		it("should validate CLI flags against builtin metadata before external duplicate flags", async () => {
+			const externalExtDir = join(agentDir, "extensions", "external-permission-flag");
+			mkdirSync(externalExtDir, { recursive: true });
+			writeFileSync(
+				join(externalExtDir, "index.ts"),
+				`
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+export default function(pi: ExtensionAPI) {
+  pi.registerFlag("permission", {
+    type: "boolean",
+    default: true,
+    description: "External permission override",
+  });
+}`,
+			);
+
+			const authStorage = AuthStorage.create(join(tempDir, "auth-cli-flag.json"));
+			const services = await createAgentSessionServices({
+				cwd,
+				agentDir,
+				authStorage,
+				modelRegistry: ModelRegistry.create(authStorage),
+				settingsManager: SettingsManager.inMemory(),
+				extensionFlagValues: new Map([["permission", "bash=allow"]]),
+			});
+
+			expect(services.diagnostics).toEqual([]);
+			expect(services.resourceLoader.getExtensions().runtime.flagValues.get("permission")).toBe("bash=allow");
 		});
 
 		it("should prefer explicit CLI extensions over discovered extensions when commands and tools conflict", async () => {

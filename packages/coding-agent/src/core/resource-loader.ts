@@ -58,6 +58,24 @@ const LEGACY_GENERATED_GLOBAL_EXTENSION_BANNERS = [
 ] as const;
 type GlobalDefaultExtensionId = (typeof globalDefaultExtensionIds)[number];
 
+const VENDORED_BUILTIN_EXTENSION_PACKAGES: ReadonlyArray<{ builtinId: string; packageName: string }> = [
+	{ builtinId: "anthropic-bash", packageName: "pi-anthropic-bash" },
+	{ builtinId: "anthropic-code-execution", packageName: "pi-anthropic-code-execution" },
+	{ builtinId: "anthropic-computer-use", packageName: "pi-anthropic-computer-use" },
+	{ builtinId: "anthropic-text-editor", packageName: "pi-anthropic-text-editor" },
+	{ builtinId: "anthropic-tool-search", packageName: "pi-anthropic-tool-search" },
+	{ builtinId: "anthropic-web-search", packageName: "pi-anthropic-web-search" },
+	{ builtinId: "gpt-apply-patch", packageName: "pi-apply-patch" },
+	{ builtinId: "bash-timeout", packageName: "pi-bash-timeout" },
+	{ builtinId: "google-code-execution", packageName: "pi-google-code-execution" },
+	{ builtinId: "google-google-search", packageName: "pi-google-google-search" },
+	{ builtinId: "google-url-context", packageName: "pi-google-url-context" },
+	{ builtinId: "openai-api-parallel-tool-calls", packageName: "pi-openai-api-parallel-tool-calls" },
+	{ builtinId: "openai-code-interpreter", packageName: "pi-openai-code-interpreter" },
+	{ builtinId: "openai-web-search", packageName: "pi-openai-web-search" },
+	{ builtinId: "todowrite", packageName: "pi-todotools" },
+];
+
 function isGeneratedGlobalDefaultExtensionShim(content: string): boolean {
 	return LEGACY_GENERATED_GLOBAL_EXTENSION_BANNERS.some((banner) => content.startsWith(banner));
 }
@@ -426,16 +444,19 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 		const enabledSkills = enabledSkillResources.map(mapSkillPath);
 
-		// Add CLI paths metadata
+		// Add CLI paths metadata. Explicit -e/-s resources must keep CLI precedence
+		// even when they resolve through a package manifest.
 		for (const r of cliExtensionPaths.extensions) {
-			if (!metadataByPath.has(r.path)) {
-				metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
-			}
+			metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
 		}
 		for (const r of cliExtensionPaths.skills) {
-			if (!metadataByPath.has(r.path)) {
-				metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
-			}
+			metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
+		}
+		for (const r of cliExtensionPaths.prompts) {
+			metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
+		}
+		for (const r of cliExtensionPaths.themes) {
+			metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
 		}
 
 		const cliEnabledExtensions = getEnabledPaths(cliExtensionPaths.extensions);
@@ -446,7 +467,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const extensionPaths = this.noExtensions
 			? cliEnabledExtensions
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
-		const dedupedExtensionPaths = this.dedupeExtensionPathsByPackageName(extensionPaths);
+		const dedupedExtensionPaths = this.dedupeExtensionPathsByPackageName(
+			this.shadowVendoredBuiltinExtensionPaths(extensionPaths, metadataByPath),
+		);
 
 		const factoryResolver: ExtensionFactoryResolver = (_extensionPath, resolvedPath) =>
 			resolveGeneratedGlobalDefaultExtensionFactory(resolvedPath, this.agentDir);
@@ -455,6 +478,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		});
 		const inlineExtensions = await this.loadExtensionFactories(extensionsResult.runtime);
 		extensionsResult.extensions.unshift(...inlineExtensions.extensions);
+		this.rebuildExtensionFlagDefaults(extensionsResult);
 		extensionsResult.errors.push(...inlineExtensions.errors);
 
 		// Detect extension conflicts (tools, commands, flags with same names from different extensions)
@@ -814,6 +838,65 @@ export class DefaultResourceLoader implements ResourceLoader {
 		return dedupedPaths;
 	}
 
+	private getActiveBuiltinExtensionIds(): Set<string> {
+		const enabledBuiltinExtensions = this.settingsManager.getEnabledBuiltinExtensions();
+		const enabledBuiltinExtensionSet = enabledBuiltinExtensions ? new Set(enabledBuiltinExtensions) : undefined;
+		const disabledBuiltinExtensions = new Set(this.settingsManager.getDisabledBuiltinExtensions());
+		const activeBuiltinExtensionIds = new Set<string>();
+
+		for (const builtinExtension of this.builtinExtensionFactories) {
+			if (enabledBuiltinExtensionSet && !enabledBuiltinExtensionSet.has(builtinExtension.id)) {
+				continue;
+			}
+			if (disabledBuiltinExtensions.has(builtinExtension.id)) {
+				continue;
+			}
+
+			activeBuiltinExtensionIds.add(builtinExtension.id);
+		}
+
+		return activeBuiltinExtensionIds;
+	}
+
+	private getShadowedVendoredBuiltinPackageNames(): Set<string> {
+		const activeBuiltinExtensionIds = this.getActiveBuiltinExtensionIds();
+		const packageNames = new Set<string>();
+		for (const { builtinId, packageName } of VENDORED_BUILTIN_EXTENSION_PACKAGES) {
+			if (activeBuiltinExtensionIds.has(builtinId)) {
+				packageNames.add(packageName);
+			}
+		}
+		return packageNames;
+	}
+
+	private shadowVendoredBuiltinExtensionPaths(
+		extensionPaths: string[],
+		metadataByPath: Map<string, PathMetadata>,
+	): string[] {
+		const shadowedPackageNames = this.getShadowedVendoredBuiltinPackageNames();
+		if (shadowedPackageNames.size === 0) {
+			return extensionPaths;
+		}
+
+		const filteredPaths: string[] = [];
+		for (const extensionPath of extensionPaths) {
+			const metadata = metadataByPath.get(extensionPath) ?? metadataByPath.get(resolve(extensionPath));
+			if (metadata?.source === "cli") {
+				filteredPaths.push(extensionPath);
+				continue;
+			}
+
+			const packageIdentity = this.findNearestPackageIdentity(extensionPath);
+			if (packageIdentity && shadowedPackageNames.has(packageIdentity.packageName)) {
+				continue;
+			}
+
+			filteredPaths.push(extensionPath);
+		}
+
+		return filteredPaths;
+	}
+
 	private loadThemes(
 		paths: string[],
 		includeDefaults: boolean = true,
@@ -901,15 +984,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}> {
 		const extensions: Extension[] = [];
 		const errors: Array<{ path: string; error: string }> = [];
-		const enabledBuiltinExtensions = this.settingsManager.getEnabledBuiltinExtensions();
-		const enabledBuiltinExtensionSet = enabledBuiltinExtensions ? new Set(enabledBuiltinExtensions) : undefined;
-		const disabledBuiltinExtensions = new Set(this.settingsManager.getDisabledBuiltinExtensions());
+		const activeBuiltinExtensionIds = this.getActiveBuiltinExtensionIds();
 
 		for (const builtinExtension of this.builtinExtensionFactories) {
-			if (enabledBuiltinExtensionSet && !enabledBuiltinExtensionSet.has(builtinExtension.id)) {
-				continue;
-			}
-			if (disabledBuiltinExtensions.has(builtinExtension.id)) {
+			if (!activeBuiltinExtensionIds.has(builtinExtension.id)) {
 				continue;
 			}
 
@@ -1017,6 +1095,24 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const existingPackageIdentity = this.findNearestPackageIdentity(existingOwner);
 		const candidatePackageIdentity = this.findNearestPackageIdentity(candidateOwner);
 		return existingPackageIdentity !== undefined && existingPackageIdentity.key === candidatePackageIdentity?.key;
+	}
+
+	private rebuildExtensionFlagDefaults(extensionsResult: LoadExtensionsResult): void {
+		const rebuiltFlagValues = new Map<string, boolean | string>();
+		const seenFlags = new Set<string>();
+		for (const extension of extensionsResult.extensions) {
+			for (const [flagName, flag] of extension.flags) {
+				if (seenFlags.has(flagName)) {
+					continue;
+				}
+				seenFlags.add(flagName);
+				if (flag.default !== undefined) {
+					rebuiltFlagValues.set(flagName, flag.default);
+				}
+			}
+		}
+
+		extensionsResult.runtime.flagValues = rebuiltFlagValues;
 	}
 
 	private detectExtensionConflicts(extensions: Extension[]): Array<{ path: string; message: string }> {
