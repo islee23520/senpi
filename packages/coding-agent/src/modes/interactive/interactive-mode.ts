@@ -16,6 +16,7 @@ import {
 	type Model,
 	type OAuthProviderId,
 	type OAuthSelectPrompt,
+	type TextContent,
 } from "@earendil-works/pi-ai";
 import type {
 	AutocompleteItem,
@@ -1280,19 +1281,6 @@ export class InteractiveMode {
 		}
 
 		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
-		const _compactPath = (resourcePath: string, sourceInfo?: SourceInfo): string => {
-			const builtinName = this.getBuiltinExtensionNameFromPath(resourcePath);
-			if (builtinName) {
-				return `builtin/${builtinName}`;
-			}
-			const shortPath = this.getShortPath(resourcePath, sourceInfo);
-			const normalizedPath = shortPath.replace(/\\/g, "/");
-			const segments = normalizedPath.split("/").filter((segment) => segment.length > 0 && segment !== "~");
-			if (segments.length > 0) {
-				return segments[segments.length - 1]!;
-			}
-			return shortPath;
-		};
 		const formatCompactList = (items: string[], options?: { sort?: boolean }): string => {
 			const labels = items.map((item) => item.trim()).filter((item) => item.length > 0);
 			if (options?.sort !== false) {
@@ -1978,7 +1966,11 @@ export class InteractiveMode {
 			setWorkingVisible: (visible) => this.setWorkingVisible(visible),
 			setWorkingIndicator: (options) => this.setWorkingIndicator(options),
 			setHiddenThinkingLabel: (label) => this.setHiddenThinkingLabel(label),
-			setWidget: (key, content, options) => this.setExtensionWidget(key, content, options),
+			setWidget: (
+				key: string,
+				content: string[] | ((tui: TUI, thm: Theme) => Component & { dispose?(): void }) | undefined,
+				options?: ExtensionWidgetOptions,
+			) => this.setExtensionWidget(key, content, options),
 			setFooter: (factory) => this.setExtensionFooter(factory),
 			setHeader: (factory) => this.setExtensionHeader(factory),
 			setTitle: (title) => this.ui.terminal.setTitle(title),
@@ -3005,11 +2997,11 @@ export class InteractiveMode {
 	/** Extract text content from a user message */
 	private getUserMessageText(message: Message): string {
 		if (message.role !== "user") return "";
-		const textBlocks =
+		const textBlocks: TextContent[] =
 			typeof message.content === "string"
 				? [{ type: "text", text: message.content }]
-				: message.content.filter((c: { type: string }) => c.type === "text");
-		return textBlocks.map((c) => (c as { text: string }).text).join("");
+				: message.content.filter((content): content is TextContent => content.type === "text");
+		return textBlocks.map((content) => content.text).join("");
 	}
 
 	/**
@@ -3126,7 +3118,8 @@ export class InteractiveMode {
 				break;
 			}
 			default: {
-				const _exhaustive: never = message;
+				const exhaustive: never = message;
+				void exhaustive;
 			}
 		}
 	}
@@ -3983,7 +3976,7 @@ export class InteractiveMode {
 	private async getModelCandidates(): Promise<Model<any>[]> {
 		this.session.modelRegistry.refresh();
 		try {
-			const availableModels = await this.session.modelRegistry.getAvailable();
+			const availableModels = this.session.modelRegistry.getAvailable();
 			if (this.session.scopedModels.length === 0) {
 				return availableModels;
 			}
