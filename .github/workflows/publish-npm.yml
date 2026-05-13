@@ -56,8 +56,8 @@ jobs:
       - name: Build all workspaces (so husky pre-commit type check resolves)
         run: npm run build
 
-      - name: Reset auto-generated files (regenerated each prebuild; not part of release diff)
-        run: git checkout -- packages/ai/src/models.generated.ts packages/ai/src/image-models.generated.ts
+      - name: Reset auto-generated and npm-install drift files (not part of release diff)
+        run: git checkout -- packages/ai/src/models.generated.ts packages/ai/src/image-models.generated.ts package-lock.json
 
       - name: Run release
         env:

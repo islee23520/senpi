@@ -68,7 +68,7 @@
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
 		"dev:tsc": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
 		"test": "vitest --run",
-		"prepublishOnly": "shx rm -rf dist && tsx scripts/generate-models.ts && tsgo -p tsconfig.build.json"
+		"prepublishOnly": "shx rm -rf dist && tsx scripts/generate-models.ts && tsgo -p tsconfig.build.json && shx chmod +x dist/cli.js"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.91.1",
