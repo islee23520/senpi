@@ -2058,8 +2058,15 @@ export class AgentSession {
 			return;
 		}
 
-		// Case 1: Overflow - LLM returned context overflow error
-		if (sameModel && isContextOverflow(assistantMessage, contextWindow)) {
+		// Case 1: Overflow - LLM returned context overflow error.
+		// If the saved assistant provider differs from the currently selected provider alias,
+		// still recover as overflow when the current context is also at the compaction limit.
+		const contextUsage = this.getContextUsage();
+		const currentContextNeedsCompaction =
+			contextUsage !== undefined &&
+			contextUsage.tokens !== null &&
+			shouldCompact(contextUsage.tokens, contextUsage.contextWindow, settings);
+		if (isContextOverflow(assistantMessage, contextWindow) && (sameModel || currentContextNeedsCompaction)) {
 			if (this._overflowRecoveryAttempted) {
 				this._emit({
 					type: "compaction_end",

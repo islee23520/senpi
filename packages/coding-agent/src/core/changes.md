@@ -18,6 +18,24 @@
 
 - LOW: `export-html/index.ts` and `AgentSession.exportToJsonl()` path handling.
 
+## Overflow alias recovery (2026-05-13)
+
+### What changed
+
+- `src/core/agent-session.ts`: context-window overflow errors now trigger overflow compaction with automatic retry when the saved assistant provider differs from the current provider alias but the current context is also at the compaction limit.
+
+### Why
+
+- Imported or resumed sessions can contain OpenAI provider aliases from a previous run. When such a near-limit session overflows, treating the error as threshold compaction leaves the user with an empty error turn and no automatic retry.
+
+### Why extension system couldn't handle this
+
+- Overflow retry policy is core agent-loop recovery behavior; extensions can request compaction but cannot reliably remove the error turn and restart the agent turn.
+
+### Expected merge conflict zones
+
+- MEDIUM: `AgentSession._checkCompaction()` around overflow-vs-threshold recovery.
+
 ## Extension duplicate resource conflict policy (2026-05-12)
 
 ### What changed
