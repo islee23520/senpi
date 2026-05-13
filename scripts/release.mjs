@@ -1,196 +1,371 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release script for the senpi monorepo (CalVer).
  *
  * Usage:
- *   node scripts/release.mjs <major|minor|patch>
- *   node scripts/release.mjs <x.y.z>
+ *   node scripts/release.mjs               # compute next version via calver.mjs, run release
+ *   node scripts/release.mjs --version <v> # explicit CalVer override (YYYY.MM.DD or YYYY.MM.DD-N)
+ *   node scripts/release.mjs --dry-run     # preview every command and file write; modify nothing
+ *   node scripts/release.mjs --help        # print usage
  *
- * Steps:
- * 1. Check for uncommitted changes
- * 2. Bump version via npm run version:xxx or set an explicit version
- * 3. Update CHANGELOG.md files: [Unreleased] -> [version] - date
- * 4. Commit and tag
- * 5. Publish to npm
- * 6. Add new [Unreleased] section to changelogs
- * 7. Commit
+ * Flow (matches AGENTS.md "VERSIONING & UPSTREAM SYNC"):
+ *   1. Pre-flight: branch must be `main`; working tree must be clean (--dry-run warns
+ *      and continues so the preview is usable during development).
+ *   2. Resolve version: `--version` override or `computeNextVersion()` from calver.mjs.
+ *   3. Write `version` into all 5 workspace package.json files directly (TAB indent,
+ *      trailing newline). `npm version` is intentionally NOT used; the `-N` suffix on
+ *      same-day re-releases looks like a prerelease tag to npm.
+ *   4. Run `scripts/sync-versions.js` to propagate the new version to inter-package deps.
+ *   5. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
+ *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
+ *      (`### Added`, `### Fixed`, ...) for re-insertion in step 7.
+ *   6. `git add -A`, `git commit -m "release: v<version>"` (husky pre-commit runs),
+ *      `git tag v<version>`, then `npm run publish` (publishes to npm with `--tag latest`).
+ *   7. Re-insert a fresh `## [Unreleased]` block with the same subsection placeholders,
+ *      commit, then push `main` and the new tag.
  */
 
-import { execSync } from "child_process";
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
-import { join } from "path";
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { computeNextVersion } from "./calver.mjs";
 
-const RELEASE_TARGET = process.argv[2];
-const BUMP_TYPES = new Set(["major", "minor", "patch"]);
-const SEMVER_RE = /^\d+\.\d+\.\d+$/;
+const VERSION_RE = /^\d{4}\.\d{2}\.\d{2}(-\d+)?$/;
 
-if (!RELEASE_TARGET || (!BUMP_TYPES.has(RELEASE_TARGET) && !SEMVER_RE.test(RELEASE_TARGET))) {
-	console.error("Usage: node scripts/release.mjs <major|minor|patch|x.y.z>");
-	process.exit(1);
+const WORKSPACE_PACKAGES = [
+	"packages/ai/package.json",
+	"packages/agent/package.json",
+	"packages/coding-agent/package.json",
+	"packages/tui/package.json",
+	"packages/web-ui/package.json",
+];
+
+const CHANGELOGS = [
+	"packages/ai/CHANGELOG.md",
+	"packages/agent/CHANGELOG.md",
+	"packages/coding-agent/CHANGELOG.md",
+	"packages/tui/CHANGELOG.md",
+	"packages/web-ui/CHANGELOG.md",
+];
+
+function printUsage() {
+	const text = [
+		"Usage: node scripts/release.mjs [options]",
+		"",
+		"Releases the senpi monorepo using CalVer (YYYY.MM.DD or YYYY.MM.DD-N).",
+		"",
+		"Options:",
+		"  --version <v>   Explicit CalVer version. Must match",
+		"                  /^\\d{4}\\.\\d{2}\\.\\d{2}(-\\d+)?$/ — for example 2026.05.13",
+		"                  or 2026.05.13-2.",
+		"  --dry-run       Preview every shell command and file write; modify nothing.",
+		"                  Read-only git/npm reads (status, branch, tag --list,",
+		"                  npm view) still execute so the plan is accurate.",
+		"  --help, -h      Show this help and exit.",
+		"",
+		"Default flow: compute next version via scripts/calver.mjs, then release.",
+	].join("\n");
+	process.stdout.write(`${text}\n`);
 }
 
-function run(cmd, options = {}) {
-	console.log(`$ ${cmd}`);
-	try {
-		return execSync(cmd, { encoding: "utf-8", stdio: options.silent ? "pipe" : "inherit", ...options });
-	} catch (e) {
-		if (!options.ignoreError) {
-			console.error(`Command failed: ${cmd}`);
+function parseArgs(argv) {
+	const args = { dryRun: false, version: null, help: false };
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === "--help" || arg === "-h") {
+			args.help = true;
+		} else if (arg === "--dry-run") {
+			args.dryRun = true;
+		} else if (arg === "--version") {
+			i += 1;
+			if (i >= argv.length) {
+				process.stderr.write("[release] error: --version requires an argument\n");
+				process.exit(1);
+			}
+			args.version = argv[i];
+		} else {
+			process.stderr.write(`[release] error: unknown argument: ${arg}\n`);
 			process.exit(1);
 		}
-		return null;
 	}
+	return args;
 }
 
-function getVersion() {
-	const pkg = JSON.parse(readFileSync("packages/ai/package.json", "utf-8"));
-	return pkg.version;
+function log(message) {
+	process.stdout.write(`[release] ${message}\n`);
 }
 
-function compareVersions(a, b) {
-	const aParts = a.split(".").map(Number);
-	const bParts = b.split(".").map(Number);
-
-	for (let i = 0; i < 3; i++) {
-		const diff = (aParts[i] || 0) - (bParts[i] || 0);
-		if (diff !== 0) {
-			return diff;
-		}
-	}
-
-	return 0;
+function dryRunLog(message) {
+	process.stdout.write(`[dry-run] ${message}\n`);
 }
 
-function shellQuote(value) {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function stageChangedFiles() {
-	const output = run("git ls-files -m -o -d --exclude-standard", { silent: true });
-	const paths = [...new Set((output || "").split("\n").map((line) => line.trim()).filter(Boolean))];
-	if (paths.length === 0) {
-		return;
-	}
-
-	run(`git add -- ${paths.map(shellQuote).join(" ")}`);
-}
-
-function bumpOrSetVersion(target) {
-	const currentVersion = getVersion();
-
-	if (BUMP_TYPES.has(target)) {
-		console.log(`Bumping version (${target})...`);
-		run(`npm run version:${target}`);
-		return getVersion();
-	}
-
-	if (compareVersions(target, currentVersion) <= 0) {
-		console.error(`Error: explicit version ${target} must be greater than current version ${currentVersion}.`);
+function captureCommand(bin, args) {
+	try {
+		return execFileSync(bin, args, {
+			encoding: "utf-8",
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+	} catch (err) {
+		const message = err && typeof err === "object" && "message" in err ? err.message : String(err);
+		process.stderr.write(`[release] error: ${bin} ${args.join(" ")} failed: ${message}\n`);
 		process.exit(1);
 	}
-
-	console.log(`Setting explicit version (${target})...`);
-	run(
-		`npm version ${target} -ws --no-git-tag-version && node scripts/sync-versions.js && npx shx rm -rf node_modules packages/*/node_modules package-lock.json && npm install`,
-	);
-	return getVersion();
 }
 
-function getChangelogs() {
-	const packagesDir = "packages";
-	const packages = readdirSync(packagesDir);
-	return packages
-		.map((pkg) => join(packagesDir, pkg, "CHANGELOG.md"))
-		.filter((path) => existsSync(path));
-}
-
-function updateChangelogsForRelease(version) {
-	const date = new Date().toISOString().split("T")[0];
-	const changelogs = getChangelogs();
-
-	for (const changelog of changelogs) {
-		const content = readFileSync(changelog, "utf-8");
-
-		if (!content.includes("## [Unreleased]")) {
-			console.log(`  Skipping ${changelog}: no [Unreleased] section`);
-			continue;
-		}
-
-		const updated = content.replace(
-			"## [Unreleased]",
-			`## [${version}] - ${date}`
-		);
-		writeFileSync(changelog, updated);
-		console.log(`  Updated ${changelog}`);
+function runCommand(bin, args) {
+	try {
+		execFileSync(bin, args, { stdio: "inherit" });
+	} catch (err) {
+		const message = err && typeof err === "object" && "message" in err ? err.message : String(err);
+		process.stderr.write(`[release] error: ${bin} ${args.join(" ")} failed: ${message}\n`);
+		process.exit(1);
 	}
 }
 
-function addUnreleasedSection() {
-	const changelogs = getChangelogs();
-	const unreleasedSection = "## [Unreleased]\n\n";
-
-	for (const changelog of changelogs) {
-		const content = readFileSync(changelog, "utf-8");
-
-		// Insert after "# Changelog\n\n"
-		const updated = content.replace(
-			/^(# Changelog\n\n)/,
-			`$1${unreleasedSection}`
+function preflight(dryRun) {
+	const branch = captureCommand("git", ["branch", "--show-current"]).trim();
+	if (branch !== "main") {
+		process.stderr.write(
+			`[release] error: must be on main branch, currently on "${branch || "<detached>"}"\n`,
 		);
-		writeFileSync(changelog, updated);
-		console.log(`  Added [Unreleased] to ${changelog}`);
+		process.exit(1);
 	}
-}
+	log("on branch main");
 
-// Main flow
-console.log("\n=== Release Script ===\n");
-
-// 1. Check for uncommitted changes
-console.log("Checking for uncommitted changes...");
-const status = run("git status --porcelain", { silent: true });
-if (status && status.trim()) {
-	console.error("Error: Uncommitted changes detected. Commit or stash first.");
-	console.error(status);
+	const status = captureCommand("git", ["status", "--porcelain"]);
+	if (status.trim().length === 0) {
+		log("working tree clean");
+		return;
+	}
+	if (dryRun) {
+		log("warn: working tree has uncommitted changes (dry-run continues; live release would abort)");
+		return;
+	}
+	process.stderr.write("[release] error: uncommitted changes detected:\n");
+	process.stderr.write(status);
 	process.exit(1);
 }
-console.log("  Working directory clean\n");
 
-// 2. Bump or set version
-const version = bumpOrSetVersion(RELEASE_TARGET);
-console.log(`  New version: ${version}\n`);
+function resolveVersion(opts) {
+	if (opts.version !== null) {
+		if (!VERSION_RE.test(opts.version)) {
+			process.stderr.write(
+				`[release] error: invalid --version "${opts.version}" ` +
+					"(expected YYYY.MM.DD or YYYY.MM.DD-N)\n",
+			);
+			process.exit(1);
+		}
+		log(`using explicit version: ${opts.version}`);
+		return opts.version;
+	}
+	log("computing next CalVer version via scripts/calver.mjs ...");
+	const version = computeNextVersion();
+	if (!VERSION_RE.test(version)) {
+		process.stderr.write(`[release] error: calver returned invalid version "${version}"\n`);
+		process.exit(1);
+	}
+	return version;
+}
 
-// 3. Update changelogs
-console.log("Updating CHANGELOG.md files...");
-updateChangelogsForRelease(version);
-console.log();
+function todayISO() {
+	return new Date().toISOString().slice(0, 10);
+}
 
-// 4. Commit and tag
-console.log("Committing and tagging...");
-stageChangedFiles();
-run(`git commit -m "Release v${version}"`);
-run(`git tag v${version}`);
-console.log();
+function writeWorkspaceVersion(file, version, dryRun) {
+	const raw = readFileSync(file, "utf-8");
+	const pkg = JSON.parse(raw);
+	const previous = pkg.version;
+	if (previous === version) {
+		log(`  ${file}: already ${version}`);
+		return;
+	}
+	if (dryRun) {
+		dryRunLog(`write ${file} (version: ${previous} -> ${version})`);
+		return;
+	}
+	// JSON.stringify preserves key insertion order for string keys. Reassigning
+	// `version` updates the value in place without moving the key.
+	pkg.version = version;
+	writeFileSync(file, `${JSON.stringify(pkg, null, "\t")}\n`);
+	log(`  ${file}: ${previous} -> ${version}`);
+}
 
-// 5. Publish
-console.log("Publishing to npm...");
-run("npm run publish");
-console.log();
+function applyWorkspaceVersions(version, dryRun) {
+	log(`applying version ${version} to ${WORKSPACE_PACKAGES.length} workspace package.json files`);
+	for (const file of WORKSPACE_PACKAGES) {
+		writeWorkspaceVersion(file, version, dryRun);
+	}
+}
 
-// 6. Add new [Unreleased] sections
-console.log("Adding [Unreleased] sections for next cycle...");
-addUnreleasedSection();
-console.log();
+function extractUnreleasedSubsections(content) {
+	const lines = content.split("\n");
+	const start = lines.findIndex((line) => line.trim() === "## [Unreleased]");
+	if (start === -1) {
+		return null;
+	}
+	const subsections = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		const line = lines[i];
+		if (line.startsWith("## [")) {
+			break;
+		}
+		if (line.startsWith("### ")) {
+			subsections.push(line);
+		}
+	}
+	return subsections;
+}
 
-// 7. Commit
-console.log("Committing changelog updates...");
-stageChangedFiles();
-run(`git commit -m "Add [Unreleased] section for next cycle"`);
-console.log();
+function buildUnreleasedBlock(subsections) {
+	let block = "## [Unreleased]\n\n";
+	for (const sub of subsections) {
+		block += `${sub}\n\n`;
+	}
+	return block;
+}
 
-// 8. Push
-console.log("Pushing to remote...");
-run("git push origin main");
-run(`git push origin v${version}`);
-console.log();
+const capturedSubsections = new Map();
 
-console.log(`=== Released v${version} ===`);
+function stampChangelogs(version, date, dryRun) {
+	log(`stamping ${CHANGELOGS.length} CHANGELOG.md files: [Unreleased] -> [${version}] - ${date}`);
+	for (const file of CHANGELOGS) {
+		const content = readFileSync(file, "utf-8");
+		const subsections = extractUnreleasedSubsections(content);
+		if (subsections === null) {
+			log(`  skip ${file}: no [Unreleased] section`);
+			continue;
+		}
+		capturedSubsections.set(file, subsections);
+		const updated = content.replace(/^## \[Unreleased\]$/m, `## [${version}] - ${date}`);
+		const count = subsections.length;
+		const noun = count === 1 ? "subsection header" : "subsection headers";
+		if (dryRun) {
+			dryRunLog(`write ${file} ([Unreleased] -> [${version}] - ${date}; ${count} ${noun} captured)`);
+			continue;
+		}
+		writeFileSync(file, updated);
+		log(`  stamped ${file} (${count} ${noun} captured)`);
+	}
+}
+
+function reAddUnreleasedSections(version, date, dryRun) {
+	log(`re-inserting [Unreleased] block in ${CHANGELOGS.length} CHANGELOG.md files`);
+	for (const file of CHANGELOGS) {
+		const subsections = capturedSubsections.get(file);
+		if (subsections === undefined) {
+			log(`  skip ${file}: no [Unreleased] section was captured`);
+			continue;
+		}
+		const block = buildUnreleasedBlock(subsections);
+		const count = subsections.length;
+		const noun = count === 1 ? "placeholder" : "placeholders";
+		if (dryRun) {
+			dryRunLog(
+				`insert [Unreleased] block before [${version}] - ${date} in ${file} (${count} ${noun})`,
+			);
+			continue;
+		}
+		const content = readFileSync(file, "utf-8");
+		const target = `## [${version}] - ${date}`;
+		const updated = content.replace(target, () => `${block}${target}`);
+		writeFileSync(file, updated);
+		log(`  re-added [Unreleased] to ${file}`);
+	}
+}
+
+function runSyncVersions(dryRun) {
+	if (dryRun) {
+		dryRunLog("node scripts/sync-versions.js");
+		return;
+	}
+	log("running scripts/sync-versions.js");
+	runCommand("node", ["scripts/sync-versions.js"]);
+}
+
+function gitAddAll(dryRun) {
+	if (dryRun) {
+		dryRunLog("git add -A");
+		return;
+	}
+	log("git add -A");
+	runCommand("git", ["add", "-A"]);
+}
+
+function gitCommit(message, dryRun) {
+	if (dryRun) {
+		dryRunLog(`git commit -m ${JSON.stringify(message)}`);
+		return;
+	}
+	log(`git commit -m ${JSON.stringify(message)}`);
+	runCommand("git", ["commit", "-m", message]);
+}
+
+function gitTag(version, dryRun) {
+	const tag = `v${version}`;
+	if (dryRun) {
+		dryRunLog(`git tag ${tag}`);
+		return;
+	}
+	log(`git tag ${tag}`);
+	runCommand("git", ["tag", tag]);
+}
+
+function gitPush(refspec, dryRun) {
+	if (dryRun) {
+		dryRunLog(`git push origin ${refspec}`);
+		return;
+	}
+	log(`git push origin ${refspec}`);
+	runCommand("git", ["push", "origin", refspec]);
+}
+
+function runPublish(dryRun) {
+	if (dryRun) {
+		dryRunLog("npm run publish");
+		return;
+	}
+	log("npm run publish");
+	runCommand("npm", ["run", "publish"]);
+}
+
+function main() {
+	const args = parseArgs(process.argv.slice(2));
+	if (args.help) {
+		printUsage();
+		process.exit(0);
+	}
+
+	preflight(args.dryRun);
+
+	const version = resolveVersion(args);
+	const date = todayISO();
+	log(`target version: v${version}`);
+	log(`release date: ${date}`);
+	if (args.dryRun) {
+		dryRunLog("preview mode; no files, commits, tags, or npm state will be modified");
+	}
+
+	applyWorkspaceVersions(version, args.dryRun);
+	runSyncVersions(args.dryRun);
+	stampChangelogs(version, date, args.dryRun);
+
+	gitAddAll(args.dryRun);
+	gitCommit(`release: v${version}`, args.dryRun);
+	gitTag(version, args.dryRun);
+
+	runPublish(args.dryRun);
+
+	reAddUnreleasedSections(version, date, args.dryRun);
+	gitAddAll(args.dryRun);
+	gitCommit("Add [Unreleased] section for next cycle", args.dryRun);
+
+	gitPush("main", args.dryRun);
+	gitPush(`v${version}`, args.dryRun);
+
+	if (args.dryRun) {
+		log(`dry-run complete; would have published v${version}`);
+	} else {
+		log(`published v${version}`);
+	}
+}
+
+main();
