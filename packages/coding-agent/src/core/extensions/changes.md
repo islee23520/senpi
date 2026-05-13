@@ -1,5 +1,25 @@
 # Core Extensions Changes
 
+## 2026-05-13 - Rename injected system prefix to senpi
+
+### What changed
+
+- `builtin/system-messages.ts`: Changed the injected builtin system-message prefix from `[system:sanepi]` to `[system:senpi]`.
+- `builtin/todotools/system-messages.ts`: Applied the same prefix change to the vendored todotools helper.
+- `test/suite/sanepi-conversation.test.ts`: Added regression coverage that both helpers emit the `senpi` marker.
+
+### Why
+
+- The runtime identity is `senpi`, but internally injected reminder/follow-up messages still used the stale `[system:sanepi]` marker.
+
+### Why extension system couldn't handle this alone
+
+- The marker is emitted by bundled helper modules used by builtin extensions before handing messages to the agent runtime.
+
+### Expected merge conflict zones
+
+- LOW: `builtin/system-messages.ts` and `builtin/todotools/system-messages.ts` if the helper modules are renamed or consolidated.
+
 ## 2026-05-12 - Externalize todotools vendored builtin source
 
 ### What changed

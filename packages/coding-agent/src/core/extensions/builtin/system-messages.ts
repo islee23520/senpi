@@ -2,7 +2,7 @@ import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { CustomMessage } from "../../messages.js";
 import type { ExtensionAPI } from "../types.js";
 
-export const SANEPI_SYSTEM_PREFIX = "[system:sanepi]";
+export const SANEPI_SYSTEM_PREFIX = "[system:senpi]";
 export const SANEPI_CONVERSATION_EVENT = "sanepi:conversation";
 
 export type BuiltinSystemMessageRoute = "background-task.notification" | "todotools.continuation";
