@@ -1,5 +1,23 @@
 # changes
 
+## Export tilde paths (2026-05-13)
+
+### What changed
+
+- `src/core/export-html/index.ts` and `src/core/agent-session.ts`: `/export` output paths now expand leading `~` before writing HTML or JSONL exports.
+
+### Why
+
+- A user-facing `/export ~/asdf.jsonl` could create `./~/asdf.jsonl` instead of writing to the home directory.
+
+### Why extension system couldn't handle this
+
+- Export path resolution lives in the core export/session methods before extension command handlers see the final file write.
+
+### Expected merge conflict zones
+
+- LOW: `export-html/index.ts` and `AgentSession.exportToJsonl()` path handling.
+
 ## Extension duplicate resource conflict policy (2026-05-12)
 
 ### What changed

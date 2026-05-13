@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import { SessionImportFileNotFoundError } from "../src/core/agent-session-runtime.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
@@ -23,7 +24,20 @@ type ImportCommandContext = {
 	getPathCommandArgument: (text: string, command: PathCommand) => string | undefined;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+function getInteractiveModeMethod<TMethod>(name: keyof InteractiveModePrototype): TMethod {
+	const descriptor = Object.getOwnPropertyDescriptor(InteractiveMode.prototype, name);
+	if (!descriptor || typeof descriptor.value !== "function") {
+		throw new Error(`InteractiveMode.${name} is not available for command parsing tests`);
+	}
+	return descriptor.value;
+}
+
+const interactiveModePrototype: InteractiveModePrototype = {
+	getPathCommandArgument:
+		getInteractiveModeMethod<InteractiveModePrototype["getPathCommandArgument"]>("getPathCommandArgument"),
+	handleImportCommand:
+		getInteractiveModeMethod<InteractiveModePrototype["handleImportCommand"]>("handleImportCommand"),
+};
 
 describe("InteractiveMode /import parsing", () => {
 	it("strips quotes from /import path arguments", () => {
@@ -33,6 +47,15 @@ describe("InteractiveMode /import parsing", () => {
 		expect(
 			interactiveModePrototype.getPathCommandArgument('/import "path with spaces/session.jsonl"', "/import"),
 		).toBe("path with spaces/session.jsonl");
+	});
+
+	it("expands leading tilde in /export and /import path arguments", () => {
+		expect(interactiveModePrototype.getPathCommandArgument("/export ~/asdf.jsonl", "/export")).toBe(
+			`${homedir()}/asdf.jsonl`,
+		);
+		expect(interactiveModePrototype.getPathCommandArgument('/import "~/session with spaces.jsonl"', "/import")).toBe(
+			`${homedir()}/session with spaces.jsonl`,
+		);
 	});
 
 	it("preserves apostrophes in unquoted /import path arguments", () => {

@@ -34,6 +34,7 @@ import {
 	supportsMax,
 	supportsXhigh,
 } from "@earendil-works/pi-ai";
+import { expandTildePath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
@@ -3290,7 +3291,9 @@ export class AgentSession {
 	 * @returns The resolved output file path.
 	 */
 	exportToJsonl(outputPath?: string): string {
-		const filePath = resolve(outputPath ?? `session-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`);
+		const filePath = resolve(
+			expandTildePath(outputPath ?? `session-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`),
+		);
 		const dir = dirname(filePath);
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });

@@ -467,8 +467,9 @@ export async function main(args: string[], options?: MainOptions) {
 	if (parsed.export) {
 		let result: string;
 		try {
-			const outputPath = parsed.messages.length > 0 ? parsed.messages[0] : undefined;
-			result = await exportFromFile(parsed.export, outputPath);
+			const inputPath = expandTildePath(parsed.export);
+			const outputPath = parsed.messages.length > 0 ? expandTildePath(parsed.messages[0]) : undefined;
+			result = await exportFromFile(inputPath, outputPath);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Failed to export session";
 			console.error(chalk.red(`Error: ${message}`));

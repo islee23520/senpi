@@ -1,5 +1,23 @@
 # changes
 
+## CLI export tilde expansion (2026-05-13)
+
+### What changed
+
+- `main.ts`: `senpi --export ~/session.jsonl ~/out.html` expands leading `~` for both the input session path and optional output path before exporting.
+
+### Why
+
+- The interactive `/export` bug also affected the non-interactive export path because Node's path resolution treats `~` as a literal directory name.
+
+### Why extension system couldn't handle this
+
+- `--export` exits before interactive mode and extension command handlers run, so CLI path normalization must happen in `main.ts`.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `main.ts` around the early `parsed.export` branch.
+
 ## Senpi self-update release source (2026-05-02)
 
 ### What changed

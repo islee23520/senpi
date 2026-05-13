@@ -1,5 +1,23 @@
 # changes
 
+## Slash command path tilde expansion (2026-05-13)
+
+### What changed
+
+- `interactive-mode.ts`: `/export ~/...` and `/import ~/...` expand leading `~` to the user's home directory before invoking session import/export.
+
+### Why
+
+- Built-in slash commands previously treated `~` as a literal path segment, which could create or read files under `./~/...`.
+
+### Why extension system couldn't handle this
+
+- Slash-command path parsing is internal to `InteractiveMode`; extensions cannot normalize the built-in command argument after parsing.
+
+### Expected merge conflict zones
+
+- LOW: `getPathCommandArgument()` in `interactive-mode.ts`.
+
 ## bash execution command syntax highlighting
 
 - Changed `src/modes/interactive/components/bash-execution.ts` so the command header for interactive/user shell execution highlights bash syntax with the existing TUI syntax palette instead of coloring the whole command as a single bash-mode string.

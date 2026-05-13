@@ -52,6 +52,7 @@ import { spawn, spawnSync } from "child_process";
 import {
 	APP_NAME,
 	APP_TITLE,
+	expandTildePath,
 	getAuthPath,
 	getDebugLogPath,
 	getDocsPath,
@@ -4961,14 +4962,14 @@ export class InteractiveMode {
 			if (closingQuoteIndex < 0) {
 				return undefined;
 			}
-			return argsString.slice(1, closingQuoteIndex);
+			return expandTildePath(argsString.slice(1, closingQuoteIndex));
 		}
 
 		const firstWhitespaceIndex = argsString.search(/\s/);
 		if (firstWhitespaceIndex < 0) {
-			return argsString;
+			return expandTildePath(argsString);
 		}
-		return argsString.slice(0, firstWhitespaceIndex);
+		return expandTildePath(argsString.slice(0, firstWhitespaceIndex));
 	}
 
 	private async handleImportCommand(text: string): Promise<void> {

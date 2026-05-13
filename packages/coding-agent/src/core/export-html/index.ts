@@ -1,7 +1,7 @@
 import type { AgentState } from "@earendil-works/pi-agent-core";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { basename, join } from "path";
-import { APP_NAME, getExportTemplateDir } from "../../config.js";
+import { APP_NAME, expandTildePath, getExportTemplateDir } from "../../config.js";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.js";
 import type { ToolDefinition } from "../extensions/types.js";
 import type { SessionEntry } from "../session-manager.js";
@@ -274,6 +274,8 @@ export async function exportSessionToHtml(
 	if (!outputPath) {
 		const sessionBasename = basename(sessionFile, ".jsonl");
 		outputPath = `${APP_NAME}-session-${sessionBasename}.html`;
+	} else {
+		outputPath = expandTildePath(outputPath);
 	}
 
 	writeFileSync(outputPath, html, "utf8");
@@ -286,6 +288,7 @@ export async function exportSessionToHtml(
  */
 export async function exportFromFile(inputPath: string, options?: ExportOptions | string): Promise<string> {
 	const opts: ExportOptions = typeof options === "string" ? { outputPath: options } : options || {};
+	inputPath = expandTildePath(inputPath);
 
 	if (!existsSync(inputPath)) {
 		throw new Error(`File not found: ${inputPath}`);
@@ -307,6 +310,8 @@ export async function exportFromFile(inputPath: string, options?: ExportOptions 
 	if (!outputPath) {
 		const inputBasename = basename(inputPath, ".jsonl");
 		outputPath = `${APP_NAME}-session-${inputBasename}.html`;
+	} else {
+		outputPath = expandTildePath(outputPath);
 	}
 
 	writeFileSync(outputPath, html, "utf8");
