@@ -13,10 +13,6 @@ describe("synced builtin extensions", () => {
 			extensions?: Record<string, { packageName?: string; version?: string; source?: string }>;
 		};
 
-		expect(manifest.extensions?.["openai-api-parallel-tool-calls"]?.packageName).toBe(
-			"pi-openai-api-parallel-tool-calls",
-		);
-		expect(manifest.extensions?.["openai-api-parallel-tool-calls"]?.version).toBe("0.1.0");
 		expect(manifest.extensions?.["bash-timeout"]?.packageName).toBe("pi-bash-timeout");
 		expect(manifest.extensions?.["bash-timeout"]?.version).toBe("0.1.0");
 		expect(manifest.extensions?.todowrite?.packageName).toBe("pi-todotools");

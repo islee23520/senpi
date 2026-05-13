@@ -1,10 +1,5 @@
 {
 	"extensions": {
-		"openai-api-parallel-tool-calls": {
-			"packageName": "pi-openai-api-parallel-tool-calls",
-			"version": "0.1.0",
-			"source": "../pi-extensions/pi-openai-api-parallel-tool-calls"
-		},
 		"bash-timeout": {
 			"packageName": "pi-bash-timeout",
 			"version": "0.1.0",

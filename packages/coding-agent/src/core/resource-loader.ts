@@ -60,18 +60,9 @@ type GlobalDefaultExtensionId = (typeof globalDefaultExtensionIds)[number];
 
 const VENDORED_BUILTIN_EXTENSION_PACKAGES: ReadonlyArray<{ builtinId: string; packageName: string }> = [
 	{ builtinId: "anthropic-bash", packageName: "pi-anthropic-bash" },
-	{ builtinId: "anthropic-code-execution", packageName: "pi-anthropic-code-execution" },
-	{ builtinId: "anthropic-computer-use", packageName: "pi-anthropic-computer-use" },
-	{ builtinId: "anthropic-text-editor", packageName: "pi-anthropic-text-editor" },
-	{ builtinId: "anthropic-tool-search", packageName: "pi-anthropic-tool-search" },
 	{ builtinId: "anthropic-web-search", packageName: "pi-anthropic-web-search" },
 	{ builtinId: "gpt-apply-patch", packageName: "pi-apply-patch" },
 	{ builtinId: "bash-timeout", packageName: "pi-bash-timeout" },
-	{ builtinId: "google-code-execution", packageName: "pi-google-code-execution" },
-	{ builtinId: "google-google-search", packageName: "pi-google-google-search" },
-	{ builtinId: "google-url-context", packageName: "pi-google-url-context" },
-	{ builtinId: "openai-api-parallel-tool-calls", packageName: "pi-openai-api-parallel-tool-calls" },
-	{ builtinId: "openai-code-interpreter", packageName: "pi-openai-code-interpreter" },
 	{ builtinId: "openai-web-search", packageName: "pi-openai-web-search" },
 	{ builtinId: "todowrite", packageName: "pi-todotools" },
 ];

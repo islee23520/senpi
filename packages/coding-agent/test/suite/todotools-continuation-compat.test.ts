@@ -4,10 +4,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../../src/config.js";
-import openaiApiParallelToolCallsExtension from "../../src/core/extensions/builtin/openai-api-parallel-tool-calls/index.js";
 import { resolveContinuationConfig } from "../../src/core/extensions/builtin/todotools/continuation/config.js";
 import { CONTINUATION_DIRECTIVE } from "../../src/core/extensions/builtin/todotools/continuation/prompt.js";
 import todotoolsExtension, {
@@ -195,24 +193,6 @@ async function waitForHarnessToSettle(harness: Harness, timeoutMs = 1_500): Prom
 	throw new Error("Timed out waiting for continuation dispatch to settle");
 }
 
-function createDelayedTool(name: string, delayMs: number, executions: string[]): AgentTool {
-	return {
-		name,
-		label: name,
-		description: `${name} tool`,
-		parameters: Type.Object({ value: Type.String() }),
-		execute: async (_toolCallId, params) => {
-			const value = typeof params === "object" && params !== null && "value" in params ? String(params.value) : "";
-			await new Promise((resolve) => setTimeout(resolve, delayMs));
-			executions.push(`${name}:${value}`);
-			return {
-				content: [{ type: "text", text: `${name}:${value}` }],
-				details: { value },
-			};
-		},
-	};
-}
-
 async function emitHandlers(
 	extension: Extension,
 	eventName: string,
@@ -391,35 +371,6 @@ describe("todotools continuation compatibility", () => {
 
 		expect(getInjectedContinuationMessages(harness)).toHaveLength(2);
 		expect(getInjectedContinuationMessages(harness)[1]).toContain("Alternate branch task");
-	});
-
-	it("fires continuation exactly once after a multi-tool turn when openai-api-parallel-tool-calls is active", async () => {
-		useIsolatedAgentDir();
-		const toolExecutions: string[] = [];
-		const { harness } = await createTodoHarness({
-			extensionFactories: [openaiApiParallelToolCallsExtension, todotoolsExtension],
-			tools: [createDelayedTool("slow", 25, toolExecutions)],
-		});
-		harness.setResponses([
-			fauxAssistantMessage(
-				[fauxToolCall("slow", { value: "aux" }), fauxToolCall("todowrite", { todos: PENDING_TODOS })],
-				{
-					stopReason: "toolUse",
-				},
-			),
-			fauxAssistantMessage("tool turn complete", { stopReason: "stop" }),
-			fauxAssistantMessage([fauxToolCall("todowrite", { todos: markTodosCompleted(PENDING_TODOS) })], {
-				stopReason: "toolUse",
-			}),
-			fauxAssistantMessage("completed", { stopReason: "stop" }),
-		]);
-
-		await harness.session.prompt("run multiple tools in one turn");
-		await waitForHarnessToSettle(harness);
-
-		expect(toolExecutions).toEqual(["slow:aux"]);
-		expect(harness.session.messages.filter((message) => message.role === "toolResult")).toHaveLength(3);
-		expect(getInjectedContinuationMessages(harness)).toHaveLength(1);
 	});
 
 	it.each(SETTINGS_PRIORITY_CASES)(

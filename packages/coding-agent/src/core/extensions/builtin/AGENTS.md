@@ -1,6 +1,6 @@
 # packages/coding-agent/src/core/extensions/builtin
 
-22 in-tree extensions. Each is the canonical answer to "can senpi do X without core changes?". Registration order matters.
+13 in-tree extensions. Each is the canonical answer to "can senpi do X without core changes?". Registration order matters.
 
 ## INVENTORY (registration order from `builtin/index.ts`)
 
@@ -13,21 +13,12 @@
 | 5 | `todowrite` | `todotools/` | Plan/task tools + continuation chain; synced from `../pi-extensions/pi-todotools` |
 | 6 | `redraws` | `redraws.ts` | Force-redraw event hooks for stable streaming visuals |
 | 7 | `anthropic-web-search` | `anthropic-web-search/` | Anthropic-native web search tool |
-| 8 | `anthropic-tool-search` | `anthropic-tool-search/` | Anthropic-native tool-search tool |
-| 9 | `anthropic-code-execution` | `anthropic-code-execution/` | Anthropic-native code-execution sandbox |
-| 10 | `anthropic-bash` | `anthropic-bash/` | Anthropic-native bash tool variant |
-| 11 | `anthropic-text-editor` | `anthropic-text-editor/` | Anthropic-native text editor tool |
-| 12 | `anthropic-computer-use` | `anthropic-computer-use/` | Anthropic computer-use bindings |
-| 13 | `openai-web-search` | `openai-web-search/` | OpenAI-native web search |
-| 14 | `openai-code-interpreter` | `openai-code-interpreter/` | OpenAI Code Interpreter |
-| 15 | `google-google-search` | `google-google-search/` | Google Search grounding |
-| 16 | `google-code-execution` | `google-code-execution/` | Google native code execution |
-| 17 | `google-url-context` | `google-url-context/` | Google URL grounding |
-| 18 | `openai-api-parallel-tool-calls` | `openai-api-parallel-tool-calls/` | Toggles `parallel_tool_calls: true` on payload |
-| 19 | `service-tier` | `service-tier.ts` | Per-model service-tier (e.g., priority-tier mapping) |
-| 20 | `bash-timeout` | `bash-timeout/` | Bash tool timeout + handlers |
-| 21 | `tool-pair-guard` | `tool-pair-guard/` | Repairs orphaned tool_use/tool_result pairs (compaction safety) |
-| 22 | `compaction` | `compaction/` | Plugsuit-style speculative + emergency compaction with restoration |
+| 8 | `anthropic-bash` | `anthropic-bash/` | Anthropic-native bash tool variant |
+| 9 | `openai-web-search` | `openai-web-search/` | OpenAI-native web search |
+| 10 | `service-tier` | `service-tier.ts` | Per-model service-tier (e.g., priority-tier mapping) |
+| 11 | `bash-timeout` | `bash-timeout/` | Bash tool timeout + handlers |
+| 12 | `tool-pair-guard` | `tool-pair-guard/` | Repairs orphaned tool_use/tool_result pairs (compaction safety) |
+| 13 | `compaction` | `compaction/` | Plugsuit-style speculative + emergency compaction with restoration |
 
 Plus 4 **global default extensions** (resolved fast-path): `diff`, `files`, `prompt-url-widget`, `tps` (in `globalDefaultExtensionFactories`).
 
