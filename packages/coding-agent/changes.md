@@ -1,10 +1,10 @@
 # Local fork changes
 
-## 2026-05-13 — copy interactive theme JSON files in the coding-agent build
+## 2026-05-13 — copy all non-TypeScript resources into dist via copy-assets
 
 - Changed: `packages/coding-agent/package.json`
-- Why: `tsgo` does not copy `.json` assets into `dist/`, but `scripts/build-binaries.sh` expects the interactive theme JSON files to exist there when packaging release binaries.
-- What changed: Updated the coding-agent `build` script to create `dist/modes/interactive/theme/` and copy `src/modes/interactive/theme/*.json` into it after the TypeScript build.
+- Why: `tsgo` does not copy non-`.ts` assets into `dist/`, but `scripts/build-binaries.sh` expects interactive theme JSON files, PNG assets, and export-html templates to exist there when packaging release binaries. The previous fix only copied theme JSON, so CI still failed on missing `dist/modes/interactive/assets/*` and `dist/core/export-html/`.
+- What changed: Replaced the inline theme-only copy in the `build` script with `npm run copy-assets`, which already covers theme JSON, PNG assets, and export-html templates + vendor JS in one step.
 - Merge-conflict risk: low. The expected conflict zone is the `build` script in `packages/coding-agent/package.json` if upstream changes packaging flow.
 
 ## 2026-05-12 — add pi-todotools to builtin sync
