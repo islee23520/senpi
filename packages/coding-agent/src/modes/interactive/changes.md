@@ -4,7 +4,8 @@
 
 ### What changed
 
-- `components/assistant-message.ts`: Anthropic native `server_tool_use` web-search calls and `web_search_tool_result` blocks render as compact TUI summaries instead of raw provider JSON.
+- `components/assistant-message.ts`: provider-native web-search blocks render through the shared formatter in `../provider-native-rendering.ts` instead of dumping raw provider JSON.
+- Recognized Anthropic, OpenAI, and Google native web-search metadata now show compact query/status/source summaries while unknown provider-native blocks keep the generic JSON fallback.
 
 ### Why
 
@@ -16,7 +17,7 @@
 
 ### Expected merge conflict zones
 
-- LOW: provider-native formatting helpers in `components/assistant-message.ts`.
+- LOW: the provider-native branch in `components/assistant-message.ts` and shared formatting behavior in `../provider-native-rendering.ts`.
 
 ## Slash command path tilde expansion (2026-05-13)
 

@@ -1,5 +1,24 @@
 # changes
 
+## shared provider-native rendering in text output (2026-05-14)
+
+### What changed
+
+- `modes/provider-native-rendering.ts`: added shared provider-native formatting for Anthropic, OpenAI, and Google native web-search metadata, with a generic JSON fallback for unknown provider-native blocks.
+- `modes/print-mode.ts`: text print mode now emits provider-native summaries and bodies through the shared formatter instead of silently skipping provider-native content.
+
+### Why
+
+- Native web-search metadata should be readable outside the interactive TUI as well, and the compact rendering rules should stay consistent between interactive and print surfaces.
+
+### Why extension system couldn't handle this
+
+- Print mode emits assistant content directly after the session finishes; extension tool renderers do not own provider-native assistant content.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `modes/print-mode.ts` final assistant-content emission and `modes/provider-native-rendering.ts` if upstream adds its own provider-native formatter.
+
 ## CLI export tilde expansion (2026-05-13)
 
 ### What changed
