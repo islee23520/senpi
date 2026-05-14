@@ -1,8 +1,24 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { visibleWidth, wrapTextWithAnsi } from "../src/utils.js";
+import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../src/utils.js";
 
 describe("wrapTextWithAnsi", () => {
+	describe("background layering", () => {
+		it("#given inner background reset inside outer background #when applying line background #then outer background resumes", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const innerBg = "\x1b[48;2;60;30;30m";
+			const bgReset = "\x1b[49m";
+			const line = `left ${innerBg}row${bgReset} tail`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 20, (text) => `${outerBg}${text}${bgReset}`);
+
+			// then
+			assert.ok(rendered.includes(`${bgReset}${outerBg} tail`));
+		});
+	});
+
 	describe("underline styling", () => {
 		it("should not apply underline style before the styled text", () => {
 			const underlineOn = "\x1b[4m";

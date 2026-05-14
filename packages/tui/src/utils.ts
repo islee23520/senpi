@@ -850,7 +850,22 @@ export function applyBackgroundToLine(line: string, width: number, bgFn: (text: 
 
 	// Apply background to content + padding
 	const withPadding = line + padding;
-	return bgFn(withPadding);
+	const marker = "\x1fpi-bg-marker\x1f";
+	const wrappedMarker = bgFn(marker);
+	const markerIndex = wrappedMarker.indexOf(marker);
+	if (markerIndex === -1) {
+		return bgFn(withPadding);
+	}
+
+	const bgStart = wrappedMarker.slice(0, markerIndex);
+	const bgEnd = wrappedMarker.slice(markerIndex + marker.length);
+	const restored = withPadding.replace(/\x1b\[([0-9;]*)m/g, (sequence: string, params: string) => {
+		if (params === "" || params.split(";").some((param) => param === "0" || param === "49")) {
+			return `${sequence}${bgStart}`;
+		}
+		return sequence;
+	});
+	return `${bgStart}${restored}${bgEnd}`;
 }
 
 /**

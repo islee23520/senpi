@@ -25,6 +25,18 @@ const markerTheme = {
 	inverse: (text: string) => `<inverse>${text}</inverse>`,
 };
 
+const successBg = "\x1b[48;2;40;50;40m";
+const bgReset = "\x1b[49m";
+const ansiTheme = {
+	fg: (_name: string, text: string) => text,
+	bg: (name: string, text: string) => {
+		const start = name === "toolSuccessBg" ? successBg : "\x1b[48;2;40;40;50m";
+		return `${start}${text}${bgReset}`;
+	},
+	bold: (text: string) => text,
+	inverse: (text: string) => text,
+};
+
 function createRenderContext(cwd: string, args: ApplyPatchArgs, overrides: Partial<ToolRenderContext> = {}) {
 	return {
 		args,
@@ -228,5 +240,40 @@ describe("gpt apply_patch rich TUI rendering", () => {
 		expect(rendered).toContain("• Edited src/foo.ts (+1 -1)");
 		expect(rendered).toContain("<fg:toolDiffRemoved>alpha <inverse>old</inverse></fg:toolDiffRemoved>");
 		expect(rendered).toContain("<fg:toolDiffAdded>alpha <inverse>new</inverse></fg:toolDiffAdded>");
+	});
+
+	it("preserves the outer success background after highlighted diff row resets", () => {
+		// given
+		const tool = createApplyPatchTool();
+		const result = {
+			content: [{ type: "text" as const, text: "Applied patch" }],
+			details: {
+				preview: {
+					files: [
+						{
+							filePath: "src/foo.ts",
+							operation: "update" as const,
+							diff: "+1 const value = 1;",
+							added: 1,
+							removed: 0,
+						},
+					],
+					added: 1,
+					removed: 0,
+				},
+			},
+		};
+
+		// when
+		const component = tool.renderResult?.(
+			result,
+			{ expanded: true, isPartial: false },
+			ansiTheme as never,
+			createRenderContext("/workspace/project", { input: "" }, { executionStarted: true, argsComplete: true }),
+		);
+		const rendered = component?.render(120).join("\n") ?? "";
+
+		// then
+		expect(rendered).toContain(`${bgReset}${successBg}`);
 	});
 });
