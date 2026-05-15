@@ -56,6 +56,15 @@ function downgradeUnsupportedImages<TApi extends Api>(messages: Message[], model
 	});
 }
 
+export interface TransformMessagesOptions {
+	/**
+	 * Preserve provider-native thinking/reasoning replay state for the current
+	 * model. When false, standalone same-model thinking is omitted, while
+	 * thinking attached to tool calls is preserved for provider validation.
+	 */
+	preserveThinking?: boolean;
+}
+
 /**
  * Normalize tool call ID for cross-provider compatibility.
  * OpenAI Responses API generates IDs that are 450+ chars with special characters like `|`.
@@ -65,10 +74,12 @@ export function transformMessages<TApi extends Api>(
 	messages: Message[],
 	model: Model<TApi>,
 	normalizeToolCallId?: (id: string, model: Model<TApi>, source: AssistantMessage) => string,
+	options: TransformMessagesOptions = {},
 ): Message[] {
 	// Build a map of original tool call IDs to normalized IDs
 	const toolCallIdMap = new Map<string, string>();
 	const imageAwareMessages = downgradeUnsupportedImages(messages, model);
+	const preserveThinking = options.preserveThinking ?? true;
 
 	// First pass: transform messages (unsupported image downgrade, thinking blocks, tool call ID normalization)
 	const transformed = imageAwareMessages.map((msg) => {
@@ -93,20 +104,22 @@ export function transformMessages<TApi extends Api>(
 				assistantMsg.provider === model.provider &&
 				assistantMsg.api === model.api &&
 				assistantMsg.model === model.id;
+			const hasToolCalls = assistantMsg.content.some((block) => block.type === "toolCall");
+			const preserveProviderState = preserveThinking || hasToolCalls;
 
 			const transformedContent = assistantMsg.content.flatMap((block) => {
 				if (block.type === "thinking") {
 					// Redacted thinking is opaque encrypted content, only valid for the same model.
 					// Drop it for cross-model to avoid API errors.
 					if (block.redacted) {
-						return isSameModel ? block : [];
+						return isSameModel && preserveProviderState ? block : [];
 					}
 					// For same model: keep thinking blocks with signatures (needed for replay)
 					// even if the thinking text is empty (OpenAI encrypted reasoning)
-					if (isSameModel && block.thinkingSignature) return block;
+					if (isSameModel && preserveProviderState && block.thinkingSignature) return block;
 					// Skip empty thinking blocks, convert others to plain text
 					if (!block.thinking || block.thinking.trim() === "") return [];
-					if (isSameModel) return block;
+					if (isSameModel) return preserveProviderState ? block : [];
 					return {
 						type: "text" as const,
 						text: block.thinking,
@@ -114,7 +127,7 @@ export function transformMessages<TApi extends Api>(
 				}
 
 				if (block.type === "text") {
-					if (isSameModel) return block;
+					if (isSameModel && preserveProviderState) return block;
 					return {
 						type: "text" as const,
 						text: block.text,
@@ -125,7 +138,7 @@ export function transformMessages<TApi extends Api>(
 					const toolCall = block as ToolCall;
 					let normalizedToolCall: ToolCall = toolCall;
 
-					if (!isSameModel && toolCall.thoughtSignature) {
+					if ((!isSameModel || !preserveProviderState) && toolCall.thoughtSignature) {
 						normalizedToolCall = { ...toolCall };
 						delete (normalizedToolCall as { thoughtSignature?: string }).thoughtSignature;
 					}

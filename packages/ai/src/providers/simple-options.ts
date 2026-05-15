@@ -6,14 +6,14 @@ import type { Api, Model, SimpleStreamOptions, StreamOptions, ThinkingBudgets, T
  * Mutates `target` in place for zero-copy integration into per-provider builders.
  */
 export function applyExtraBody(
-	target: Record<string, unknown>,
+	target: object,
 	extraBody: Record<string, unknown> | undefined,
 	reservedKeys: ReadonlySet<string>,
 ): void {
 	if (!extraBody) return;
 	for (const [key, value] of Object.entries(extraBody)) {
 		if (reservedKeys.has(key)) continue;
-		target[key] = value;
+		Reflect.set(target, key, value);
 	}
 }
 
