@@ -164,6 +164,8 @@ export type AnthropicThinkingDisplay = "summarized" | "omitted";
 
 const FINE_GRAINED_TOOL_STREAMING_BETA = "fine-grained-tool-streaming-2025-05-14";
 const INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14";
+const COMPUTER_USE_BETA = "computer-use-2025-01-24";
+const NATIVE_COMPUTER_TOOL_TYPE = "computer_20250124";
 
 function getAnthropicCompat(model: Model<"anthropic-messages">): Required<AnthropicMessagesCompat> {
 	// Auto-detect session affinity and cache control support from provider
@@ -282,6 +284,107 @@ function extractPayloadRequestMetadata(params: MessageCreateParamsStreaming): {
 	delete stripped.extra_body;
 
 	return headers ? { params: stripped, headers } : { params: stripped };
+}
+
+function removeComputerUseBetaHeader(headers: Record<string, string> | undefined): {
+	changed: boolean;
+	headers?: Record<string, string>;
+} {
+	if (!headers) {
+		return { changed: false };
+	}
+
+	const nextHeaders: Record<string, string> = {};
+	let changed = false;
+
+	for (const [key, value] of Object.entries(headers)) {
+		if (key.toLowerCase() !== "anthropic-beta") {
+			nextHeaders[key] = value;
+			continue;
+		}
+
+		const betas = value
+			.split(",")
+			.map((beta) => beta.trim())
+			.filter((beta) => beta.length > 0);
+		const supportedBetas = betas.filter((beta) => beta !== COMPUTER_USE_BETA);
+		changed = changed || supportedBetas.length !== betas.length;
+
+		if (supportedBetas.length > 0) {
+			nextHeaders[key] = supportedBetas.join(", ");
+		}
+	}
+
+	if (!changed) {
+		return { changed: false, headers };
+	}
+
+	return {
+		changed: true,
+		headers: Object.keys(nextHeaders).length > 0 ? nextHeaders : undefined,
+	};
+}
+
+function sanitizeUnsupportedNativeTools(
+	model: Model<"anthropic-messages">,
+	params: MessageCreateParamsStreaming,
+): MessageCreateParamsStreaming {
+	if (!isOpus47(model.id)) {
+		return params;
+	}
+
+	const payload = params as AnthropicPayloadWithRequestMetadata;
+	const headers = stringRecord(payload.headers);
+	const headerSanitization = removeComputerUseBetaHeader(headers);
+	const tools = payload.tools;
+	const sanitized: AnthropicPayloadWithRequestMetadata = { ...payload };
+	let changed = false;
+	const removedToolNames = new Set<string>();
+
+	if (Array.isArray(tools)) {
+		const supportedTools: typeof tools = [];
+
+		for (const tool of tools) {
+			const hookTool: unknown = tool;
+			if (isRecord(hookTool) && hookTool.type === NATIVE_COMPUTER_TOOL_TYPE) {
+				changed = true;
+				if (typeof hookTool.name === "string") {
+					removedToolNames.add(hookTool.name);
+				}
+				continue;
+			}
+
+			supportedTools.push(tool);
+		}
+
+		if (changed) {
+			if (supportedTools.length > 0) {
+				sanitized.tools = supportedTools;
+			} else {
+				delete sanitized.tools;
+			}
+		}
+	}
+
+	if (headerSanitization.changed) {
+		changed = true;
+		if (headerSanitization.headers) {
+			sanitized.headers = headerSanitization.headers;
+		} else {
+			delete sanitized.headers;
+		}
+	}
+
+	if (changed && isRecord(sanitized.tool_choice)) {
+		const toolChoiceName = sanitized.tool_choice.name;
+		const shouldRemoveToolChoice =
+			(typeof toolChoiceName === "string" && removedToolNames.has(toolChoiceName)) || sanitized.tools === undefined;
+		if (shouldRemoveToolChoice) {
+			delete sanitized.tool_choice;
+		}
+	}
+
+	return changed ? (sanitized as MessageCreateParamsStreaming) : params;
 }
 
 function isCacheableUserContentBlock(
@@ -535,6 +638,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			if (nextParams !== undefined) {
 				params = nextParams as MessageCreateParamsStreaming;
 			}
+			params = sanitizeUnsupportedNativeTools(model, params);
 			const payloadRequestMetadata = extractPayloadRequestMetadata(params);
 			params = payloadRequestMetadata.params;
 			const requestOptions = {

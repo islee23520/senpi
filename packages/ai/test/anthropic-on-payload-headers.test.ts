@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamAnthropic } from "../src/providers/anthropic.js";
 import type { Context } from "../src/types.js";
@@ -52,6 +52,11 @@ describe("Anthropic onPayload request metadata", () => {
 		messages: [{ role: "user", content: "Hello", timestamp: Date.now() }],
 	};
 
+	beforeEach(() => {
+		mockState.createParams = undefined;
+		mockState.requestOptions = undefined;
+	});
+
 	it("forwards hook-added headers to SDK request options without leaking metadata into the body", async () => {
 		const model = getModel("anthropic", "claude-sonnet-4-5");
 
@@ -69,5 +74,38 @@ describe("Anthropic onPayload request metadata", () => {
 		expect(mockState.requestOptions?.headers).toEqual({ "anthropic-beta": "computer-use-2025-01-24" });
 		expect(mockState.createParams).not.toHaveProperty("headers");
 		expect(mockState.createParams).not.toHaveProperty("extra_body");
+	});
+
+	it("strips native computer-use tools that Opus 4.7 rejects after payload hooks run", async () => {
+		const model = getModel("anthropic", "claude-opus-4-7");
+
+		const stream = streamAnthropic(model, context, {
+			apiKey: "fake-key",
+			onPayload: (payload) => ({
+				...(payload as Record<string, unknown>),
+				tools: [
+					{
+						type: "computer_20250124",
+						name: "computer",
+						display_width_px: 1024,
+						display_height_px: 768,
+						display_number: 1,
+					},
+					{ type: "bash_20250124", name: "bash" },
+				],
+				headers: {
+					"anthropic-beta": "computer-use-2025-01-24, fine-grained-tool-streaming-2025-05-14",
+				},
+			}),
+		});
+
+		await stream.result();
+
+		const tools = mockState.createParams?.tools as Array<Record<string, unknown>>;
+		expect(tools.some((tool) => tool.type === "computer_20250124")).toBe(false);
+		expect(tools).toContainEqual({ type: "bash_20250124", name: "bash" });
+		expect(mockState.requestOptions?.headers).toEqual({
+			"anthropic-beta": "fine-grained-tool-streaming-2025-05-14",
+		});
 	});
 });
