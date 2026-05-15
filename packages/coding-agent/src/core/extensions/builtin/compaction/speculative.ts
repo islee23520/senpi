@@ -311,7 +311,7 @@ export async function runExtensionCompaction(
 		customInstructions: snapshot.customInstructions,
 	});
 
-	for (let attempt = 0; attempt < 2; attempt++) {
+	while (true) {
 		const response = await generateSummaryMessage({
 			messages,
 			onProgress,

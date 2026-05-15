@@ -262,4 +262,30 @@ describe("speculative compaction", () => {
 		expect(result?.summary).toBe("retry summary");
 		expect(context.registration.getCallLog()).toHaveLength(2);
 	});
+
+	it("keeps pruning and retrying after repeated compaction summary context-window failures", async () => {
+		// Given
+		const context = createContext();
+		const snapshot = createSpeculativeCompactionSnapshot(context, { generation: 1 });
+		context.registration.setResponses([
+			fauxAssistantMessage("", {
+				stopReason: "error",
+				errorMessage:
+					"Your input exceeds the context window of this model. Please adjust your input and try again.",
+			}),
+			fauxAssistantMessage("", {
+				stopReason: "error",
+				errorMessage:
+					"Your input exceeds the context window of this model. Please adjust your input and try again.",
+			}),
+			fauxAssistantMessage("eventually compacted"),
+		]);
+
+		// When
+		const result = snapshot ? await runExtensionCompaction(context, snapshot) : undefined;
+
+		// Then
+		expect(result?.summary).toBe("eventually compacted");
+		expect(context.registration.getCallLog()).toHaveLength(3);
+	});
 });
