@@ -1,11 +1,13 @@
 import type { ExtensionAPI } from "../../types.js";
 import { sanitizeAnthropicPayload } from "./sanitize-anthropic-payload.js";
+import { sanitizeOpenAIResponsesPayload } from "./sanitize-openai-responses-payload.js";
 
-/** Guards provider requests by removing orphan tool_result blocks. */
+/** Guards provider requests by keeping tool-call/result pairs balanced. */
 export default function toolPairGuardExtension(pi: ExtensionAPI): void {
 	pi.on("before_provider_request", (event) => {
-		const sanitized = sanitizeAnthropicPayload(event.payload);
-		if (sanitized === event.payload) return undefined;
-		return sanitized;
+		const sanitizedAnthropicPayload = sanitizeAnthropicPayload(event.payload);
+		const sanitizedPayload = sanitizeOpenAIResponsesPayload(sanitizedAnthropicPayload);
+		if (sanitizedPayload === event.payload) return undefined;
+		return sanitizedPayload;
 	});
 }

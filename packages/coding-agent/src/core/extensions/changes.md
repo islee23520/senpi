@@ -1,5 +1,26 @@
 # Core Extensions Changes
 
+## 2026-05-15 - OpenAI Responses Tool Pair Guard
+
+### What changed
+
+- `builtin/tool-pair-guard/index.ts`: Extended the existing provider request guard to run both Anthropic and OpenAI Responses payload sanitizers.
+- `builtin/tool-pair-guard/sanitize-openai-responses-payload.ts`: Added OpenAI Responses request input repair that drops orphan `function_call_output` / `custom_tool_call_output` items and inserts synthetic outputs for interrupted calls that have no result.
+- `test/tool-pair-guard/sanitize-openai-responses-payload.test.ts`: Added regression coverage for orphan output removal, missing output synthesis, valid-pair no-op behavior, and `previous_response_id` delta preservation.
+
+### Why
+
+- OpenAI Responses rejects requests with `No tool call found for function call output with call_id ...` when a stale tool output survives without its matching call. Once such history is persisted, follow-up prompts can repeatedly send the same invalid output and leave the session stuck.
+
+### Why extension system couldn't handle this alone
+
+- The fix does use the extension system: `tool-pair-guard` is a builtin extension that repairs provider payloads through `before_provider_request`. No core provider or agent loop change was required.
+
+### Expected merge conflict zones
+
+- LOW: `builtin/tool-pair-guard/index.ts` if upstream changes provider-request hook wiring.
+- LOW: `builtin/tool-pair-guard/sanitize-openai-responses-payload.ts` if upstream adds an equivalent OpenAI Responses pairing normalizer.
+
 ## 2026-05-15 - Normalize remaining senpi internal names
 
 ### What changed
