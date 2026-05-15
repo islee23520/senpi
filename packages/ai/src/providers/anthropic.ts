@@ -1195,7 +1195,7 @@ function convertMessages(
 	const params: MessageParam[] = [];
 
 	// Transform messages for cross-provider compatibility
-	const transformedMessages = transformMessages(messages, model, normalizeToolCallId);
+	const transformedMessages = transformMessages(messages, model, normalizeToolCallId, { preserveThinking });
 
 	for (let i = 0; i < transformedMessages.length; i++) {
 		const msg = transformedMessages[i];
@@ -1240,7 +1240,6 @@ function convertMessages(
 			}
 		} else if (msg.role === "assistant") {
 			const blocks: ContentBlockParam[] = [];
-			const preserveAssistantThinking = preserveThinking || msg.content.some((block) => block.type === "toolCall");
 
 			for (const block of msg.content) {
 				if (block.type === "text") {
@@ -1250,7 +1249,6 @@ function convertMessages(
 						text: sanitizeSurrogates(block.text),
 					});
 				} else if (block.type === "thinking") {
-					if (!preserveAssistantThinking) continue;
 					// Redacted thinking: pass the opaque payload back as redacted_thinking
 					if (block.redacted) {
 						blocks.push({
