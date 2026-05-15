@@ -138,7 +138,26 @@ describe("openai-completions thinking-as-text replay", () => {
 		});
 	});
 
-	it("reaches the endpoint when replay contains both thinking and text", async () => {
+	it("omits standalone same-model thinking replay when thinking is off", () => {
+		const messages = convertMessages(
+			buildModel(),
+			buildContext(
+				buildAssistant([
+					{ type: "thinking", thinking: "internal reasoning" },
+					{ type: "text", text: "visible answer" },
+				]),
+			),
+			compat,
+			{ preserveThinking: false },
+		);
+
+		expect(messages[1]).toEqual({
+			role: "assistant",
+			content: "visible answer",
+		});
+	});
+
+	it("reaches the endpoint with thinking replay when reasoning is requested", async () => {
 		const requestBodies: ChatCompletionsRequestBody[] = [];
 		const server = http.createServer(async (req, res) => {
 			if (req.method !== "POST" || req.url !== "/chat/completions") {
@@ -194,7 +213,7 @@ describe("openai-completions thinking-as-text replay", () => {
 							{ type: "text", text: "visible answer" },
 						]),
 					),
-					{ apiKey: "test-key" },
+					{ apiKey: "test-key", reasoningEffort: "low" },
 				),
 			);
 

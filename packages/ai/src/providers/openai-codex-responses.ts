@@ -372,8 +372,10 @@ function buildRequestBody(
 	context: Context,
 	options?: OpenAICodexResponsesOptions,
 ): RequestBody {
+	const reasoningRequested = options?.reasoningEffort !== undefined && options.reasoningEffort !== "none";
 	const messages = convertResponsesMessages(model, context, CODEX_TOOL_CALL_PROVIDERS, {
 		includeSystemPrompt: false,
+		preserveThinking: reasoningRequested,
 	});
 
 	const body: RequestBody = {
@@ -414,7 +416,7 @@ function buildRequestBody(
 		}
 	}
 
-	applyExtraBody(body as unknown as Record<string, unknown>, options?.extraBody, OPENAI_RESPONSES_RESERVED_BODY_KEYS);
+	applyExtraBody(body, options?.extraBody, OPENAI_RESPONSES_RESERVED_BODY_KEYS);
 
 	return body;
 }
@@ -541,7 +543,7 @@ async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): 
 		}
 
 		if (type === "response.done" || type === "response.completed" || type === "response.incomplete") {
-			const response = (event as { response?: { status?: unknown } }).response;
+			const response = (event as { response?: { status?: string } }).response;
 			const normalizedResponse = response
 				? { ...response, status: normalizeCodexStatus(response.status) }
 				: response;
@@ -549,7 +551,8 @@ async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): 
 			return;
 		}
 
-		yield event as unknown as ResponseStreamEvent;
+		const responseEvent: ResponseStreamEvent = JSON.parse(JSON.stringify(event));
+		yield responseEvent;
 	}
 }
 
@@ -754,7 +757,9 @@ async function getWebSocketConstructor(): Promise<WebSocketConstructor | null> {
 		const m = await dynamicImport("proxy-from-env");
 		const getProxyForUrl = (m as { getProxyForUrl: (url: string | object | URL) => string }).getProxyForUrl;
 
-		_cachedWebsocket = class extends WebSocket {
+		_cachedWebsocket = class implements WebSocketLike {
+			private readonly socket: WebSocketLike;
+
 			constructor(url: string | URL, options?: string | string[] | Record<string, unknown>) {
 				let _opts: Record<string, unknown> = {};
 				if (Array.isArray(options) || typeof options === "string") {
@@ -764,15 +769,38 @@ async function getWebSocketConstructor(): Promise<WebSocketConstructor | null> {
 				}
 
 				const proxy = getProxyForUrl(url.toString().replace(/^wss:/, "https:").replace(/^ws:/, "http:"));
-				super(url, { ..._opts, ...(proxy ? { proxy } : {}) } as any);
+				this.socket = Reflect.construct(WebSocket, [
+					url,
+					{ ..._opts, ...(proxy ? { proxy } : {}) },
+				]) as WebSocketLike;
+			}
+
+			close(code?: number, reason?: string): void {
+				this.socket.close(code, reason);
+			}
+
+			send(data: string): void {
+				this.socket.send(data);
+			}
+
+			addEventListener(type: WebSocketEventType, listener: WebSocketListener): void {
+				this.socket.addEventListener(type, listener);
+			}
+
+			removeEventListener(type: WebSocketEventType, listener: WebSocketListener): void {
+				this.socket.removeEventListener(type, listener);
 			}
 		};
 		return _cachedWebsocket;
 	}
 
-	const ctor = (globalThis as { WebSocket?: unknown }).WebSocket;
-	if (typeof ctor !== "function") return null;
-	return ctor as unknown as WebSocketConstructor;
+	const ctor: unknown = globalThis.WebSocket;
+	if (!isWebSocketConstructor(ctor)) return null;
+	return ctor;
+}
+
+function isWebSocketConstructor(value: unknown): value is WebSocketConstructor {
+	return typeof value === "function";
 }
 
 class WebSocketCloseError extends Error {

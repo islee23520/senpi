@@ -285,7 +285,10 @@ function createClient(
 }
 
 function buildParams(model: Model<"openai-responses">, context: Context, options?: OpenAIResponsesOptions) {
-	const messages = convertResponsesMessages(model, context, OPENAI_TOOL_CALL_PROVIDERS);
+	const reasoningRequested = options?.reasoningEffort !== undefined || !!options?.reasoningSummary;
+	const messages = convertResponsesMessages(model, context, OPENAI_TOOL_CALL_PROVIDERS, {
+		preserveThinking: reasoningRequested,
+	});
 
 	const cacheRetention = resolveCacheRetention(options?.cacheRetention);
 	const compat = getCompat(model);
@@ -315,7 +318,7 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 	}
 
 	if (model.reasoning) {
-		if (options?.reasoningEffort || options?.reasoningSummary) {
+		if (reasoningRequested) {
 			const effort = options?.reasoningEffort
 				? (model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort)
 				: "medium";

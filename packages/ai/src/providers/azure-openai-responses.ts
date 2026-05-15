@@ -245,7 +245,10 @@ function buildParams(
 	options: AzureOpenAIResponsesOptions | undefined,
 	deploymentName: string,
 ) {
-	const messages = convertResponsesMessages(model, context, AZURE_TOOL_CALL_PROVIDERS);
+	const reasoningRequested = options?.reasoningEffort !== undefined || !!options?.reasoningSummary;
+	const messages = convertResponsesMessages(model, context, AZURE_TOOL_CALL_PROVIDERS, {
+		preserveThinking: reasoningRequested,
+	});
 
 	const params: ResponseCreateParamsStreaming = {
 		model: deploymentName,
@@ -267,7 +270,7 @@ function buildParams(
 	}
 
 	if (model.reasoning) {
-		if (options?.reasoningEffort || options?.reasoningSummary) {
+		if (reasoningRequested) {
 			const effort = options?.reasoningEffort
 				? (model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort)
 				: "medium";
@@ -283,11 +286,7 @@ function buildParams(
 		}
 	}
 
-	applyExtraBody(
-		params as unknown as Record<string, unknown>,
-		options?.extraBody,
-		OPENAI_RESPONSES_RESERVED_BODY_KEYS,
-	);
+	applyExtraBody(params, options?.extraBody, OPENAI_RESPONSES_RESERVED_BODY_KEYS);
 
 	return params;
 }

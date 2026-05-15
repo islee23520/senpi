@@ -10,6 +10,7 @@ import type {
 	ChatCompletionSystemMessageParam,
 	ChatCompletionToolMessageParam,
 } from "openai/resources/chat/completions.js";
+import type { FunctionParameters } from "openai/resources/shared.js";
 import { getEnvApiKey } from "../env-api-keys.js";
 import { calculateCost, clampThinkingLevel, supportsXhigh } from "../models.js";
 import type {
@@ -44,6 +45,27 @@ import {
 } from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
+type OpenAIReasoningDetail = { type?: string; id?: string; data?: string };
+type ChatCompletionChoiceWithUsage = ChatCompletionChunk.Choice & {
+	usage?: Parameters<typeof parseChunkUsage>[0];
+};
+type ChatCompletionDeltaWithReasoning = ChatCompletionChunk.Choice.Delta & {
+	reasoning_details?: OpenAIReasoningDetail[];
+};
+type OpenAICompletionsRequestParams = Omit<
+	OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
+	"max_tokens" | "reasoning_effort"
+> & {
+	max_tokens?: number | null;
+	tool_stream?: boolean;
+	enable_thinking?: boolean;
+	chat_template_kwargs?: { enable_thinking: boolean; preserve_thinking: boolean };
+	thinking?: { type: "enabled" | "disabled" };
+	reasoning_effort?: string;
+	provider?: OpenAICompletionsCompat["openRouterRouting"];
+	providerOptions?: { gateway: Record<string, string[]> };
+};
+
 /**
  * Check if conversation messages contain tool calls or tool results.
  * This is needed because Anthropic (via proxy) requires the tools param
@@ -77,6 +99,16 @@ function isToolCallBlock(block: { type: string }): block is ToolCall {
 
 function isImageContentBlock(block: { type: string }): block is ImageContent {
 	return block.type === "image";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function getOpenRouterRawMetadata(error: unknown): string | undefined {
+	if (!isRecord(error) || !isRecord(error.error) || !isRecord(error.error.metadata)) return undefined;
+	const rawMetadata = error.error.metadata.raw;
+	return typeof rawMetadata === "string" ? rawMetadata : undefined;
 }
 
 export interface OpenAICompletionsOptions extends StreamOptions {
@@ -152,16 +184,18 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 			let params = buildParams(model, context, options, compat, cacheRetention);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
-				params = nextParams as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming;
+				params = nextParams as OpenAICompletionsRequestParams;
 			}
 			const requestOptions = {
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
 				...(options?.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
 			};
-			const { data: openaiStream, response } = await client.chat.completions
-				.create(params, requestOptions)
-				.withResponse();
+			const createChatCompletion = client.chat.completions.create.bind(client.chat.completions) as (
+				body: OpenAICompletionsRequestParams,
+				requestConfig: typeof requestOptions,
+			) => { withResponse(): Promise<{ data: AsyncIterable<ChatCompletionChunk>; response: Response }> };
+			const { data: openaiStream, response } = await createChatCompletion(params, requestOptions).withResponse();
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			stream.push({ type: "start", partial: output });
 
@@ -287,8 +321,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 
 				// Fallback: some providers (e.g., Moonshot) return usage
 				// in choice.usage instead of the standard chunk.usage
-				if (!chunk.usage && (choice as any).usage) {
-					output.usage = parseChunkUsage((choice as any).usage, model);
+				const choiceUsage = (choice as ChatCompletionChoiceWithUsage).usage;
+				if (!chunk.usage && choiceUsage) {
+					output.usage = parseChunkUsage(choiceUsage, model);
 				}
 
 				if (choice.finish_reason) {
@@ -370,7 +405,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 						}
 					}
 
-					const reasoningDetails = (choice.delta as any).reasoning_details;
+					const reasoningDetails = (choice.delta as ChatCompletionDeltaWithReasoning).reasoning_details;
 					if (reasoningDetails && Array.isArray(reasoningDetails)) {
 						for (const detail of reasoningDetails) {
 							if (detail.type === "reasoning.encrypted" && detail.id && detail.data) {
@@ -412,7 +447,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
 			// Some providers via OpenRouter give additional information in this field.
-			const rawMetadata = (error as any)?.error?.metadata?.raw;
+			const rawMetadata = getOpenRouterRawMetadata(error);
 			if (rawMetadata) output.errorMessage += `\n${rawMetadata}`;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
@@ -507,10 +542,12 @@ function buildParams(
 	compat: ResolvedOpenAICompletionsCompat = getCompat(model),
 	cacheRetention: CacheRetention = resolveCacheRetention(options?.cacheRetention),
 ) {
-	const messages = convertMessages(model, context, compat);
+	const messages = convertMessages(model, context, compat, {
+		preserveThinking: options?.reasoningEffort !== undefined,
+	});
 	const cacheControl = getCompatCacheControl(compat, cacheRetention);
 
-	const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
+	const params: OpenAICompletionsRequestParams = {
 		model: model.id,
 		messages,
 		stream: true,
@@ -523,7 +560,7 @@ function buildParams(
 	};
 
 	if (compat.supportsUsageInStreaming !== false) {
-		(params as any).stream_options = { include_usage: true };
+		params.stream_options = { include_usage: true };
 	}
 
 	if (compat.supportsStore) {
@@ -532,7 +569,7 @@ function buildParams(
 
 	if (options?.maxTokens) {
 		if (compat.maxTokensField === "max_tokens") {
-			(params as any).max_tokens = options.maxTokens;
+			params.max_tokens = options.maxTokens;
 		} else {
 			params.max_completion_tokens = options.maxTokens;
 		}
@@ -545,7 +582,7 @@ function buildParams(
 	if (context.tools && context.tools.length > 0) {
 		params.tools = convertTools(context.tools, compat);
 		if (compat.zaiToolStream) {
-			(params as any).tool_stream = true;
+			params.tool_stream = true;
 		}
 	} else if (hasToolHistory(context.messages)) {
 		// Anthropic (via LiteLLM/proxy) requires tools param when conversation has tool_calls/tool_results
@@ -561,19 +598,18 @@ function buildParams(
 	}
 
 	if (compat.thinkingFormat === "zai" && model.reasoning) {
-		(params as any).enable_thinking = !!options?.reasoningEffort;
+		params.enable_thinking = !!options?.reasoningEffort;
 	} else if (compat.thinkingFormat === "qwen" && model.reasoning) {
-		(params as any).enable_thinking = !!options?.reasoningEffort;
+		params.enable_thinking = !!options?.reasoningEffort;
 	} else if (compat.thinkingFormat === "qwen-chat-template" && model.reasoning) {
-		(params as any).chat_template_kwargs = {
+		params.chat_template_kwargs = {
 			enable_thinking: !!options?.reasoningEffort,
 			preserve_thinking: true,
 		};
 	} else if (compat.thinkingFormat === "deepseek" && model.reasoning) {
-		(params as any).thinking = { type: options?.reasoningEffort ? "enabled" : "disabled" };
+		params.thinking = { type: options?.reasoningEffort ? "enabled" : "disabled" };
 		if (options?.reasoningEffort) {
-			(params as any).reasoning_effort =
-				model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+			params.reasoning_effort = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
 		}
 	} else if (compat.thinkingFormat === "openrouter" && model.reasoning) {
 		// OpenRouter normalizes reasoning across providers via a nested reasoning object.
@@ -596,17 +632,17 @@ function buildParams(
 		}
 	} else if (options?.reasoningEffort && model.reasoning && compat.supportsReasoningEffort) {
 		// OpenAI-style reasoning_effort
-		(params as any).reasoning_effort = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+		params.reasoning_effort = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
 	} else if (!options?.reasoningEffort && model.reasoning && compat.supportsReasoningEffort) {
 		const offValue = model.thinkingLevelMap?.off;
 		if (typeof offValue === "string") {
-			(params as any).reasoning_effort = offValue;
+			params.reasoning_effort = offValue;
 		}
 	}
 
 	// OpenRouter provider routing preferences
 	if (model.baseUrl.includes("openrouter.ai") && model.compat?.openRouterRouting) {
-		(params as any).provider = model.compat.openRouterRouting;
+		params.provider = model.compat.openRouterRouting;
 	}
 
 	// Vercel AI Gateway provider routing preferences
@@ -616,15 +652,11 @@ function buildParams(
 			const gatewayOptions: Record<string, string[]> = {};
 			if (routing.only) gatewayOptions.only = routing.only;
 			if (routing.order) gatewayOptions.order = routing.order;
-			(params as any).providerOptions = { gateway: gatewayOptions };
+			params.providerOptions = { gateway: gatewayOptions };
 		}
 	}
 
-	applyExtraBody(
-		params as unknown as Record<string, unknown>,
-		options?.extraBody,
-		OPENAI_COMPLETIONS_RESERVED_BODY_KEYS,
-	);
+	applyExtraBody(params, options?.extraBody, OPENAI_COMPLETIONS_RESERVED_BODY_KEYS);
 
 	return params;
 }
@@ -748,6 +780,7 @@ export function convertMessages(
 	model: Model<"openai-completions">,
 	context: Context,
 	compat: ResolvedOpenAICompletionsCompat,
+	options: { preserveThinking?: boolean } = {},
 ): ChatCompletionMessageParam[] {
 	const params: ChatCompletionMessageParam[] = [];
 
@@ -766,7 +799,9 @@ export function convertMessages(
 		return id;
 	};
 
-	const transformedMessages = transformMessages(context.messages, model, (id) => normalizeToolCallId(id));
+	const transformedMessages = transformMessages(context.messages, model, (id) => normalizeToolCallId(id), {
+		preserveThinking: options.preserveThinking,
+	});
 
 	if (context.systemPrompt) {
 		const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole;
@@ -857,7 +892,9 @@ export function convertMessages(
 					// Use the signature from the first thinking block if available (for llama.cpp server + gpt-oss)
 					const signature = nonEmptyThinkingBlocks[0].thinkingSignature;
 					if (signature && signature.length > 0) {
-						(assistantMsg as any)[signature] = nonEmptyThinkingBlocks.map((block) => block.thinking).join("\n");
+						Object.assign(assistantMsg, {
+							[signature]: nonEmptyThinkingBlocks.map((block) => block.thinking).join("\n"),
+						});
 					}
 				}
 			} else if (assistantText.length > 0) {
@@ -890,7 +927,7 @@ export function convertMessages(
 					})
 					.filter(Boolean);
 				if (reasoningDetails.length > 0) {
-					(assistantMsg as any).reasoning_details = reasoningDetails;
+					Object.assign(assistantMsg, { reasoning_details: reasoningDetails });
 				}
 			}
 			if (
@@ -936,7 +973,7 @@ export function convertMessages(
 					tool_call_id: toolMsg.toolCallId,
 				};
 				if (compat.requiresToolResultName && toolMsg.toolName) {
-					(toolResultMsg as any).name = toolMsg.toolName;
+					Object.assign(toolResultMsg, { name: toolMsg.toolName });
 				}
 				params.push(toolResultMsg);
 
@@ -1001,7 +1038,7 @@ function convertTools(
 			function: {
 				name: tool.name,
 				description: tool.description,
-				parameters: tool.parameters as any, // TypeBox already generates JSON Schema
+				parameters: tool.parameters as FunctionParameters,
 				// Only include strict if provider supports it. Some reject unknown fields.
 				...(compat.supportsStrictMode !== false && { strict: false }),
 			},

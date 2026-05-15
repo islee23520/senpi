@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamOpenAIResponses } from "../src/providers/openai-responses.js";
-import type { Model } from "../src/types.js";
+import type { AssistantMessage, Context, Model } from "../src/types.js";
 
 type CapturedHeaders = Headers | string[][] | Record<string, string | readonly string[]> | undefined;
+type ResponsePayload = { input?: Array<{ type?: string; role?: string; content?: unknown }> };
 
 function getHeader(headers: CapturedHeaders, name: string): string | null {
 	if (!headers) return null;
@@ -89,6 +90,67 @@ describe("openai-responses provider defaults", () => {
 		expect(capturedPayload).not.toMatchObject({
 			reasoning: expect.anything(),
 		});
+	});
+
+	it("omits standalone same-model reasoning replay when no reasoning is requested", async () => {
+		const model = getModel("openai", "gpt-5.4");
+		let capturedPayload: ResponsePayload | undefined;
+		const previousAssistant: AssistantMessage = {
+			role: "assistant",
+			api: "openai-responses",
+			provider: "openai",
+			model: model.id,
+			content: [
+				{
+					type: "thinking",
+					thinking: "prior reasoning",
+					thinkingSignature: JSON.stringify({
+						id: "rs_123",
+						type: "reasoning",
+						summary: [],
+						status: "completed",
+					}),
+				},
+				{ type: "text", text: "previous answer" },
+			],
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: Date.now(),
+		};
+		const context: Context = {
+			messages: [
+				{ role: "user", content: "first turn", timestamp: Date.now() },
+				previousAssistant,
+				{ role: "user", content: "follow-up", timestamp: Date.now() },
+			],
+		};
+
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response("data: [DONE]\n\n", {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			}),
+		);
+
+		const stream = streamOpenAIResponses(model, context, {
+			apiKey: "test-key",
+			onPayload: (payload) => {
+				capturedPayload = payload as ResponsePayload;
+			},
+		});
+
+		for await (const event of stream) {
+			if (event.type === "done" || event.type === "error") break;
+		}
+
+		expect(capturedPayload?.input?.some((item) => item.type === "reasoning")).toBe(false);
 	});
 
 	it.each(["gpt-5.1", "gpt-5.2", "gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.5"] as const)(
