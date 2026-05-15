@@ -1,5 +1,26 @@
 # Core Extensions Changes
 
+## 2026-05-15 - OpenAI Chat Completions Tool Pair Guard
+
+### What changed
+
+- `builtin/tool-pair-guard/index.ts`: Extended the provider request guard to run an OpenAI Chat Completions payload sanitizer after the Anthropic and OpenAI Responses sanitizers.
+- `builtin/tool-pair-guard/sanitize-openai-chat-completions-payload.ts`: Added Chat Completions request message repair that drops orphan or duplicate `role: "tool"` messages and inserts synthetic `role: "tool"` results for interrupted assistant `tool_calls`.
+- `test/tool-pair-guard/sanitize-openai-chat-completions-payload.test.ts`: Added regression coverage for valid-pair no-op behavior, orphan output removal, duplicate output removal, and missing output synthesis before transcript advance or payload end.
+
+### Why
+
+- OpenAI-compatible Chat Completions providers reject `role: "tool"` messages whose `tool_call_id` has no preceding assistant `tool_calls` entry. Persisted or compacted sessions with stale tool outputs can otherwise keep replaying the same invalid payload and fail with HTTP 400.
+
+### Why extension system couldn't handle this alone
+
+- The fix does use the extension system: `tool-pair-guard` is a builtin extension that repairs provider payloads through `before_provider_request`. No core provider or agent loop change was required.
+
+### Expected merge conflict zones
+
+- LOW: `builtin/tool-pair-guard/index.ts` if upstream changes provider-request hook wiring.
+- LOW: `builtin/tool-pair-guard/sanitize-openai-chat-completions-payload.ts` if upstream adds an equivalent Chat Completions pairing normalizer.
+
 ## 2026-05-15 - OpenAI Responses Tool Pair Guard
 
 ### What changed
