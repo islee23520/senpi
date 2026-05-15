@@ -8,10 +8,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultRoot = dirname(__dirname);
 
 export function shouldWriteGlobalShim(root = defaultRoot, environment = process.env) {
-	if (environment.CI) {
-		return false;
-	}
-	return existsSync(join(root, ".git"));
+	if (environment.CI) return false;
+	if (!existsSync(join(root, ".git"))) return false;
+	return environment.SENPI_WRITE_GLOBAL_SHIM === "1";
 }
 
 function linkedWrapperScript() {

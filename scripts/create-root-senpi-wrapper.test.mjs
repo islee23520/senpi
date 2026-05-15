@@ -17,12 +17,38 @@ describe("create-root-senpi-wrapper", () => {
 		const wrapper = readFileSync(result.wrapperPath, "utf8");
 
 		// Then
-		assert.equal(shouldWriteGlobalShim(root), false);
+		assert.equal(shouldWriteGlobalShim(root, {}), false);
 		assert.equal(result.globalShimWritten, false);
 		assert.equal(wrapper.includes("packages/coding-agent/dist/senpi"), true);
 		assert.equal(wrapper.includes("scripts/build-all.mjs"), true);
 		assert.equal(wrapper.includes("packages/ai/src"), true);
 		assert.equal(wrapper.includes(".senpi-build-head"), true);
+	});
+
+	it("does NOT write a global shim by default in a git checkout (opt-in only)", () => {
+		// Given
+		const root = mkdtempSync(join(tmpdir(), "senpi-wrapper-git-default-"));
+		mkdirSync(join(root, ".git"));
+
+		// When
+		const defaultDecision = shouldWriteGlobalShim(root, {});
+		const ciDecision = shouldWriteGlobalShim(root, { CI: "true", SENPI_WRITE_GLOBAL_SHIM: "1" });
+
+		// Then
+		assert.equal(defaultDecision, false);
+		assert.equal(ciDecision, false);
+	});
+
+	it("writes a global shim only when SENPI_WRITE_GLOBAL_SHIM=1 in a non-CI git checkout", () => {
+		// Given
+		const root = mkdtempSync(join(tmpdir(), "senpi-wrapper-git-optin-"));
+		mkdirSync(join(root, ".git"));
+
+		// When
+		const optInDecision = shouldWriteGlobalShim(root, { SENPI_WRITE_GLOBAL_SHIM: "1" });
+
+		// Then
+		assert.equal(optInDecision, true);
 	});
 
 	it("replaces an existing global symlink instead of following it", () => {
