@@ -55,8 +55,8 @@ function isOpenAiResponsesModel(model: ExtensionContext["model"]): boolean {
 	return model?.provider === "openai" && model.api === "openai-responses";
 }
 
-function estimatePendingPromptTokens(event: { prompt: string; images?: readonly unknown[] }): number {
-	return approxTokens(event.prompt) + (event.images?.length ?? 0) * IMAGE_PROMPT_TOKEN_ESTIMATE;
+function estimatePendingPromptTokens(event: { prompt?: string; images?: readonly unknown[] }): number {
+	return approxTokens(event.prompt ?? "") + (event.images?.length ?? 0) * IMAGE_PROMPT_TOKEN_ESTIMATE;
 }
 
 function withAdditionalTokens(usage: ContextUsage, additionalTokens: number): ContextUsage {

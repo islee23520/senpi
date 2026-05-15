@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Model, Usage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Context, Model, StreamOptions, Usage } from "@earendil-works/pi-ai";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,19 @@ vi.mock("@earendil-works/pi-ai", async (importOriginal) => {
 	return {
 		...actual,
 		complete: completeMock,
+		stream: (model: Model<string>, context: Context, options: StreamOptions) => {
+			const output = actual.createAssistantMessageEventStream();
+			queueMicrotask(async () => {
+				const message = (await completeMock(model, context, options)) as AssistantMessage;
+				if (message.stopReason === "error" || message.stopReason === "aborted") {
+					output.push({ type: "error", reason: message.stopReason, error: message });
+				} else {
+					output.push({ type: "done", reason: message.stopReason, message });
+				}
+				output.end(message);
+			});
+			return output;
+		},
 	};
 });
 
