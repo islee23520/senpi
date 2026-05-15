@@ -26,7 +26,6 @@ import * as truncation from "./tool-truncation.js";
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const COMPACTION_BUDGET_RATIO = 0.6;
-const COMPACTION_RETRY_BUDGET_RATIO = 0.4;
 const EMERGENCY_CONTEXT_TARGET_RATIO = 0.95;
 const MAX_SUMMARY_TOKENS = 8192;
 const SUMMARY_SCHEMA = "senpi.compaction.summary.v1";
@@ -218,9 +217,8 @@ function pruneOldMessagesToBudget(messages: AgentMessage[], targetTokens: number
 	return pruned;
 }
 
-function pruneMessagesForOverflowRetry(messages: AgentMessage[], targetTokens: number): AgentMessage[] | undefined {
-	const budgetPruned = pruneOldMessagesToBudget(messages, targetTokens);
-	if (budgetPruned.length < messages.length) return budgetPruned;
+function removeOldestHistoryItemForOverflowRetry(messages: AgentMessage[]): AgentMessage[] | undefined {
+	if (messages.length <= 1) return undefined;
 	const boundaryIndex = findLastUserLikeIndex(messages);
 	return (
 		removeFirstOldToolPair(messages, boundaryIndex) ??
@@ -327,10 +325,7 @@ export async function runExtensionCompaction(
 		if (!response) return undefined;
 
 		if (isAssistantMessage(response) && isContextOverflow(response, snapshot.contextWindow)) {
-			const retryMessages = pruneMessagesForOverflowRetry(
-				messages,
-				Math.floor(snapshot.contextWindow * COMPACTION_RETRY_BUDGET_RATIO),
-			);
+			const retryMessages = removeOldestHistoryItemForOverflowRetry(messages);
 			if (!retryMessages || retryMessages.length === messages.length) {
 				break;
 			}

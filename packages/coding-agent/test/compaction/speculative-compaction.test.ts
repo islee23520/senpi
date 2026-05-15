@@ -266,6 +266,12 @@ describe("speculative compaction", () => {
 	it("keeps pruning and retrying after repeated compaction summary context-window failures", async () => {
 		// Given
 		const context = createContext();
+		context.getCompactionSettings = () => ({ ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 });
+		context.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "kept recent user" }],
+			timestamp: Date.now(),
+		});
 		const snapshot = createSpeculativeCompactionSnapshot(context, { generation: 1 });
 		context.registration.setResponses([
 			fauxAssistantMessage("", {
@@ -286,6 +292,22 @@ describe("speculative compaction", () => {
 
 		// Then
 		expect(result?.summary).toBe("eventually compacted");
-		expect(context.registration.getCallLog()).toHaveLength(3);
+		const requestTexts = context.registration.getCallLog().map((entry) => {
+			const firstMessage = entry.context.messages[0];
+			if (!firstMessage) return "";
+			const content = firstMessage.content;
+			if (typeof content === "string") return content;
+			return content
+				.filter((part) => part.type === "text")
+				.map((part) => part.text)
+				.join("\n");
+		});
+		expect(requestTexts).toHaveLength(3);
+		expect(requestTexts[0]).toContain("first user");
+		expect(requestTexts[1]).not.toContain("first user");
+		expect(requestTexts[1]).toContain("first assistant");
+		expect(requestTexts[2]).not.toContain("first assistant");
+		expect(requestTexts[2]).toContain("second user");
+		expect(requestTexts[2]).not.toContain("kept recent user");
 	});
 });
