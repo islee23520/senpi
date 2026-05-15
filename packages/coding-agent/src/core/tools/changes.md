@@ -1,5 +1,30 @@
 # core/tools changes
 
+## bash tool elapsed display (2026-05-15)
+
+### What changed
+
+- `bash.ts`: Bash tool result timing now renders as stable whole-second text (`<1s`, `1s`, `1m 8s`)
+  instead of fractional seconds like `0.0s` or `68.1s`.
+
+### Why
+
+- The TUI invalidates running bash timing on a one-second cadence, so a decimal suffix implied precision the display
+  does not maintain and made short or long-running commands look inconsistent.
+
+### Why extension system couldn't handle this
+
+- The elapsed/took line is produced by the built-in bash tool's `renderResult()` implementation. Extensions can wrap or
+  replace the tool, but fixing the default bash widget for every session requires changing the core renderer.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `formatDuration()` and the elapsed/took line in `bash.ts`.
+
+### Files modified
+
+- `bash.ts`
+
 ## bash tool command syntax highlighting (2026-05-12)
 
 ### What changed

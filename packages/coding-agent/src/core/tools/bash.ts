@@ -174,7 +174,24 @@ class BashResultRenderComponent extends Container {
 }
 
 function formatDuration(ms: number): string {
-	return `${(ms / 1000).toFixed(1)}s`;
+	const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
+	if (totalSeconds < 1) {
+		return "<1s";
+	}
+
+	const seconds = totalSeconds % 60;
+	const totalMinutes = Math.floor(totalSeconds / 60);
+	if (totalMinutes < 1) {
+		return `${seconds}s`;
+	}
+
+	const minutes = totalMinutes % 60;
+	const hours = Math.floor(totalMinutes / 60);
+	if (hours < 1) {
+		return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+	}
+
+	return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 function highlightBashCommand(command: string): string {

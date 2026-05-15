@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { Text, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { getReadmePath } from "../src/config.js";
 import type { ToolDefinition } from "../src/core/extensions/types.js";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.js";
@@ -138,6 +138,42 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain(theme.fg("syntaxString", '"hello"'));
 		expect(rendered).toContain(theme.fg("syntaxType", "echo"));
 		expect(stripAnsi(rendered)).toContain('$ echo "hello" && false');
+	});
+
+	test("renders bash elapsed time as stable whole-second text while running", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-05-15T00:00:00.000Z"));
+
+		try {
+			const component = new ToolExecutionComponent(
+				"bash",
+				"tool-bash-elapsed",
+				{ command: "sleep 70" },
+				{},
+				createBashToolDefinition(process.cwd()),
+				createFakeTui(),
+				process.cwd(),
+			);
+
+			component.markExecutionStarted();
+			component.updateResult({ content: [], details: undefined, isError: false }, true);
+
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("Elapsed <1s");
+
+			vi.advanceTimersByTime(1_100);
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("Elapsed 1s");
+
+			vi.advanceTimersByTime(67_000);
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("Elapsed 1m 8s");
+
+			component.updateResult(
+				{ content: [{ type: "text", text: "(no output)" }], details: undefined, isError: false },
+				false,
+			);
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("Took 1m 8s");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {
