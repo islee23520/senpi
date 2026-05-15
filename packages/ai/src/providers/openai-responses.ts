@@ -23,6 +23,7 @@ import { buildBaseOptions, clampMaxForOpenAI, OPENAI_RESPONSES_RESERVED_BODY_KEY
 
 const OPENAI_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 const OPENAI_BETA_RESPONSES_WEBSOCKETS = "responses_websockets=2026-02-06";
+const OPENAI_WEB_SEARCH_SOURCES_INCLUDE = "web_search_call.action.sources";
 const SESSION_WEBSOCKET_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type WebSocketEventType = "open" | "message" | "error" | "close";
@@ -46,6 +47,12 @@ type WebSocketConstructor = new (
 	protocols?: string | string[] | { headers?: Record<string, string> },
 ) => WebSocketLike;
 
+type MutableResponsesPayload = ResponseCreateParamsStreaming & {
+	include?: unknown[];
+	tool_choice?: unknown;
+	tools?: unknown[];
+};
+
 const websocketSessionCache = new Map<string, CachedWebSocketConnection>();
 
 /**
@@ -63,14 +70,16 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 }
 
 function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCompat> {
+	const isNativeEndpoint = isOpenAIResponsesNativeEndpoint(model);
 	return {
 		sendSessionIdHeader: model.compat?.sendSessionIdHeader ?? true,
 		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? true,
-		supportsWebSocket: model.compat?.supportsWebSocket ?? isOpenAIResponsesWebSocketEndpoint(model),
+		supportsWebSocket: model.compat?.supportsWebSocket ?? isNativeEndpoint,
+		supportsWebSearchPreview: model.compat?.supportsWebSearchPreview ?? isNativeEndpoint,
 	};
 }
 
-function isOpenAIResponsesWebSocketEndpoint(model: Model<"openai-responses">): boolean {
+function isOpenAIResponsesNativeEndpoint(model: Model<"openai-responses">): boolean {
 	const baseUrl = isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model) : model.baseUrl;
 	try {
 		return new URL(baseUrl || "https://api.openai.com/v1").hostname === "api.openai.com";
@@ -84,6 +93,60 @@ function getPromptCacheRetention(
 	cacheRetention: CacheRetention,
 ): "24h" | undefined {
 	return cacheRetention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isOpenAiWebSearchPreviewTool(value: unknown): boolean {
+	return isRecord(value) && (value.type === "web_search_preview" || value.type === "web_search_preview_2025_03_11");
+}
+
+function sanitizeUnsupportedNativeTools(
+	params: ResponseCreateParamsStreaming,
+	compat: Required<OpenAIResponsesCompat>,
+): ResponseCreateParamsStreaming {
+	if (compat.supportsWebSearchPreview) {
+		return params;
+	}
+
+	const payload = params as MutableResponsesPayload;
+	let sanitized: MutableResponsesPayload | undefined;
+	const nextPayload = (): MutableResponsesPayload => {
+		sanitized ??= { ...payload };
+		return sanitized;
+	};
+
+	if (Array.isArray(payload.tools)) {
+		const tools = payload.tools.filter((tool) => !isOpenAiWebSearchPreviewTool(tool));
+		if (tools.length !== payload.tools.length) {
+			const next = nextPayload();
+			if (tools.length > 0) {
+				next.tools = tools;
+			} else {
+				delete next.tools;
+			}
+		}
+	}
+
+	if (Array.isArray(payload.include)) {
+		const include = payload.include.filter((value) => value !== OPENAI_WEB_SEARCH_SOURCES_INCLUDE);
+		if (include.length !== payload.include.length) {
+			const next = nextPayload();
+			if (include.length > 0) {
+				next.include = include;
+			} else {
+				delete next.include;
+			}
+		}
+	}
+
+	if (isOpenAiWebSearchPreviewTool(payload.tool_choice)) {
+		delete nextPayload().tool_choice;
+	}
+
+	return sanitized ? (sanitized as ResponseCreateParamsStreaming) : params;
 }
 
 // OpenAI Responses-specific options
@@ -135,6 +198,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 			}
 
 			const compat = getCompat(model);
+			params = sanitizeUnsupportedNativeTools(params, compat);
 			const transport = options?.transport ?? "sse";
 			if (transport !== "sse" && compat.supportsWebSocket) {
 				let websocketStarted = false;

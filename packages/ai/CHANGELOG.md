@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Fixed OpenAI Responses custom endpoints to strip unsupported native `web_search_preview` request fields after `onPayload` unless `compat.supportsWebSearchPreview` opts in.
+
 ## [2026.5.15-3] - 2026-05-15
 
 ### Added

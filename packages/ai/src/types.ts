@@ -451,6 +451,8 @@ export interface OpenAIResponsesCompat {
 	supportsLongCacheRetention?: boolean;
 	/** Whether the provider supports the OpenAI Responses WebSocket transport. Default: true for api.openai.com only. */
 	supportsWebSocket?: boolean;
+	/** Whether the provider supports the OpenAI Responses native `web_search_preview` tool. Default: true for api.openai.com only. */
+	supportsWebSearchPreview?: boolean;
 }
 
 /** Compatibility settings for Anthropic Messages-compatible APIs. */

@@ -1,5 +1,24 @@
 # AI Source Changes
 
+## 2026-05-15 - OpenAI Responses `web_search_preview` compat guard
+
+### What changed and why
+- `providers/openai-responses.ts`: after `onPayload` hooks run, custom OpenAI Responses endpoints now strip native `web_search_preview` / `web_search_preview_2025_03_11` tools, the matching `tool_choice`, and `web_search_call.action.sources` includes unless `compat.supportsWebSearchPreview` explicitly opts in. Official `api.openai.com` endpoints keep the existing default support.
+- `types.ts`: added `OpenAIResponsesCompat.supportsWebSearchPreview` so custom providers can declare support when they really pass OpenAI-native Responses tools through.
+- Added regression coverage for hook-injected native web search on a custom Responses endpoint and the explicit opt-in path.
+
+### Files modified
+- `providers/openai-responses.ts`
+- `types.ts`
+- `../test/openai-responses-web-search-compat.test.ts`
+
+### Why the higher-level extension system couldn't handle this alone
+- External or user extensions can add provider-native tools through `before_provider_request`; the final OpenAI Responses payload is only known after all hooks have run. The provider is the last reliable guard before SDK submission.
+
+### Expected merge conflict zones
+- LOW: `streamOpenAIResponses()` request construction immediately after the `onPayload` callback.
+- LOW: `OpenAIResponsesCompat` if upstream adds more Responses compatibility flags.
+
 ## 2026-05-15 - Opus 4.6/4.7 unsupported native computer tool guard
 
 ### What changed and why

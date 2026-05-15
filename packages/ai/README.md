@@ -945,7 +945,10 @@ interface OpenAICompletionsCompat {
 }
 
 interface OpenAIResponsesCompat {
-  // Reserved for future use
+  sendSessionIdHeader?: boolean;        // Send OpenAI cache-affinity `session_id` from sessionId (default: true)
+  supportsLongCacheRetention?: boolean; // Support `prompt_cache_retention: "24h"` (default: true)
+  supportsWebSocket?: boolean;          // Support OpenAI Responses WebSocket transport (default: api.openai.com only)
+  supportsWebSearchPreview?: boolean;   // Support native `web_search_preview` tools (default: api.openai.com only)
 }
 ```
 
