@@ -14,7 +14,7 @@ type RestoreQueuedMessagesToEditorThis = {
 		setText: (text: string) => void;
 	};
 	session: {
-		abort: () => void;
+		abort: () => Promise<void> | void;
 	};
 };
 
@@ -87,5 +87,40 @@ describe("InteractiveMode.restoreQueuedMessagesToEditor", () => {
 		expect(setText).not.toHaveBeenCalled();
 		expect(updatePendingMessagesDisplay).toHaveBeenCalledTimes(1);
 		expect(abort).toHaveBeenCalledTimes(1);
+	});
+
+	test("restores queued messages before async abort settles", async () => {
+		// given
+		let resolveAbort: (() => void) | undefined;
+		const abortSettled = new Promise<void>((resolve) => {
+			resolveAbort = resolve;
+		});
+		const abort = vi.fn<() => Promise<void>>(() => abortSettled);
+		const setText = vi.fn<(text: string) => void>();
+		const updatePendingMessagesDisplay = vi.fn<() => void>();
+		const fakeThis = {
+			clearAllQueues: () => ({
+				steering: ["queued before abort"],
+				followUp: [],
+			}),
+			updatePendingMessagesDisplay,
+			editor: {
+				getText: () => "",
+				setText,
+			},
+			session: { abort },
+		} satisfies RestoreQueuedMessagesToEditorThis;
+
+		// when
+		const restoredCount = restoreQueuedMessagesToEditor(fakeThis, { abort: true });
+
+		// then
+		expect(restoredCount).toBe(1);
+		expect(setText).toHaveBeenCalledWith("queued before abort");
+		expect(updatePendingMessagesDisplay).toHaveBeenCalledTimes(1);
+		expect(abort).toHaveBeenCalledTimes(1);
+
+		resolveAbort?.();
+		await abortSettled;
 	});
 });

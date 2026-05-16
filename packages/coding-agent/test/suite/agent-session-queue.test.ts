@@ -1,18 +1,18 @@
-import type { ExtensionAPI } from "@code-yeongyu/senpi";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHarness, getAssistantTexts, getMessageText, getUserTexts, type Harness } from "./harness.js";
+import type { ExtensionAPI } from "../../src/index.js";
+import {
+	createHarness,
+	getAssistantTexts,
+	getMessageText,
+	getUserTexts,
+	type Harness,
+	type HarnessOptions,
+} from "./harness.js";
 
-async function createWaitingHarness(
-	options: {
-		tools?: AgentTool[];
-		extensionFactories?: Harness["session"]["extensionRunner"] extends never
-			? never
-			: Array<(pi: ExtensionAPI) => void>;
-	} = {},
-): Promise<{
+async function createWaitingHarness(options: Pick<HarnessOptions, "extensionFactories" | "tools"> = {}): Promise<{
 	harness: Harness;
 	releaseToolExecution: () => void;
 	promptPromise: Promise<void>;
@@ -382,6 +382,71 @@ describe("AgentSession queue characterization", () => {
 
 		expect(countsAtQueuedMessageStart).toEqual([0]);
 		expect(harness.session.pendingMessageCount).toBe(0);
+	});
+
+	it("starts a fresh turn for steer input submitted while a user abort is settling", async () => {
+		const waiting = await createWaitingHarness();
+		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
+		harnesses.push(harness);
+		let freshTurnUserMessages: string[] = [];
+
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("wait", {}), { stopReason: "toolUse" }),
+			(context) => {
+				freshTurnUserMessages = context.messages
+					.filter((message) => message.role === "user")
+					.map((message) => getMessageText(message));
+				return fauxAssistantMessage("fresh steer response");
+			},
+		]);
+
+		await waitForToolStart;
+		const abortPromise = harness.session.abort();
+		const secondAbortPromise = harness.session.abort();
+		const freshPromptPromise = harness.session.prompt("fresh after abort", { streamingBehavior: "steer" });
+
+		expect(harness.session.isStreaming).toBe(true);
+		releaseToolExecution();
+		await Promise.all([promptPromise, abortPromise, secondAbortPromise, freshPromptPromise]);
+
+		expect(freshTurnUserMessages).toEqual(["start", "fresh after abort"]);
+		expect(getUserTexts(harness)).toEqual(["start", "fresh after abort"]);
+		expect(getAssistantTexts(harness)).toEqual(["", "fresh steer response"]);
+		expect(harness.session.pendingMessageCount).toBe(0);
+		expect(harness.getPendingResponseCount()).toBe(0);
+	});
+
+	it("starts a fresh turn for follow-up input submitted while a user abort is settling", async () => {
+		const waiting = await createWaitingHarness();
+		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
+		harnesses.push(harness);
+		let freshTurnUserMessages: string[] = [];
+
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("wait", {}), { stopReason: "toolUse" }),
+			(context) => {
+				freshTurnUserMessages = context.messages
+					.filter((message) => message.role === "user")
+					.map((message) => getMessageText(message));
+				return fauxAssistantMessage("fresh follow-up response");
+			},
+		]);
+
+		await waitForToolStart;
+		const abortPromise = harness.session.abort();
+		const freshPromptPromise = harness.session.prompt("fresh follow-up after abort", {
+			streamingBehavior: "followUp",
+		});
+
+		expect(harness.session.isStreaming).toBe(true);
+		releaseToolExecution();
+		await Promise.all([promptPromise, abortPromise, freshPromptPromise]);
+
+		expect(freshTurnUserMessages).toEqual(["start", "fresh follow-up after abort"]);
+		expect(getUserTexts(harness)).toEqual(["start", "fresh follow-up after abort"]);
+		expect(getAssistantTexts(harness)).toEqual(["", "fresh follow-up response"]);
+		expect(harness.session.pendingMessageCount).toBe(0);
+		expect(harness.getPendingResponseCount()).toBe(0);
 	});
 
 	it("throws when queueing an extension command with steer", async () => {

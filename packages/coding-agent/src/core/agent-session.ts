@@ -327,6 +327,7 @@ export class AgentSession {
 	private _retryAttempt = 0;
 	private _retryPromise: Promise<void> | undefined = undefined;
 	private _retryResolve: (() => void) | undefined = undefined;
+	private _userAbortPromise: Promise<void> | undefined = undefined;
 
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
@@ -1094,6 +1095,11 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	async prompt(text: string, options?: PromptOptions): Promise<void> {
+		const userAbortPromise = this._userAbortPromise;
+		if (userAbortPromise) {
+			await userAbortPromise;
+		}
+
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
 		let messages: AgentMessage[] | undefined;
@@ -1516,8 +1522,24 @@ export class AgentSession {
 	 */
 	async abort(): Promise<void> {
 		this.abortRetry();
-		this.agent.abort();
-		await this.agent.waitForIdle();
+		if (this._userAbortPromise) {
+			this.agent.abort();
+			await this._userAbortPromise;
+			return;
+		}
+
+		const abortPromise = (async () => {
+			this.agent.abort();
+			await this.agent.waitForIdle();
+		})();
+		this._userAbortPromise = abortPromise;
+		try {
+			await abortPromise;
+		} finally {
+			if (this._userAbortPromise === abortPromise) {
+				this._userAbortPromise = undefined;
+			}
+		}
 	}
 
 	// =========================================================================

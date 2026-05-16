@@ -1,5 +1,29 @@
 # changes
 
+## User abort prompt settlement barrier (2026-05-17)
+
+### What changed
+
+- `src/core/agent-session.ts`: `abort()` now creates a shared user-abort settlement promise before waiting for the
+  active agent run to become idle.
+- `src/core/agent-session.ts`: `prompt()` waits for that user-abort promise before classifying submitted input as
+  streaming steering/follow-up or a normal fresh prompt.
+
+### Why
+
+- Pressing Esc while a tool call was active started abort asynchronously. A message submitted before the old run settled
+  still saw `isStreaming === true`, so it was queued into the aborting run and could remain stuck after abort completed.
+
+### Why extension system couldn't handle this
+
+- The stale queue classification happens inside `AgentSession.prompt()` before extension commands or input handlers can
+  reliably distinguish "streaming" from "currently aborting and about to become idle".
+
+### Expected merge conflict zones
+
+- MEDIUM: `AgentSession.prompt()` around the streaming queue branch.
+- MEDIUM: `AgentSession.abort()` around agent abort and idle waiting.
+
 ## Provider-supplied retry delay handling (2026-05-15)
 
 ### What changed

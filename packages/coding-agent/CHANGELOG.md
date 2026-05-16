@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Fixed interactive abort settling so messages submitted immediately after Esc start a fresh turn instead of staying queued behind the aborted run.
+
 ## [2026.5.16] - 2026-05-16
 
 ### Added
