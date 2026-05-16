@@ -2481,8 +2481,8 @@ export class InteractiveMode {
 		// Set up handlers on defaultEditor - they use this.editor for text access
 		// so they work correctly regardless of which editor is active
 		this.defaultEditor.onEscape = () => {
-			if (this.session.isStreaming) {
-				this.restoreQueuedMessagesToEditor({ abort: true });
+			if (this.session.isStreaming || this.session.retryAttempt > 0) {
+				void this.abortAndFireQueuedMessages();
 			} else if (this.session.isBashRunning) {
 				this.session.abortBash();
 			} else if (this.isBashMode) {
@@ -3059,11 +3059,11 @@ export class InteractiveMode {
 			}
 
 			case "auto_retry_start": {
-				// Set up escape to abort retry
-				this.retryEscapeHandler = this.defaultEditor.onEscape;
-				this.defaultEditor.onEscape = () => {
-					this.session.abortRetry();
-				};
+				// During retry waits, isStreaming flips false between attempts. The main Esc handler
+				// keys off both isStreaming and retryAttempt so we keep the same close-out path here;
+				// no separate retry-only handler is installed (the prior one only called
+				// session.abortRetry() and left queued steering messages stranded).
+				this.retryEscapeHandler = undefined;
 				// Show retry indicator
 				this.statusContainer.clear();
 				this.retryCountdown?.dispose();
@@ -3830,6 +3830,38 @@ export class InteractiveMode {
 		if (options?.abort) {
 			void this.session.abort();
 		}
+		return allQueued.length;
+	}
+
+	/**
+	 * User-abort path that drains the queue, aborts the active run (and any in-flight retry),
+	 * waits for settle, then re-fires queued messages as a single fresh prompt.
+	 *
+	 * Behavior contract:
+	 * - clearAllQueues() is called synchronously so the pending-messages display empties immediately.
+	 * - `await session.abort()` ensures the previous run is fully idle before the fresh prompt fires,
+	 *   so it starts a new turn instead of being re-queued as steering behind the dying run.
+	 * - When no messages were queued, the helper is just a sync clear + abort (no fresh prompt).
+	 * - Failures from the fresh prompt are surfaced via showError but do not throw.
+	 */
+	private async abortAndFireQueuedMessages(): Promise<number> {
+		const { steering, followUp } = this.clearAllQueues();
+		const allQueued = [...steering, ...followUp];
+		this.updatePendingMessagesDisplay();
+		await this.session.abort();
+
+		if (allQueued.length === 0) {
+			return 0;
+		}
+
+		const queuedText = allQueued.join("\n\n");
+		try {
+			await this.session.prompt(queuedText);
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+			this.showError(`Failed to fire queued message: ${errorMessage}`);
+		}
+
 		return allQueued.length;
 	}
 

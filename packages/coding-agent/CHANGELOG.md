@@ -7,6 +7,7 @@
 ### Fixed
 
 - Fixed interactive abort settling so messages submitted immediately after Esc start a fresh turn instead of staying queued behind the aborted run.
+- Fixed Esc during streaming or retry waits to auto-fire queued steering/follow-up messages as a fresh prompt after the abort settles, instead of leaving them stranded behind the aborted run or restoring them to the editor for manual re-submission.
 
 ## [2026.5.16] - 2026-05-16
 
