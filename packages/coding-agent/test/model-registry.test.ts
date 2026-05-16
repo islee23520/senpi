@@ -1145,6 +1145,109 @@ describe("ModelRegistry", () => {
 					headers: { "x-proxy": "enabled" },
 				});
 			});
+
+			test("headers-only override replaces stale provider request modifiers after refresh", async () => {
+				const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+
+				// given a custom provider with provider-specific request modifiers
+				registry.registerProvider("custom-provider", {
+					...providerConfig("https://custom.test/v1", [{ id: "custom-a" }], "openai-completions"),
+					headers: { "x-old-provider": "enabled" },
+					extraBody: { stale_parameter: true },
+					authHeader: true,
+				});
+
+				// when a later provider snapshot only supplies replacement headers
+				registry.registerProvider("custom-provider", { headers: { "x-new-provider": "enabled" } });
+				registry.refresh();
+
+				// then only the latest request modifiers are applied while structural auth survives
+				const model = registry.find("custom-provider", "custom-a");
+				if (!model) throw new Error("Expected custom-provider/custom-a to remain registered");
+
+				const auth = await registry.getApiKeyAndHeaders(model);
+				expect(auth).toEqual({
+					ok: true,
+					apiKey: "TEST_KEY",
+					headers: { "x-new-provider": "enabled" },
+				});
+			});
+
+			test("model replacement clears request modifiers for removed models", async () => {
+				const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+
+				registry.registerProvider("custom-provider", {
+					...providerConfig("https://custom.test/v1", [{ id: "custom-a" }], "openai-completions"),
+					models: [
+						{
+							id: "custom-a",
+							name: "custom-a",
+							reasoning: false,
+							input: ["text"],
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							contextWindow: 100000,
+							maxTokens: 8000,
+							headers: { "x-old-model": "enabled" },
+							extraBody: { stale_model_parameter: true },
+							upstreamModelId: "upstream-old",
+							serviceTier: "priority",
+						},
+					],
+				});
+				const removedModel = registry.find("custom-provider", "custom-a");
+				if (!removedModel) throw new Error("Expected custom-provider/custom-a before replacement");
+
+				// when the provider replaces its model list without the old model id
+				registry.registerProvider(
+					"custom-provider",
+					providerConfig("https://custom.test/v1", [{ id: "custom-b" }], "openai-completions"),
+				);
+
+				// then the removed model cannot keep provider-specific request data alive
+				const auth = await registry.getApiKeyAndHeaders(removedModel);
+				expect(auth).toEqual({
+					ok: true,
+					apiKey: "TEST_KEY",
+				});
+			});
+
+			test("full provider replacement after refresh clears stale request modifiers for new model", async () => {
+				const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+
+				registry.registerProvider("custom-provider", {
+					...providerConfig("https://custom.test/v1", [{ id: "gpt-5.5" }], "openai-completions"),
+					headers: { "x-old-provider": "enabled" },
+					extraBody: { stale_parameter: true },
+					authHeader: true,
+					models: [
+						{
+							id: "gpt-5.5",
+							name: "gpt-5.5",
+							reasoning: false,
+							input: ["text"],
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							contextWindow: 100000,
+							maxTokens: 8000,
+							upstreamModelId: "gpt-5.5-upstream",
+							serviceTier: "priority",
+						},
+					],
+				});
+				registry.registerProvider(
+					"custom-provider",
+					providerConfig("https://custom.test/v1", [{ id: "MiMo-V2.5" }], "openai-completions"),
+				);
+				registry.refresh();
+
+				const model = registry.find("custom-provider", "MiMo-V2.5");
+				if (!model) throw new Error("Expected custom-provider/MiMo-V2.5 after replacement");
+
+				const auth = await registry.getApiKeyAndHeaders(model);
+				expect(auth).toEqual({
+					ok: true,
+					apiKey: "TEST_KEY",
+				});
+			});
 		});
 	});
 

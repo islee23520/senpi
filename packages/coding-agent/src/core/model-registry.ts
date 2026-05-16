@@ -781,13 +781,16 @@ export class ModelRegistry {
 			extraBody?: Record<string, unknown>;
 			authHeader?: boolean;
 		},
+		preservedApiKey?: string,
 	): void {
-		if (!config.apiKey && !config.headers && !config.extraBody && !config.authHeader) {
+		const apiKey = config.apiKey ?? preservedApiKey;
+		if (!apiKey && !config.headers && !config.extraBody && config.authHeader !== true) {
+			this.providerRequestConfigs.delete(providerName);
 			return;
 		}
 
 		this.providerRequestConfigs.set(providerName, {
-			apiKey: config.apiKey,
+			apiKey,
 			headers: config.headers,
 			extraBody: config.extraBody,
 			authHeader: config.authHeader,
@@ -828,6 +831,30 @@ export class ModelRegistry {
 			return;
 		}
 		this.modelRequestServiceTiers.set(key, serviceTier);
+	}
+
+	private clearModelRequestConfigForProvider(providerName: string): void {
+		const prefix = `${providerName}:`;
+		for (const key of this.modelRequestHeaders.keys()) {
+			if (key.startsWith(prefix)) {
+				this.modelRequestHeaders.delete(key);
+			}
+		}
+		for (const key of this.modelRequestExtraBody.keys()) {
+			if (key.startsWith(prefix)) {
+				this.modelRequestExtraBody.delete(key);
+			}
+		}
+		for (const key of this.modelRequestUpstreamIds.keys()) {
+			if (key.startsWith(prefix)) {
+				this.modelRequestUpstreamIds.delete(key);
+			}
+		}
+		for (const key of this.modelRequestServiceTiers.keys()) {
+			if (key.startsWith(prefix)) {
+				this.modelRequestServiceTiers.delete(key);
+			}
+		}
 	}
 
 	/**
@@ -988,11 +1015,33 @@ export class ModelRegistry {
 			this.registeredProviders.set(providerName, config);
 			return;
 		}
-		for (const k of Object.keys(config) as (keyof ProviderConfigInput)[]) {
-			if (config[k] !== undefined) {
-				(existing as Record<string, unknown>)[k] = config[k];
-			}
+		const next: ProviderConfigInput = { ...existing };
+
+		if (config.name !== undefined) next.name = config.name;
+		if (config.baseUrl !== undefined) next.baseUrl = config.baseUrl;
+		if (config.apiKey !== undefined) next.apiKey = config.apiKey;
+		if (config.api !== undefined) next.api = config.api;
+		if (config.streamSimple !== undefined) next.streamSimple = config.streamSimple;
+		if (config.oauth !== undefined) next.oauth = config.oauth;
+		if (config.models !== undefined) next.models = config.models;
+
+		if (config.headers !== undefined) {
+			next.headers = config.headers;
+		} else {
+			delete next.headers;
 		}
+		if (config.extraBody !== undefined) {
+			next.extraBody = config.extraBody;
+		} else {
+			delete next.extraBody;
+		}
+		if (config.authHeader !== undefined) {
+			next.authHeader = config.authHeader;
+		} else {
+			delete next.authHeader;
+		}
+
+		this.registeredProviders.set(providerName, next);
 	}
 
 	private validateProviderConfig(providerName: string, config: ProviderConfigInput): void {
@@ -1042,11 +1091,12 @@ export class ModelRegistry {
 			);
 		}
 
-		this.storeProviderRequestConfig(providerName, config);
+		this.storeProviderRequestConfig(providerName, config, this.registeredProviders.get(providerName)?.apiKey);
 
 		if (config.models && config.models.length > 0) {
 			// Full replacement: remove existing models for this provider
 			this.models = this.models.filter((m) => m.provider !== providerName);
+			this.clearModelRequestConfigForProvider(providerName);
 
 			// Parse and add new models
 			for (const modelDef of config.models) {
