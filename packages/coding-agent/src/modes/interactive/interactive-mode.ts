@@ -142,7 +142,11 @@ import {
 	type ThemeColor,
 	theme,
 } from "./theme/theme.js";
-import { formatWorkingStatusMessageFrame } from "./working-status.js";
+import {
+	blendWorkingStatusShimmerRgbColor,
+	formatWorkingStatusMessageFrame,
+	type WorkingStatusRgbColor,
+} from "./working-status.js";
 
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
@@ -179,18 +183,12 @@ const DEFAULT_WORKING_STATUS_REFRESH_INTERVAL_MS = 600;
 const DEFAULT_WORKING_STATUS_MESSAGE_ANIMATION_INTERVAL_MS = 32;
 const RGB_FOREGROUND_PATTERN = /\x1b\[38;2;(\d+);(\d+);(\d+)m/;
 
-type RgbColor = {
-	r: number;
-	g: number;
-	b: number;
-};
+const DARK_DEFAULT_WORKING_TEXT_RGB: WorkingStatusRgbColor = { r: 229, g: 229, b: 231 };
+const LIGHT_DEFAULT_WORKING_TEXT_RGB: WorkingStatusRgbColor = { r: 17, g: 17, b: 17 };
+const DARK_DEFAULT_WORKING_BASE_RGB: WorkingStatusRgbColor = { r: 102, g: 102, b: 102 };
+const LIGHT_DEFAULT_WORKING_BASE_RGB: WorkingStatusRgbColor = { r: 118, g: 118, b: 118 };
 
-const DARK_DEFAULT_WORKING_TEXT_RGB: RgbColor = { r: 229, g: 229, b: 231 };
-const LIGHT_DEFAULT_WORKING_TEXT_RGB: RgbColor = { r: 17, g: 17, b: 17 };
-const DARK_DEFAULT_WORKING_BASE_RGB: RgbColor = { r: 102, g: 102, b: 102 };
-const LIGHT_DEFAULT_WORKING_BASE_RGB: RgbColor = { r: 118, g: 118, b: 118 };
-
-function parseAnsiRgbForeground(ansi: string): RgbColor | undefined {
+function parseAnsiRgbForeground(ansi: string): WorkingStatusRgbColor | undefined {
 	const match = RGB_FOREGROUND_PATTERN.exec(ansi);
 	const red = match?.[1];
 	const green = match?.[2];
@@ -209,19 +207,6 @@ function isWorkingLightTheme(): boolean {
 	return theme.name?.toLowerCase().includes("light") ?? false;
 }
 
-function clampColorChannel(value: number): number {
-	return Math.max(0, Math.min(255, Math.round(value)));
-}
-
-function mixRgbColor(base: RgbColor, highlight: RgbColor, amount: number): RgbColor {
-	const clampedAmount = Math.max(0, Math.min(1, amount));
-	return {
-		r: clampColorChannel(base.r + (highlight.r - base.r) * clampedAmount),
-		g: clampColorChannel(base.g + (highlight.g - base.g) * clampedAmount),
-		b: clampColorChannel(base.b + (highlight.b - base.b) * clampedAmount),
-	};
-}
-
 function formatWorkingStatusShimmerText(text: string, intensity: number): string {
 	if (theme.getColorMode() !== "truecolor") {
 		if (intensity < 0.2) {
@@ -234,13 +219,13 @@ function formatWorkingStatusShimmerText(text: string, intensity: number): string
 	}
 
 	const lightTheme = isWorkingLightTheme();
-	const base =
+	const highlight =
 		parseAnsiRgbForeground(theme.getFgAnsi("dim")) ??
 		(lightTheme ? LIGHT_DEFAULT_WORKING_BASE_RGB : DARK_DEFAULT_WORKING_BASE_RGB);
-	const highlight =
+	const base =
 		parseAnsiRgbForeground(theme.getFgAnsi("text")) ??
 		(lightTheme ? LIGHT_DEFAULT_WORKING_TEXT_RGB : DARK_DEFAULT_WORKING_TEXT_RGB);
-	const color = mixRgbColor(base, highlight, intensity * 0.9);
+	const color = blendWorkingStatusShimmerRgbColor(highlight, base, intensity * 0.9);
 	return `\x1b[1m\x1b[38;2;${color.r};${color.g};${color.b}m${text}\x1b[39m\x1b[22m`;
 }
 

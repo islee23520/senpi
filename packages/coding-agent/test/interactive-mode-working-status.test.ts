@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { formatKeyText } from "../src/modes/interactive/components/keybinding-hints.js";
 import {
+	blendWorkingStatusShimmerRgbColor,
 	formatWorkingElapsedSeconds,
 	formatWorkingStatusMessage,
 	formatWorkingStatusMessageFrame,
@@ -29,6 +30,17 @@ describe("formatWorkingElapsedSeconds", () => {
 describe("formatWorkingStatusMessage", () => {
 	test("combines message, elapsed time, and interrupt hint", () => {
 		expect(formatWorkingStatusMessage("Working", 427, "esc")).toBe("Working (7m 07s • esc to interrupt)");
+	});
+});
+
+describe("blendWorkingStatusShimmerRgbColor", () => {
+	test("matches codex highlight-to-base blend order", () => {
+		const highlight = { r: 110, g: 120, b: 130 };
+		const base = { r: 10, g: 20, b: 30 };
+
+		expect(blendWorkingStatusShimmerRgbColor(highlight, base, 0)).toEqual(base);
+		expect(blendWorkingStatusShimmerRgbColor(highlight, base, 0.25)).toEqual({ r: 35, g: 45, b: 55 });
+		expect(blendWorkingStatusShimmerRgbColor(highlight, base, 1)).toEqual(highlight);
 	});
 });
 

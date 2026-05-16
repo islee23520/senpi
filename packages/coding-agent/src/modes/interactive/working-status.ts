@@ -2,6 +2,12 @@ const WORKING_STATUS_MESSAGE_SHIMMER_PADDING = 10;
 const WORKING_STATUS_MESSAGE_SHIMMER_BAND_HALF_WIDTH = 5;
 const WORKING_STATUS_MESSAGE_SHIMMER_SWEEP_MS = 2_000;
 
+export type WorkingStatusRgbColor = {
+	r: number;
+	g: number;
+	b: number;
+};
+
 type WorkingStatusTextFrameStyle = {
 	base: (text: string) => string;
 	glow: (text: string) => string;
@@ -30,6 +36,23 @@ export function formatWorkingElapsedSeconds(elapsedSeconds: number): string {
 
 export function formatWorkingStatusMessage(message: string, elapsedSeconds: number, interruptKey: string): string {
 	return `${message} (${formatWorkingElapsedSeconds(elapsedSeconds)} • ${interruptKey} to interrupt)`;
+}
+
+function clampColorChannel(value: number): number {
+	return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+export function blendWorkingStatusShimmerRgbColor(
+	highlight: WorkingStatusRgbColor,
+	base: WorkingStatusRgbColor,
+	amount: number,
+): WorkingStatusRgbColor {
+	const clampedAmount = Math.max(0, Math.min(1, amount));
+	return {
+		r: clampColorChannel(highlight.r * clampedAmount + base.r * (1 - clampedAmount)),
+		g: clampColorChannel(highlight.g * clampedAmount + base.g * (1 - clampedAmount)),
+		b: clampColorChannel(highlight.b * clampedAmount + base.b * (1 - clampedAmount)),
+	};
 }
 
 export function formatWorkingStatusTextFrame(
