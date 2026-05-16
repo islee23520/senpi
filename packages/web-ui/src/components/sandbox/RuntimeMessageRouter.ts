@@ -89,8 +89,9 @@ export class RuntimeMessageRouter {
 			}
 
 			// Remove user script listener
-			if (this.userScriptMessageListener && typeof chrome !== "undefined" && chrome.runtime?.onUserScriptMessage) {
-				chrome.runtime.onUserScriptMessage.removeListener(this.userScriptMessageListener);
+			const chromeRuntime = typeof chrome === "undefined" ? undefined : chrome.runtime;
+			if (this.userScriptMessageListener && chromeRuntime?.onUserScriptMessage) {
+				chromeRuntime.onUserScriptMessage.removeListener(this.userScriptMessageListener);
 				this.userScriptMessageListener = null;
 			}
 		}

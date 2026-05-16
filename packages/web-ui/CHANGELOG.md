@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed sandbox runtime listener cleanup to preserve the Chrome extension guard while satisfying release checks.
+
 ## [2026.5.15-3] - 2026-05-15
 
 ## [2026.5.15-2] - 2026-05-15
