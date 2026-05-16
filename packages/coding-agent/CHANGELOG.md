@@ -4,10 +4,13 @@
 
 ### Added
 
+- Added a Context Window section to the `/session` output that shows `Used: <tokens> / <contextWindow> (<percent>%)` in opencode-style intuitive notation, with em-dashes for unknown tokens or percent after a pending compaction.
+
 ### Fixed
 
 - Fixed interactive abort settling so messages submitted immediately after Esc start a fresh turn instead of staying queued behind the aborted run.
 - Fixed Esc during streaming or retry waits to auto-fire queued steering/follow-up messages as a fresh prompt after the abort settles, instead of leaving them stranded behind the aborted run or restoring them to the editor for manual re-submission.
+- Fixed `/session` cost to render through `Intl.NumberFormat` USD (e.g. `$0.12`) instead of the raw four-decimal number (`0.1234`).
 
 ## [2026.5.16] - 2026-05-16
 

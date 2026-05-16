@@ -125,6 +125,7 @@ import { ToolExecutionComponent } from "./components/tool-execution.js";
 import { TreeSelectorComponent } from "./components/tree-selector.js";
 import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
+import { formatSessionInfo } from "./session-info-format.js";
 import { resolveStartupToolPaths } from "./startup-tools.js";
 import {
 	getAvailableThemes,
@@ -5337,34 +5338,7 @@ export class InteractiveMode {
 	private handleSessionCommand(): void {
 		const stats = this.session.getSessionStats();
 		const sessionName = this.sessionManager.getSessionName();
-
-		let info = `${theme.bold("Session Info")}\n\n`;
-		if (sessionName) {
-			info += `${theme.fg("dim", "Name:")} ${sessionName}\n`;
-		}
-		info += `${theme.fg("dim", "File:")} ${stats.sessionFile ?? "In-memory"}\n`;
-		info += `${theme.fg("dim", "ID:")} ${stats.sessionId}\n\n`;
-		info += `${theme.bold("Messages")}\n`;
-		info += `${theme.fg("dim", "User:")} ${stats.userMessages}\n`;
-		info += `${theme.fg("dim", "Assistant:")} ${stats.assistantMessages}\n`;
-		info += `${theme.fg("dim", "Tool Calls:")} ${stats.toolCalls}\n`;
-		info += `${theme.fg("dim", "Tool Results:")} ${stats.toolResults}\n`;
-		info += `${theme.fg("dim", "Total:")} ${stats.totalMessages}\n\n`;
-		info += `${theme.bold("Tokens")}\n`;
-		info += `${theme.fg("dim", "Input:")} ${stats.tokens.input.toLocaleString()}\n`;
-		info += `${theme.fg("dim", "Output:")} ${stats.tokens.output.toLocaleString()}\n`;
-		if (stats.tokens.cacheRead > 0) {
-			info += `${theme.fg("dim", "Cache Read:")} ${stats.tokens.cacheRead.toLocaleString()}\n`;
-		}
-		if (stats.tokens.cacheWrite > 0) {
-			info += `${theme.fg("dim", "Cache Write:")} ${stats.tokens.cacheWrite.toLocaleString()}\n`;
-		}
-		info += `${theme.fg("dim", "Total:")} ${stats.tokens.total.toLocaleString()}\n`;
-
-		if (stats.cost > 0) {
-			info += `\n${theme.bold("Cost")}\n`;
-			info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}`;
-		}
+		const info = formatSessionInfo(stats, sessionName);
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(info, 1, 0));
