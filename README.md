@@ -23,7 +23,7 @@ Core source modifications are minimised and tracked in [`changes.md`](#fork-stra
 
 ## Coming from OMO? Recommended extension setup
 
-If you're migrating from [OMO (oh-my-openagent)](https://github.com/code-yeongyu/oh-my-openagent), here is the practical map from "what I used in OMO" to "what to install in senpi". A lot of OMO's signature work is **already wired into senpi as a builtin** (nothing to install); the rest lives in the sibling `../pi-extensions/*` packages and is one `senpi install` away.
+If you're migrating from [OMO (oh-my-openagent)](https://github.com/code-yeongyu/oh-my-openagent), here is the practical map from "what I used in OMO" to "what to install in senpi". A lot of OMO's signature work is **already wired into senpi as a builtin** (nothing to install); the rest lives in the [`code-yeongyu/pi-*`](https://github.com/code-yeongyu?tab=repositories&q=pi-) GitHub repos and is one `senpi install` away.
 
 > senpi is intentionally lighter than OMO — single CLI binary, not an opencode plugin. Some OMO concepts (Discipline Agents, Team Mode, Skills, Hashline, Ralph Loop, `/init-deep`) have **no 1:1 senpi counterpart** and are flagged at the bottom of this section. If you need those, keep using OMO.
 
@@ -41,31 +41,31 @@ If you're migrating from [OMO (oh-my-openagent)](https://github.com/code-yeongyu
 | **Compaction-safe tool pairing** | [`tool-pair-guard`](packages/coding-agent/src/core/extensions/builtin/tool-pair-guard/) — strips orphan `tool_result` blocks. |
 | **Permission system** (opencode-style allow/deny) | [`permission-system`](packages/coding-agent/src/core/extensions/builtin/permission-system/) — rules, JSONL storage, TUI prompts, parser-aware patterns. |
 
-### Install these `../pi-extensions/*` for the OMO-shaped senpi
+### Install these pi-extension packages for the OMO-shaped senpi
 
 ```bash
-senpi install ../pi-extensions/pi-lsp-client            # 🛠️  LSP: rename / goto / refs / diagnostics + /lsp inspector
-senpi install ../pi-extensions/pi-ast-grep              # 🛠️  AST-Grep across 25 languages (auto-downloads sg)
-senpi install ../pi-extensions/pi-comment-checker       # 💬  Comment Checker — the standalone pi port of OMO's hook
-senpi install ../pi-extensions/pi-rules                 #     Context injection: .claude/rules, .cursor/rules, .github/instructions, AGENTS.md, CLAUDE.md
-senpi install ../pi-extensions/pi-nested-agents-md      # 🔍  Auto-injects nearby AGENTS.md (the runtime half of /init-deep)
-senpi install ../pi-extensions/pi-websearch             # 📚  Provider-backed web search (fills the Exa-style slot)
-senpi install ../pi-extensions/pi-webfetch              #     web_fetch tool (markdown / text / HTML, bounded time + size)
-senpi install ../pi-extensions/pi-goal                  #     Persistent goal tracking + continuation prompts (closest thing to Sisyphus discipline)
-senpi install ../pi-extensions/pi-sandbox               #     OS-level sandbox: native / Docker / justbash / QEMU + SSH transport
+senpi install git:github.com/code-yeongyu/pi-lsp-client            # 🛠️  LSP: rename / goto / refs / diagnostics + /lsp inspector
+senpi install git:github.com/code-yeongyu/pi-ast-grep              # 🛠️  AST-Grep across 25 languages (auto-downloads sg)
+senpi install git:github.com/code-yeongyu/pi-comment-checker       # 💬  Comment Checker — the standalone pi port of OMO's hook
+senpi install git:github.com/code-yeongyu/pi-rules                 #     Context injection: .claude/rules, .cursor/rules, .github/instructions, AGENTS.md, CLAUDE.md
+senpi install git:github.com/code-yeongyu/pi-nested-agents-md      # 🔍  Auto-injects nearby AGENTS.md (the runtime half of /init-deep)
+senpi install git:github.com/code-yeongyu/pi-websearch             # 📚  Provider-backed web search (fills the Exa-style slot)
+senpi install git:github.com/code-yeongyu/pi-webfetch              #     web_fetch tool (markdown / text / HTML, bounded time + size)
+senpi install git:github.com/code-yeongyu/pi-goal                  #     Persistent goal tracking + continuation prompts (closest thing to Sisyphus discipline)
+senpi install git:github.com/code-yeongyu/pi-sandbox               #     OS-level sandbox: native / Docker / justbash / QEMU + SSH transport
 
 # Optional — only if you used the matching OMO surface:
-senpi install ../pi-extensions/pi-cua-integration                 # 🖥️  Computer-use bindings (desktop / browser)
-senpi install ../pi-extensions/pi-anthropic-computer-use          #     Claude-native computer use
-senpi install ../pi-extensions/pi-anthropic-code-execution        #     Claude-native code execution sandbox
-senpi install ../pi-extensions/pi-google-code-execution           #     Google-native code execution
-senpi install ../pi-extensions/pi-openai-code-interpreter         #     OpenAI Code Interpreter
-senpi install ../pi-extensions/pi-anthropic-text-editor           #     Claude-native text editor tool
-senpi install ../pi-extensions/pi-anthropic-tool-search           #     Claude-native tool search
-senpi install ../pi-extensions/pi-anthropic-web-fetch             #     Claude-native web fetch
-senpi install ../pi-extensions/pi-google-google-search            #     Google Search grounding
-senpi install ../pi-extensions/pi-google-url-context              #     Google URL grounding
-senpi install ../pi-extensions/pi-openai-api-parallel-tool-calls  #     OpenAI parallel_tool_calls payload support
+senpi install git:github.com/code-yeongyu/pi-cua-integration                 # 🖥️  Computer-use bindings (desktop / browser)
+senpi install git:github.com/code-yeongyu/pi-anthropic-computer-use          #     Claude-native computer use
+senpi install git:github.com/code-yeongyu/pi-anthropic-code-execution        #     Claude-native code execution sandbox
+senpi install git:github.com/code-yeongyu/pi-google-code-execution           #     Google-native code execution
+senpi install git:github.com/code-yeongyu/pi-openai-code-interpreter         #     OpenAI Code Interpreter
+senpi install git:github.com/code-yeongyu/pi-anthropic-text-editor           #     Claude-native text editor tool
+senpi install git:github.com/code-yeongyu/pi-anthropic-tool-search           #     Claude-native tool search
+senpi install git:github.com/code-yeongyu/pi-anthropic-web-fetch             #     Claude-native web fetch
+senpi install git:github.com/code-yeongyu/pi-google-google-search            #     Google Search grounding
+senpi install git:github.com/code-yeongyu/pi-google-url-context              #     Google URL grounding
+senpi install git:github.com/code-yeongyu/pi-openai-api-parallel-tool-calls  #     OpenAI parallel_tool_calls payload support
 ```
 
 Each package is also installable by git URL, e.g. `senpi install git:github.com/code-yeongyu/pi-comment-checker`. See [Senpi Packages](packages/coding-agent/README.md#pi-packages) for the full install / update / remove flow.
@@ -84,56 +84,56 @@ These are part of OMO's opencode harness shape and are intentionally **not** in 
 
 ## Want more? Try the pi-extensions ecosystem
 
-senpi ships a fixed set of builtin extensions and stops there. The sibling [`../pi-extensions`](../pi-extensions) checkout contains the full extension ecosystem: some packages are vendored into senpi as builtins, while the rest can be installed on top when you want extra capabilities like LSP, AST-grep, sandboxing, goal tracking, web search/fetch, or rule loading.
+senpi ships a fixed set of builtin extensions and stops there. The [`code-yeongyu/pi-*`](https://github.com/code-yeongyu?tab=repositories&q=pi-) GitHub repos contain the full extension ecosystem: some packages are vendored into senpi as builtins, while the rest can be installed on top when you want extra capabilities like LSP, AST-grep, sandboxing, goal tracking, web search/fetch, or rule loading.
 
-### Installable sibling extensions
+### Installable extensions
 
-These `../pi-extensions/*` packages are intended to be installed as standalone senpi/pi extensions:
+These [`code-yeongyu/pi-*`](https://github.com/code-yeongyu?tab=repositories&q=pi-) packages are intended to be installed as standalone senpi/pi extensions:
 
 | Extension | What it adds |
 |---|---|
-| [`../pi-extensions/pi-anthropic-code-execution`](../pi-extensions/pi-anthropic-code-execution) | Anthropic-native code execution sandbox. |
-| [`../pi-extensions/pi-anthropic-computer-use`](../pi-extensions/pi-anthropic-computer-use) | Anthropic computer-use bindings. |
-| [`../pi-extensions/pi-anthropic-text-editor`](../pi-extensions/pi-anthropic-text-editor) | Anthropic-native text editor tool. |
-| [`../pi-extensions/pi-anthropic-tool-search`](../pi-extensions/pi-anthropic-tool-search) | Anthropic-native tool search. |
-| [`../pi-extensions/pi-anthropic-web-fetch`](../pi-extensions/pi-anthropic-web-fetch) | Anthropic-native web fetch support. |
-| [`../pi-extensions/pi-ast-grep`](../pi-extensions/pi-ast-grep) | AST-aware code search/replace across 25 languages. Auto-downloads `sg` on first use. |
-| [`../pi-extensions/pi-comment-checker`](../pi-extensions/pi-comment-checker) | Runs comment-quality checks after file-editing tools and shows warnings in the TUI. |
-| [`../pi-extensions/pi-cua-integration`](../pi-extensions/pi-cua-integration) | Computer-use action wiring for desktop/browser interaction surfaces. |
-| [`../pi-extensions/pi-goal`](../pi-extensions/pi-goal) | Persistent goal tracking with Codex-style goal tools, TUI footer, and continuation prompts. |
-| [`../pi-extensions/pi-google-code-execution`](../pi-extensions/pi-google-code-execution) | Google native code execution. |
-| [`../pi-extensions/pi-google-google-search`](../pi-extensions/pi-google-google-search) | Google Search grounding. |
-| [`../pi-extensions/pi-google-url-context`](../pi-extensions/pi-google-url-context) | Google URL grounding. |
-| [`../pi-extensions/pi-lsp-client`](../pi-extensions/pi-lsp-client) | LSP integration: `lsp_rename`, `lsp_goto_definition`, `lsp_find_references`, `lsp_diagnostics`, plus a `/lsp` inspector. |
-| [`../pi-extensions/pi-nested-agents-md`](../pi-extensions/pi-nested-agents-md) | Auto-injects nearby `AGENTS.md` files when the agent reads from a nested directory. |
-| [`../pi-extensions/pi-openai-api-parallel-tool-calls`](../pi-extensions/pi-openai-api-parallel-tool-calls) | OpenAI `parallel_tool_calls` payload support. |
-| [`../pi-extensions/pi-openai-code-interpreter`](../pi-extensions/pi-openai-code-interpreter) | OpenAI Code Interpreter. |
-| [`../pi-extensions/pi-rules`](../pi-extensions/pi-rules) | Auto-discovers rule files from `.sisyphus/rules/`, `.claude/rules/`, `.cursor/rules/`, `.github/instructions/`, `AGENTS.md`, and `CLAUDE.md`. |
-| [`../pi-extensions/pi-sandbox`](../pi-extensions/pi-sandbox) | OS-level sandbox policy with native, Docker, justbash, and QEMU backends plus SSH transport facets. |
-| [`../pi-extensions/pi-webfetch`](../pi-extensions/pi-webfetch) | `web_fetch` tool: URL content as markdown, plain text, or HTML with bounded time and size. |
-| [`../pi-extensions/pi-websearch`](../pi-extensions/pi-websearch) | Provider-backed web search with config-gated activation, TUI status, and source-aware results. |
+| [`pi-anthropic-code-execution`](https://github.com/code-yeongyu/pi-anthropic-code-execution) | Anthropic-native code execution sandbox. |
+| [`pi-anthropic-computer-use`](https://github.com/code-yeongyu/pi-anthropic-computer-use) | Anthropic computer-use bindings. |
+| [`pi-anthropic-text-editor`](https://github.com/code-yeongyu/pi-anthropic-text-editor) | Anthropic-native text editor tool. |
+| [`pi-anthropic-tool-search`](https://github.com/code-yeongyu/pi-anthropic-tool-search) | Anthropic-native tool search. |
+| [`pi-anthropic-web-fetch`](https://github.com/code-yeongyu/pi-anthropic-web-fetch) | Anthropic-native web fetch support. |
+| [`pi-ast-grep`](https://github.com/code-yeongyu/pi-ast-grep) | AST-aware code search/replace across 25 languages. Auto-downloads `sg` on first use. |
+| [`pi-comment-checker`](https://github.com/code-yeongyu/pi-comment-checker) | Runs comment-quality checks after file-editing tools and shows warnings in the TUI. |
+| [`pi-cua-integration`](https://github.com/code-yeongyu/pi-cua-integration) | Computer-use action wiring for desktop/browser interaction surfaces. |
+| [`pi-goal`](https://github.com/code-yeongyu/pi-goal) | Persistent goal tracking with Codex-style goal tools, TUI footer, and continuation prompts. |
+| [`pi-google-code-execution`](https://github.com/code-yeongyu/pi-google-code-execution) | Google native code execution. |
+| [`pi-google-google-search`](https://github.com/code-yeongyu/pi-google-google-search) | Google Search grounding. |
+| [`pi-google-url-context`](https://github.com/code-yeongyu/pi-google-url-context) | Google URL grounding. |
+| [`pi-lsp-client`](https://github.com/code-yeongyu/pi-lsp-client) | LSP integration: `lsp_rename`, `lsp_goto_definition`, `lsp_find_references`, `lsp_diagnostics`, plus a `/lsp` inspector. |
+| [`pi-nested-agents-md`](https://github.com/code-yeongyu/pi-nested-agents-md) | Auto-injects nearby `AGENTS.md` files when the agent reads from a nested directory. |
+| [`pi-openai-api-parallel-tool-calls`](https://github.com/code-yeongyu/pi-openai-api-parallel-tool-calls) | OpenAI `parallel_tool_calls` payload support. |
+| [`pi-openai-code-interpreter`](https://github.com/code-yeongyu/pi-openai-code-interpreter) | OpenAI Code Interpreter. |
+| [`pi-rules`](https://github.com/code-yeongyu/pi-rules) | Auto-discovers rule files from `.sisyphus/rules/`, `.claude/rules/`, `.cursor/rules/`, `.github/instructions/`, `AGENTS.md`, and `CLAUDE.md`. |
+| [`pi-sandbox`](https://github.com/code-yeongyu/pi-sandbox) | OS-level sandbox policy with native, Docker, justbash, and QEMU backends plus SSH transport facets. |
+| [`pi-webfetch`](https://github.com/code-yeongyu/pi-webfetch) | `web_fetch` tool: URL content as markdown, plain text, or HTML with bounded time and size. |
+| [`pi-websearch`](https://github.com/code-yeongyu/pi-websearch) | Provider-backed web search with config-gated activation, TUI status, and source-aware results. |
 
 Install any of them with:
 
 ```bash
-senpi install ../pi-extensions/pi-ast-grep
-senpi install ../pi-extensions/pi-lsp-client
-# ...or use the matching git:github.com/code-yeongyu/<package> URL.
+senpi install git:github.com/code-yeongyu/pi-ast-grep
+senpi install git:github.com/code-yeongyu/pi-lsp-client
+# ...substitute any of the package names from the table above.
 ```
 
 See [Senpi Packages](packages/coding-agent/README.md#pi-packages) for the install / update / remove flow.
 
-### `../pi-extensions` packages already shipped as senpi builtins
+### pi-extension packages already shipped as senpi builtins
 
-You do **not** need to install these sibling packages for normal senpi use; their functionality is already included in the binary. This table is intentionally limited to packages that map to the currently registered `builtinExtensions` list:
+You do **not** need to install these packages for normal senpi use; their functionality is already included in the binary. This table is intentionally limited to packages that map to the currently registered `builtinExtensions` list:
 
-| Sibling package | Included as | Builtin capability |
+| Package | Included as | Builtin capability |
 |---|---|---|
-| [`../pi-extensions/pi-anthropic-web-search`](../pi-extensions/pi-anthropic-web-search) | `anthropic-web-search` | Anthropic-native web search support. |
-| [`../pi-extensions/pi-apply-patch`](../pi-extensions/pi-apply-patch) | `gpt-apply-patch` | Codex-style `apply_patch` tool for GPT-family runs. |
-| [`../pi-extensions/pi-bash-timeout`](../pi-extensions/pi-bash-timeout) | `bash-timeout` | Bash timeout defaults, max timeout enforcement, and prompt policy. |
-| [`../pi-extensions/pi-openai-web-search`](../pi-extensions/pi-openai-web-search) | `openai-web-search` | OpenAI Responses native web search. |
-| [`../pi-extensions/pi-todotools`](../pi-extensions/pi-todotools) | `todowrite` | `todowrite` / `todoread`, todo sidebar state, workflow prompt guidance, and continuation follow-ups. |
+| [`pi-anthropic-web-search`](https://github.com/code-yeongyu/pi-anthropic-web-search) | `anthropic-web-search` | Anthropic-native web search support. |
+| [`pi-apply-patch`](https://github.com/code-yeongyu/pi-apply-patch) | `gpt-apply-patch` | Codex-style `apply_patch` tool for GPT-family runs. |
+| [`pi-bash-timeout`](https://github.com/code-yeongyu/pi-bash-timeout) | `bash-timeout` | Bash timeout defaults, max timeout enforcement, and prompt policy. |
+| [`pi-openai-web-search`](https://github.com/code-yeongyu/pi-openai-web-search) | `openai-web-search` | OpenAI Responses native web search. |
+| [`pi-todotools`](https://github.com/code-yeongyu/pi-todotools) | `todowrite` | `todowrite` / `todoread`, todo sidebar state, workflow prompt guidance, and continuation follow-ups. |
 
 Other builtins such as `permission-system`, `prompt-preset`, `anthropic-bash`, `service-tier`, `tool-pair-guard`, and `compaction` are senpi-owned builtin extensions, not installable sibling packages.
 
