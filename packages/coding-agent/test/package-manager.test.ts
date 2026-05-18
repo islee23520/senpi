@@ -4,10 +4,9 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CONFIG_DIR_NAME } from "../src/config.js";
 import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
-import { shouldUseWindowsShell } from "../src/utils/child-process.js";
+import { resolveSpawnCommand } from "../src/utils/child-process.js";
 
 function normalizeForMatch(value: string): string {
 	return value.replace(/\\/g, "/");
@@ -25,12 +24,6 @@ class MockSpawnedProcess extends EventEmitter {
 		this.emit("close", null, "SIGTERM");
 		return true;
 	}
-}
-
-interface PackageManagerInternals {
-	getLocalGitUpdateTarget(installedPath: string): Promise<{ ref: string; head: string; fetchArgs: string[] }>;
-	runCommand(command: string, args: string[], options?: { cwd?: string }): Promise<void>;
-	runCommandCapture(command: string, args: string[], options?: { cwd?: string; timeoutMs?: number }): Promise<string>;
 }
 
 // Helper to check if a resource is enabled
@@ -143,7 +136,7 @@ Content`,
 		});
 
 		it("should resolve project paths relative to .pi", async () => {
-			const extDir = join(tempDir, CONFIG_DIR_NAME, "extensions");
+			const extDir = join(tempDir, ".pi", "extensions");
 			mkdirSync(extDir, { recursive: true });
 			const extPath = join(extDir, "project-ext.ts");
 			writeFileSync(extPath, "export default function() {}");
@@ -195,15 +188,15 @@ Content`,
 				writeFileSync(join(sharedThemesDir, "shared.json"), JSON.stringify({ name: "shared-theme" }));
 
 				mkdirSync(join(agentDir), { recursive: true });
-				mkdirSync(join(tempDir, CONFIG_DIR_NAME), { recursive: true });
+				mkdirSync(join(tempDir, ".pi"), { recursive: true });
 				symlinkSync(sharedExtensionsDir, join(agentDir, "extensions"), "dir");
 				symlinkSync(sharedSkillsDir, join(agentDir, "skills"), "dir");
 				symlinkSync(sharedPromptsDir, join(agentDir, "prompts"), "dir");
 				symlinkSync(sharedThemesDir, join(agentDir, "themes"), "dir");
-				symlinkSync(sharedExtensionsDir, join(tempDir, CONFIG_DIR_NAME, "extensions"), "dir");
-				symlinkSync(sharedSkillsDir, join(tempDir, CONFIG_DIR_NAME, "skills"), "dir");
-				symlinkSync(sharedPromptsDir, join(tempDir, CONFIG_DIR_NAME, "prompts"), "dir");
-				symlinkSync(sharedThemesDir, join(tempDir, CONFIG_DIR_NAME, "themes"), "dir");
+				symlinkSync(sharedExtensionsDir, join(tempDir, ".pi", "extensions"), "dir");
+				symlinkSync(sharedSkillsDir, join(tempDir, ".pi", "skills"), "dir");
+				symlinkSync(sharedPromptsDir, join(tempDir, ".pi", "prompts"), "dir");
+				symlinkSync(sharedThemesDir, join(tempDir, ".pi", "themes"), "dir");
 
 				const result = await packageManager.resolve();
 
@@ -235,7 +228,7 @@ Content`,
 		});
 
 		it("should auto-discover project prompts with overrides", async () => {
-			const promptsDir = join(tempDir, CONFIG_DIR_NAME, "prompts");
+			const promptsDir = join(tempDir, ".pi", "prompts");
 			mkdirSync(promptsDir, { recursive: true });
 			const promptPath = join(promptsDir, "is.md");
 			writeFileSync(promptPath, "Is prompt");
@@ -450,7 +443,7 @@ Content`,
 
 			try {
 				const cwd = join(tempDir, "scratch", "nested");
-				const localAgentDir = join(tempDir, CONFIG_DIR_NAME, "agent");
+				const localAgentDir = join(tempDir, ".pi", "agent");
 				const localSettingsManager = SettingsManager.inMemory();
 				mkdirSync(cwd, { recursive: true });
 				mkdirSync(localAgentDir, { recursive: true });
@@ -532,9 +525,9 @@ Content`,
 		});
 
 		it("should not apply parent .gitignore to .pi auto-discovery", async () => {
-			writeFileSync(join(tempDir, ".gitignore"), `${CONFIG_DIR_NAME}\n`);
+			writeFileSync(join(tempDir, ".gitignore"), ".pi\n");
 
-			const skillDir = join(tempDir, CONFIG_DIR_NAME, "skills", "auto-skill");
+			const skillDir = join(tempDir, ".pi", "skills", "auto-skill");
 			mkdirSync(skillDir, { recursive: true });
 			const skillPath = join(skillDir, "SKILL.md");
 			writeFileSync(skillPath, "---\nname: auto-skill\ndescription: Auto\n---\nContent");
@@ -625,13 +618,58 @@ Content`,
 	});
 
 	describe("windows command spawning", () => {
-		it("should avoid the shell for git so Windows paths with spaces stay single arguments", () => {
+		it("should keep unresolved executables as argv commands", () => {
 			vi.spyOn(process, "platform", "get").mockReturnValue("win32");
 
-			expect(shouldUseWindowsShell("git")).toBe(false);
-			expect(shouldUseWindowsShell("npm")).toBe(true);
-			expect(shouldUseWindowsShell("pnpm")).toBe(true);
-			expect(shouldUseWindowsShell("C:/Program Files/nodejs/npm.cmd")).toBe(true);
+			const resolved = resolveSpawnCommand("git", ["clone", "repo", "C:\\Users\\A B\\repo"], {
+				env: { PATH: tempDir },
+			});
+
+			expect(resolved).toEqual({ command: "git", args: ["clone", "repo", "C:\\Users\\A B\\repo"] });
+		});
+
+		it("should prefer Windows executables over command scripts", () => {
+			vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+			const binDir = join(tempDir, "bin");
+			mkdirSync(binDir, { recursive: true });
+			writeFileSync(join(binDir, "npm.exe"), "");
+			writeFileSync(join(binDir, "npm.cmd"), "@echo off\r\n");
+
+			const args = ["install", "pkg", "--prefix", "C:\\Users\\A B\\.pi\\npm"];
+			const resolved = resolveSpawnCommand("npm", args, { env: { PATH: binDir } });
+
+			expect(resolved).toEqual({ command: join(binDir, "npm.exe"), args });
+		});
+
+		it("should resolve npm command shims to their Node entrypoint without a shell", () => {
+			vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+			const binDir = join(tempDir, "node-bin");
+			const npmCli = join(binDir, "node_modules", "npm", "bin", "npm-cli.js");
+			mkdirSync(join(binDir, "node_modules", "npm", "bin"), { recursive: true });
+			writeFileSync(join(binDir, "node.exe"), "");
+			writeFileSync(npmCli, "");
+			writeFileSync(
+				join(binDir, "npm.cmd"),
+				'@ECHO off\r\nSET "dp0=%~dp0"\r\nSET "_prog=%dp0%\\node.exe"\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%" "%dp0%\\node_modules\\npm\\bin\\npm-cli.js" %*\r\n',
+			);
+
+			const args = ["install", "pkg", "--prefix", "C:\\Users\\A B\\.pi\\npm"];
+			const resolved = resolveSpawnCommand("npm", args, { env: { PATH: binDir } });
+
+			expect(resolved).toEqual({ command: join(binDir, "node.exe"), args: [npmCli, ...args] });
+		});
+
+		it("should reject unrecognized Windows command scripts instead of using cmd.exe", () => {
+			vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+			const binDir = join(tempDir, "bin");
+			mkdirSync(binDir, { recursive: true });
+			writeFileSync(join(binDir, "npm.cmd"), "@echo off\r\necho %*\r\n");
+
+			expect(() =>
+				resolveSpawnCommand("npm", ["install", "pkg"], {
+					env: { PATH: binDir },
+				}),
+			).toThrow("Refusing to run Windows command shim without a shell");
 		});
 	});
 
@@ -652,7 +690,28 @@ Content`,
 
 			expect(runCommandSpy).toHaveBeenCalledWith(
 				"mise",
-				["exec", "node@20", "--", "npm", "install", "-g", "@scope/pkg"],
+				["exec", "node@20", "--", "npm", "install", "@scope/pkg", "--prefix", join(agentDir, "npm")],
+				undefined,
+			);
+		});
+
+		it("should use bun --cwd for npm package installs", async () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["mise", "exec", "bun@1", "--", "bun"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const runCommandSpy = vi.spyOn(packageManager as any, "runCommand").mockResolvedValue(undefined);
+
+			await packageManager.install("npm:@scope/pkg");
+
+			expect(runCommandSpy).toHaveBeenCalledWith(
+				"mise",
+				["exec", "bun@1", "--", "bun", "install", "@scope/pkg", "--cwd", join(agentDir, "npm")],
 				undefined,
 			);
 		});
@@ -704,7 +763,7 @@ Content`,
 
 		it("should update git package dependencies with --omit=dev", async () => {
 			const source = "git:github.com/user/repo";
-			const targetDir = join(tempDir, CONFIG_DIR_NAME, "git", "github.com", "user", "repo");
+			const targetDir = join(tempDir, ".senpi", "git", "github.com", "user", "repo");
 			mkdirSync(targetDir, { recursive: true });
 			writeFileSync(join(targetDir, "package.json"), JSON.stringify({ name: "repo", version: "1.0.0" }));
 			settingsManager.setProjectPackages([source]);
@@ -740,7 +799,7 @@ Content`,
 			});
 
 			const source = "git:github.com/user/repo";
-			const targetDir = join(tempDir, CONFIG_DIR_NAME, "git", "github.com", "user", "repo");
+			const targetDir = join(tempDir, ".senpi", "git", "github.com", "user", "repo");
 			mkdirSync(targetDir, { recursive: true });
 			writeFileSync(join(targetDir, "package.json"), JSON.stringify({ name: "repo", version: "1.0.0" }));
 			settingsManager.setProjectPackages([source]);
@@ -804,6 +863,135 @@ Content`,
 
 			expect(packageManager.getInstalledPath("npm:@scope/pkg", "user")).toBeUndefined();
 			expect(runCommandSyncSpy).toHaveBeenNthCalledWith(2, "mise", ["exec", "node@22", "--", "npm", "root", "-g"]);
+		});
+
+		it("should install user npm packages into the pi-managed npm root", async () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["pnpm"],
+				packages: ["npm:pnpm-pkg"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const packagePath = join(agentDir, "npm", "node_modules", "pnpm-pkg");
+			vi.spyOn(packageManager as any, "runCommandSync").mockImplementation(() => {
+				throw new Error("legacy lookup unavailable");
+			});
+			const runCommandSpy = vi
+				.spyOn(packageManager as any, "runCommand")
+				.mockImplementation(async (...callArgs: unknown[]) => {
+					const [command, args] = callArgs as [string, string[]];
+					expect(command).toBe("pnpm");
+					expect(args).toEqual([
+						"install",
+						"pnpm-pkg",
+						"--prefix",
+						join(agentDir, "npm"),
+						"--config.strict-dep-builds=false",
+					]);
+					mkdirSync(join(packagePath, "extensions"), { recursive: true });
+					writeFileSync(join(packagePath, "package.json"), JSON.stringify({ name: "pnpm-pkg", version: "1.0.0" }));
+					writeFileSync(join(packagePath, "extensions", "index.ts"), "export default function() {};");
+				});
+
+			const first = await packageManager.resolve();
+			const second = await packageManager.resolve();
+
+			expect(first.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled)).toBe(
+				true,
+			);
+			expect(
+				second.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled),
+			).toBe(true);
+			expect(runCommandSpy).toHaveBeenCalledTimes(1);
+			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
+		});
+
+		it("should load legacy pnpm global package paths from pnpm list output", async () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["pnpm"],
+				packages: ["npm:pnpm-pkg"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const pnpmRoot = join(tempDir, "pnpm", "global", "v11");
+			const packagePath = join(pnpmRoot, "20-hash", "node_modules", "pnpm-pkg");
+			mkdirSync(join(packagePath, "extensions"), { recursive: true });
+			writeFileSync(join(packagePath, "package.json"), JSON.stringify({ name: "pnpm-pkg", version: "1.0.0" }));
+			writeFileSync(join(packagePath, "extensions", "index.ts"), "export default function() {};");
+
+			vi.spyOn(packageManager as any, "runCommandSync").mockImplementation((...callArgs: unknown[]) => {
+				const [command, args] = callArgs as [string, string[]];
+				if (command !== "pnpm") {
+					throw new Error(`unexpected command ${command}`);
+				}
+				if (args.join(" ") === "list -g --depth 0 --json") {
+					return JSON.stringify([
+						{
+							path: pnpmRoot,
+							dependencies: { "pnpm-pkg": { version: "1.0.0", path: packagePath } },
+						},
+					]);
+				}
+				throw new Error(`unexpected args ${args.join(" ")}`);
+			});
+			const runCommandSpy = vi.spyOn(packageManager as any, "runCommand").mockResolvedValue(undefined);
+
+			const result = await packageManager.resolve();
+
+			expect(
+				result.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled),
+			).toBe(true);
+			expect(runCommandSpy).not.toHaveBeenCalled();
+			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
+		});
+
+		it("should resolve wrapped pnpm global package paths from pnpm list output", () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["mise", "exec", "node@20", "--", "pnpm"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const pnpmRoot = join(tempDir, "pnpm", "global", "v11");
+			const packagePath = join(pnpmRoot, "20-hash", "node_modules", "pnpm-pkg");
+			mkdirSync(packagePath, { recursive: true });
+
+			vi.spyOn(packageManager as any, "runCommandSync").mockImplementation((...callArgs: unknown[]) => {
+				const [command, args] = callArgs as [string, string[]];
+				expect(command).toBe("mise");
+				if (args.join(" ") === "exec node@20 -- pnpm list -g --depth 0 --json") {
+					return JSON.stringify([{ path: pnpmRoot, dependencies: { "pnpm-pkg": { path: packagePath } } }]);
+				}
+				throw new Error(`unexpected args ${args.join(" ")}`);
+			});
+
+			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
+		});
+
+		it("should ignore malformed legacy pnpm global package lists", () => {
+			settingsManager = SettingsManager.inMemory({
+				npmCommand: ["pnpm"],
+			});
+			packageManager = new DefaultPackageManager({
+				cwd: tempDir,
+				agentDir,
+				settingsManager,
+			});
+
+			vi.spyOn(packageManager as any, "runCommandSync").mockReturnValue("not json");
+
+			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBeUndefined();
 		});
 	});
 
@@ -899,7 +1087,7 @@ Content`,
 			expect(added).toBe(true);
 
 			const settings = settingsManager.getProjectSettings();
-			const rel = relative(join(tempDir, CONFIG_DIR_NAME), projectPkgDir);
+			const rel = relative(join(tempDir, ".pi"), projectPkgDir);
 			const expected = rel.startsWith(".") ? rel : `./${rel}`;
 			expect(settings.packages?.[0]).toBe(expected);
 		});
@@ -1593,19 +1781,19 @@ Content`,
 	describe("multi-file extension discovery (issue #1102)", () => {
 		it("should only load index.ts from subdirectories, not helper modules", async () => {
 			// Regression test: packages with multi-file extensions in subdirectories
-			// should only load the index.ts entry point, not helper modules like helpers.ts
+			// should only load the index.ts entry point, not helper modules like agents.ts
 			const pkgDir = join(tempDir, "multifile-pkg");
-			mkdirSync(join(pkgDir, "extensions", "workflow"), { recursive: true });
+			mkdirSync(join(pkgDir, "extensions", "subagent"), { recursive: true });
 
 			// Main entry point
 			writeFileSync(
-				join(pkgDir, "extensions", "workflow", "index.ts"),
-				`import { helper } from "./helpers.js";
+				join(pkgDir, "extensions", "subagent", "index.ts"),
+				`import { helper } from "./agents.js";
 export default function(api) { api.registerTool({ name: "test", description: "test", execute: async () => helper() }); }`,
 			);
 			// Helper module (should NOT be loaded as standalone extension)
 			writeFileSync(
-				join(pkgDir, "extensions", "workflow", "helpers.ts"),
+				join(pkgDir, "extensions", "subagent", "agents.ts"),
 				`export function helper() { return "helper"; }`,
 			);
 			// Top-level extension file (should be loaded)
@@ -1614,11 +1802,11 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			const result = await packageManager.resolveExtensionSources([pkgDir]);
 
 			// Should find the index.ts and standalone.ts
-			expect(result.extensions.some((r) => pathEndsWith(r.path, "workflow/index.ts") && r.enabled)).toBe(true);
+			expect(result.extensions.some((r) => pathEndsWith(r.path, "subagent/index.ts") && r.enabled)).toBe(true);
 			expect(result.extensions.some((r) => pathEndsWith(r.path, "standalone.ts") && r.enabled)).toBe(true);
 
-			// Should NOT find helpers.ts as a standalone extension
-			expect(result.extensions.some((r) => pathEndsWith(r.path, "helpers.ts"))).toBe(false);
+			// Should NOT find agents.ts as a standalone extension
+			expect(result.extensions.some((r) => pathEndsWith(r.path, "agents.ts"))).toBe(false);
 		});
 
 		it("should respect package.json pi.extensions manifest in subdirectories", async () => {
@@ -1696,7 +1884,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 
 	describe("offline mode and network timeouts", () => {
 		it("should update project npm packages using @latest when newer version is available", async () => {
-			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
+			const installedPath = join(tempDir, ".senpi", "npm", "node_modules", "example");
 			mkdirSync(installedPath, { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			settingsManager.setProjectPackages(["npm:example"]);
@@ -1713,13 +1901,13 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			);
 			expect(runCommandSpy).toHaveBeenCalledWith(
 				"npm",
-				["install", "example@latest", "--prefix", join(tempDir, CONFIG_DIR_NAME, "npm")],
+				["install", "example@latest", "--prefix", join(tempDir, ".senpi", "npm")],
 				undefined,
 			);
 		});
 
 		it("should skip project npm update when installed version matches latest", async () => {
-			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
+			const installedPath = join(tempDir, ".senpi", "npm", "node_modules", "example");
 			mkdirSync(installedPath, { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.2.3" }));
 			settingsManager.setProjectPackages(["npm:example"]);
@@ -1737,14 +1925,44 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(runCommandSpy).not.toHaveBeenCalled();
 		});
 
-		it("should batch npm updates per scope and run git updates in parallel while skipping pinned and current packages", async () => {
-			vi.spyOn(packageManager as any, "getGlobalNpmRoot").mockReturnValue(join(agentDir, "node_modules"));
+		it("should migrate legacy user npm installs into the managed npm root during update", async () => {
+			const legacyRoot = join(tempDir, "legacy-global", "node_modules");
+			const legacyPath = join(legacyRoot, "legacy-pkg");
+			const managedPath = join(agentDir, "npm", "node_modules", "legacy-pkg");
+			mkdirSync(legacyPath, { recursive: true });
+			writeFileSync(join(legacyPath, "package.json"), JSON.stringify({ name: "legacy-pkg", version: "1.0.0" }));
+			settingsManager.setPackages(["npm:legacy-pkg"]);
 
-			const userOldPath = join(agentDir, "node_modules", "user-old");
-			const userCurrentPath = join(agentDir, "node_modules", "user-current");
-			const userUnknownPath = join(agentDir, "node_modules", "user-unknown");
-			const projectOldPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "project-old");
-			const projectCurrentPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "project-current");
+			vi.spyOn(packageManager as any, "getGlobalNpmRoot").mockReturnValue(legacyRoot);
+			const runCommandCaptureSpy = vi.spyOn(packageManager as any, "runCommandCapture").mockResolvedValue('"1.0.0"');
+			const runCommandSpy = vi
+				.spyOn(packageManager as any, "runCommand")
+				.mockImplementation(async (...callArgs: unknown[]) => {
+					const [command, args] = callArgs as [string, string[]];
+					expect(command).toBe("npm");
+					expect(args).toEqual(["install", "legacy-pkg@latest", "--prefix", join(agentDir, "npm")]);
+					mkdirSync(managedPath, { recursive: true });
+					writeFileSync(
+						join(managedPath, "package.json"),
+						JSON.stringify({ name: "legacy-pkg", version: "1.0.0" }),
+					);
+				});
+
+			expect(packageManager.getInstalledPath("npm:legacy-pkg", "user")).toBe(legacyPath);
+
+			await packageManager.update("npm:legacy-pkg");
+
+			expect(runCommandCaptureSpy).not.toHaveBeenCalled();
+			expect(runCommandSpy).toHaveBeenCalledTimes(1);
+			expect(packageManager.getInstalledPath("npm:legacy-pkg", "user")).toBe(managedPath);
+		});
+
+		it("should batch npm updates per scope and run git updates in parallel while skipping pinned and current packages", async () => {
+			const userOldPath = join(agentDir, "npm", "node_modules", "user-old");
+			const userCurrentPath = join(agentDir, "npm", "node_modules", "user-current");
+			const userUnknownPath = join(agentDir, "npm", "node_modules", "user-unknown");
+			const projectOldPath = join(tempDir, ".senpi", "npm", "node_modules", "project-old");
+			const projectCurrentPath = join(tempDir, ".senpi", "npm", "node_modules", "project-current");
 			const installPaths = [userOldPath, userCurrentPath, userUnknownPath, projectOldPath, projectCurrentPath];
 			for (const installPath of installPaths) {
 				mkdirSync(installPath, { recursive: true });
@@ -1832,50 +2050,18 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(runCommandSpy).toHaveBeenNthCalledWith(
 				1,
 				"npm",
-				["install", "-g", "user-old@latest", "user-unknown@latest"],
+				["install", "user-old@latest", "user-unknown@latest", "--prefix", join(agentDir, "npm")],
 				undefined,
 			);
 			expect(runCommandSpy).toHaveBeenNthCalledWith(
 				2,
 				"npm",
-				[
-					"install",
-					"project-old@latest",
-					"project-missing@latest",
-					"--prefix",
-					join(tempDir, CONFIG_DIR_NAME, "npm"),
-				],
+				["install", "project-old@latest", "project-missing@latest", "--prefix", join(tempDir, ".senpi", "npm")],
 				undefined,
 			);
 			expect(updateGitSpy).toHaveBeenCalledTimes(3);
 			expect(maxConcurrentNpmUpdates).toBeGreaterThan(1);
 			expect(maxConcurrentGitUpdates).toBeGreaterThan(1);
-		});
-
-		it("should reinstall git package dependencies when the checkout is already current", async () => {
-			const source = "git:github.com/user/repo";
-			const targetDir = join(agentDir, "git", "github.com", "user", "repo");
-			mkdirSync(targetDir, { recursive: true });
-			writeFileSync(join(targetDir, "package.json"), JSON.stringify({ name: "repo", version: "1.0.0" }));
-			settingsManager.setPackages([source]);
-
-			const managerWithInternals = Object.getPrototypeOf(packageManager) as PackageManagerInternals;
-			vi.spyOn(managerWithInternals, "getLocalGitUpdateTarget").mockResolvedValue({
-				ref: "origin/main",
-				head: "abc123",
-				fetchArgs: ["fetch", "--prune", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"],
-			});
-			const runCommandSpy = vi.spyOn(managerWithInternals, "runCommand").mockResolvedValue(undefined);
-			vi.spyOn(managerWithInternals, "runCommandCapture").mockResolvedValue("abc123");
-
-			await packageManager.update(source);
-
-			expect(runCommandSpy).toHaveBeenCalledWith(
-				"git",
-				["fetch", "--prune", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"],
-				{ cwd: targetDir },
-			);
-			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
 		});
 
 		it("should suggest npm source prefixes for update lookups", async () => {
@@ -1923,7 +2109,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should not run npm view during resolve for installed unpinned packages", async () => {
-			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
+			const installedPath = join(tempDir, ".senpi", "npm", "node_modules", "example");
 			mkdirSync(join(installedPath, "extensions"), { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			writeFileSync(join(installedPath, "extensions", "index.ts"), "export default function() {};");
@@ -1937,7 +2123,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should reinstall pinned npm packages when installed version does not match", async () => {
-			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
+			const installedPath = join(tempDir, ".senpi", "npm", "node_modules", "example");
 			mkdirSync(installedPath, { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			settingsManager.setProjectPackages(["npm:example@2.0.0"]);
@@ -1960,7 +2146,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should report updates for installed unpinned npm packages", async () => {
-			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
+			const installedPath = join(tempDir, ".senpi", "npm", "node_modules", "example");
 			mkdirSync(installedPath, { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			settingsManager.setProjectPackages(["npm:example"]);
@@ -1979,7 +2165,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should skip pinned packages when checking for updates", async () => {
-			const installedNpmPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
+			const installedNpmPath = join(tempDir, ".senpi", "npm", "node_modules", "example");
 			mkdirSync(installedNpmPath, { recursive: true });
 			writeFileSync(join(installedNpmPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			const parsedGitSource = (packageManager as any).parseSource("git:github.com/example/repo@v1");

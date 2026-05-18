@@ -25,7 +25,13 @@ import type {
 	ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
-import { cleanupSessionResources, isContextOverflow, modelsAreEqual, resetApiProviders } from "@earendil-works/pi-ai";
+import {
+	cleanupSessionResources,
+	isContextOverflow,
+	modelsAreEqual,
+	resetApiProviders,
+	streamSimple,
+} from "@earendil-works/pi-ai";
 import { expandTildePath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
@@ -440,6 +446,19 @@ export class AgentSession {
 			);
 		}
 		throw new Error(formatNoApiKeyFoundMessage(model.provider));
+	}
+
+	private async _getCompactionRequestAuth(model: Model<any>): Promise<{
+		apiKey?: string;
+		headers?: Record<string, string>;
+		extraBody?: Record<string, unknown>;
+	}> {
+		if (this.agent.streamFn === streamSimple) {
+			return this._getRequiredRequestAuth(model);
+		}
+
+		const result = await this._modelRegistry.getApiKeyAndHeaders(model);
+		return result.ok ? { apiKey: result.apiKey, headers: result.headers, extraBody: result.extraBody } : {};
 	}
 
 	/**
@@ -1967,7 +1986,7 @@ export class AgentSession {
 			}
 
 			if (!compactionResult) {
-				const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(this.model);
+				const { apiKey, headers, extraBody } = await this._getCompactionRequestAuth(this.model);
 				compactionResult = await compact(
 					preparation,
 					this.model,
@@ -1977,6 +1996,7 @@ export class AgentSession {
 					signal,
 					extraBody,
 					this.thinkingLevel,
+					this.agent.streamFn,
 				);
 			}
 		}
@@ -2263,7 +2283,7 @@ export class AgentSession {
 			}
 
 			const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
-			if (!authResult.ok || !authResult.apiKey) {
+			if (this.agent.streamFn === streamSimple && (!authResult.ok || !authResult.apiKey)) {
 				if (reason === "overflow") this._overflowRecoveryAttempted = false;
 				this._emit({
 					type: "compaction_end",

@@ -638,6 +638,21 @@ export class InteractiveMode {
 		// lazily by the tools that need them.
 		this.fdPath = resolveStartupToolPaths().fdPath;
 
+		if (this.session.scopedModels.length > 0 && (this.options.verbose || !this.settingsManager.getQuietStartup())) {
+			const modelList = this.session.scopedModels
+				.map((sm) => {
+					const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
+					return `${sm.model.id}${thinkingStr}`;
+				})
+				.join(", ");
+			const cycleKeys = this.keybindings.getKeys("app.model.cycleForward");
+			const cycleHint =
+				cycleKeys.length > 0
+					? theme.fg("muted", ` (${formatKeyText(cycleKeys.join("/"), { capitalize: true })} to cycle)`)
+					: "";
+			console.log(theme.fg("dim", `Model scope: ${modelList}${cycleHint}`));
+		}
+
 		// Add header container as first child
 		this.ui.addChild(this.headerContainer);
 

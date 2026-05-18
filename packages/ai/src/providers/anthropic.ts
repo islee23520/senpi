@@ -1041,6 +1041,7 @@ function createClient(
 		sessionId && getAnthropicCompat(model).sendSessionAffinityHeaders ? { "x-session-affinity": sessionId } : {};
 	const client = new Anthropic({
 		apiKey,
+		authToken: null,
 		baseURL: model.baseUrl,
 		dangerouslyAllowBrowser: true,
 		defaultHeaders: mergeHeaders(

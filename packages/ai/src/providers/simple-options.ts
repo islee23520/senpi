@@ -126,10 +126,20 @@ export const BEDROCK_RESERVED_BODY_KEYS: ReadonlySet<string> = new Set([
 	"requestMetadata",
 ]);
 
+const DEFAULT_MAX_OUTPUT_TOKENS = 32000;
+const CONTEXT_WINDOW_OUTPUT_TOLERANCE = 1024;
+
 export function buildBaseOptions(model: Model<Api>, options?: SimpleStreamOptions, apiKey?: string): StreamOptions {
+	const defaultMaxTokens =
+		model.maxTokens > 0
+			? model.maxTokens >= model.contextWindow - CONTEXT_WINDOW_OUTPUT_TOLERANCE
+				? Math.min(model.maxTokens, DEFAULT_MAX_OUTPUT_TOKENS)
+				: model.maxTokens
+			: undefined;
+
 	return {
 		temperature: options?.temperature,
-		maxTokens: options?.maxTokens ?? (model.maxTokens > 0 ? Math.min(model.maxTokens, 32000) : undefined),
+		maxTokens: options?.maxTokens ?? defaultMaxTokens,
 		signal: options?.signal,
 		apiKey: apiKey || options?.apiKey,
 		transport: options?.transport,
