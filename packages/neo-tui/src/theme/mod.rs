@@ -1,9 +1,11 @@
 //! Theme system: JSON-driven semantic color tokens.
 //!
-//! Real loader + resolver land in T7 (Wave 2). This module exposes the
-//! `Token` enum, the `ThemeSpec` / `ResolvedTheme` shapes, and `parse`
-//! and `resolve` stubs so the RED tests in T2 can be compiled and locked
-//! in place before T7 ships the implementation.
+//! The theme spec ships as JSON with two halves:
+//!   - `defs`: a flat map of named colors (`"amberLed": "#FF9E64"`).
+//!   - `tokens`: a flat map of semantic token names (`"primary": "amberLed"`).
+//!     A token value can either reference a def by name or be a direct hex.
+//!
+//! Parse with [`parse`]; resolve into concrete RGB colors with [`resolve`].
 
 use std::collections::BTreeMap;
 
@@ -11,35 +13,57 @@ use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Semantic color tokens. Mirrors the opencode token set plus the
-/// senpi-neo-specific tokens called out in the design brief.
+/// Semantic color tokens consumed by the render code. Mirrors the design
+/// brief plus extras the components need.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Token {
     Primary,
     Secondary,
+    Accent,
     Error,
     Warning,
     Success,
     Info,
+
     Text,
     TextMuted,
+    TextInverse,
+
     Background,
     BackgroundPanel,
     BackgroundElement,
     BackgroundMenu,
+
     Border,
     BorderActive,
     BorderSubtle,
+    BorderError,
+    BorderSuccess,
+    BorderInfo,
+
+    SelectionBg,
+    SelectionFg,
+    Cursor,
+    Scrollbar,
+    ScrollbarThumb,
+
     DiffAdded,
+    DiffAddedBg,
     DiffRemoved,
-    DiffAddedText,
-    DiffRemovedText,
+    DiffRemovedBg,
+    DiffLineNumber,
+    DiffContext,
+
     MarkdownHeading,
     MarkdownCode,
     MarkdownLink,
     MarkdownQuote,
     MarkdownList,
+    MarkdownEmphasis,
+    MarkdownStrong,
+    MarkdownRule,
+
     SyntaxComment,
     SyntaxKeyword,
     SyntaxFunction,
@@ -48,9 +72,32 @@ pub enum Token {
     SyntaxNumber,
     SyntaxType,
     SyntaxOperator,
+
+    SpinnerActive,
+    SpinnerScannerLeading,
+    SpinnerScannerTrail,
+
+    StatusIdle,
+    StatusBusy,
+    StatusError,
+    StatusSuccess,
+
+    ToolBorderRunning,
+    ToolBorderSuccess,
+    ToolBorderError,
+    ToolHeaderText,
+    ToolBodyText,
+
+    UserMessageBar,
+    AssistantMessageBar,
+    SystemMessageBar,
+    ErrorMessageBar,
+
+    DiffAddedText,
+    DiffRemovedText,
 }
 
-/// On-disk theme spec.
+/// On-disk theme spec. Mirrors the JSON shape in `assets/themes/*.json`.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThemeSpec {
     pub name: String,
@@ -78,7 +125,7 @@ pub struct ThemeOptions {
     pub supports_true_color: Option<bool>,
 }
 
-/// Dark vs light mode discriminator.
+/// Dark vs light variant discriminator.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeMode {
@@ -86,21 +133,35 @@ pub enum ThemeMode {
     Light,
 }
 
-/// A spec resolved into concrete RGB colors keyed by token.
+/// A theme spec resolved into concrete RGB `Color`s per token.
 #[derive(Clone, Debug)]
 pub struct ResolvedTheme {
     pub name: String,
     pub mode: ThemeMode,
-    pub colors: BTreeMap<Token, Color>,
     pub thinking_opacity: f32,
+    colors: BTreeMap<Token, Color>,
 }
 
+impl ResolvedTheme {
+    /// Look up a token. Returns `Color::Reset` for unknown tokens; this is
+    /// deliberate so callers can render even on incomplete themes without
+    /// panicking. T7 logs missing tokens via `tracing` once the logger
+    /// initializes (T16).
+    pub fn token(&self, token: Token) -> Color {
+        self.colors.get(&token).copied().unwrap_or(Color::Reset)
+    }
+
+    /// Expose the underlying map for tests and debug rendering.
+    pub const fn colors(&self) -> &BTreeMap<Token, Color> {
+        &self.colors
+    }
+}
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ThemeError {
     #[error("invalid theme json: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("unknown token `{0}`")]
+    #[error("unknown token name `{0}`")]
     UnknownToken(String),
     #[error("invalid hex color `{0}`")]
     InvalidColor(String),
@@ -115,28 +176,73 @@ pub fn parse(input: &str) -> Result<ThemeSpec, ThemeError> {
 }
 
 /// Resolve a [`ThemeSpec`] into a [`ResolvedTheme`].
-///
-/// Walks the defs + tokens maps. Real implementation lands in T7; this
-/// stub returns a [`ThemeError::MissingRequiredToken`] error so the T2
-/// RED tests stay red until T7 switches it on.
 pub fn resolve(spec: &ThemeSpec) -> Result<ResolvedTheme, ThemeError> {
     if spec.tokens.is_empty() {
         return Err(ThemeError::MissingRequiredToken("primary".into()));
     }
-    if let Some(value) = spec.tokens.get("primary") {
-        if !looks_like_hex_or_def(value, &spec.defs) {
-            return Err(ThemeError::InvalidColor(value.clone()));
-        }
+    let primary_value = spec
+        .tokens
+        .get("primary")
+        .ok_or_else(|| ThemeError::MissingRequiredToken("primary".into()))?;
+    if hex_string_for(primary_value, &spec.defs).is_err() {
+        return Err(ThemeError::InvalidColor(primary_value.clone()));
     }
-    // Real resolution lives in T7. Return a structural placeholder so
-    // dependent code can read it without a second branch.
-    Err(ThemeError::MissingRequiredToken("__t7_not_yet__".into()))
+
+    let mut colors: BTreeMap<Token, Color> = BTreeMap::new();
+    for (key, raw_value) in &spec.tokens {
+        let Some(token) = parse_token_name(key) else {
+            continue;
+        };
+        let hex = hex_string_for(raw_value, &spec.defs)?;
+        let color = parse_hex_color(&hex)?;
+        colors.insert(token, color);
+    }
+
+    let thinking_opacity = spec
+        .options
+        .as_ref()
+        .and_then(|o| o.thinking_opacity_percent)
+        .map_or(0.6, |p| f32::from(p) / 100.0);
+
+    Ok(ResolvedTheme {
+        name: spec.name.clone(),
+        mode: spec.mode,
+        thinking_opacity,
+        colors,
+    })
 }
 
-fn looks_like_hex_or_def(value: &str, defs: &BTreeMap<String, String>) -> bool {
-    if defs.contains_key(value) {
-        return true;
+fn parse_token_name(name: &str) -> Option<Token> {
+    serde_json::from_value(serde_json::Value::String(name.to_string())).ok()
+}
+
+fn hex_string_for(value: &str, defs: &BTreeMap<String, String>) -> Result<String, ThemeError> {
+    if value.starts_with('#') {
+        Ok(value.to_string())
+    } else if let Some(via_def) = defs.get(value) {
+        Ok(via_def.clone())
+    } else {
+        Err(ThemeError::InvalidColor(value.to_string()))
     }
-    let hex = value.strip_prefix('#').unwrap_or(value);
-    hex.chars().all(|c| c.is_ascii_hexdigit()) && (hex.len() == 6 || hex.len() == 8)
+}
+
+fn parse_hex_color(hex: &str) -> Result<Color, ThemeError> {
+    let body = hex.strip_prefix('#').unwrap_or(hex);
+    let (r, g, b) = match body.len() {
+        6 => (
+            u8::from_str_radix(&body[0..2], 16),
+            u8::from_str_radix(&body[2..4], 16),
+            u8::from_str_radix(&body[4..6], 16),
+        ),
+        3 => (
+            u8::from_str_radix(&body[0..1].repeat(2), 16),
+            u8::from_str_radix(&body[1..2].repeat(2), 16),
+            u8::from_str_radix(&body[2..3].repeat(2), 16),
+        ),
+        _ => return Err(ThemeError::InvalidColor(hex.to_string())),
+    };
+    match (r, g, b) {
+        (Ok(r), Ok(g), Ok(b)) => Ok(Color::Rgb(r, g, b)),
+        _ => Err(ThemeError::InvalidColor(hex.to_string())),
+    }
 }
