@@ -1,0 +1,149 @@
+/**
+ * `--neo` dispatch: spawn the native Rust + ratatui TUI binary and let it
+ * own the terminal directly. The Node process waits for the child to exit
+ * and propagates the status code.
+ *
+ * The binary is shipped alongside the npm package under
+ * `dist/neo-tui-bin/senpi-neo-tui-<platform>-<arch>`. In dev (when running
+ * from source), set `SENPI_NEO_TUI_DEV=1` to use
+ * `../neo-tui/target/release/senpi-neo-tui` or `target/debug/senpi-neo-tui`.
+ */
+
+import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import chalk from "chalk";
+
+import type { Args } from "../cli/args.js";
+
+const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
+
+interface PlatformInfo {
+	platform: string;
+	arch: string;
+	exe: string;
+}
+
+function platformInfo(): PlatformInfo {
+	const platformMap: Record<string, string> = {
+		darwin: "darwin",
+		linux: "linux",
+		win32: "windows",
+	};
+	const archMap: Record<string, string> = {
+		x64: "x64",
+		arm64: "arm64",
+	};
+	const platform = platformMap[process.platform] ?? process.platform;
+	const arch = archMap[process.arch] ?? process.arch;
+	const exe = process.platform === "win32" ? ".exe" : "";
+	return { platform, arch, exe };
+}
+
+function resolveBinaryPath(): { path: string; source: string } | undefined {
+	const { platform, arch, exe } = platformInfo();
+	const fileName = `senpi-neo-tui-${platform}-${arch}${exe}`;
+
+	// 1. Production: alongside the dist/cli.js script.
+	const distPath = resolve(SCRIPT_DIR, "..", "neo-tui-bin", fileName);
+	if (existsSync(distPath)) {
+		return { path: distPath, source: "dist" };
+	}
+
+	// 2. Dev: target/{release,debug}/senpi-neo-tui in the workspace tree.
+	if (process.env.SENPI_NEO_TUI_DEV === "1") {
+		const repoRoot = resolve(SCRIPT_DIR, "..", "..", "..", "..");
+		const releasePath = resolve(repoRoot, "target", "release", `senpi-neo-tui${exe}`);
+		if (existsSync(releasePath)) {
+			return { path: releasePath, source: "target/release" };
+		}
+		const debugPath = resolve(repoRoot, "target", "debug", `senpi-neo-tui${exe}`);
+		if (existsSync(debugPath)) {
+			return { path: debugPath, source: "target/debug" };
+		}
+	}
+
+	// 3. Explicit override.
+	const override = process.env.SENPI_NEO_TUI_BIN;
+	if (override && existsSync(override)) {
+		return { path: override, source: "SENPI_NEO_TUI_BIN" };
+	}
+
+	return undefined;
+}
+
+export interface RunNeoModeOptions {
+	parsed: Args;
+	originalArgv: readonly string[];
+	senpiBin: string;
+}
+
+/**
+ * Launch the Rust TUI binary with stdio inherited so it owns the TTY.
+ * The Rust binary is expected to spawn `senpi --mode rpc` as its own child
+ * for the agent backend (T6 wires that up; until then the binary renders
+ * the demo state).
+ */
+export async function runNeoMode(options: RunNeoModeOptions): Promise<number> {
+	const located = resolveBinaryPath();
+	if (!located) {
+		const { platform, arch, exe } = platformInfo();
+		console.error(
+			chalk.red(
+				[
+					"Error: --neo TUI binary not found.",
+					`Expected: dist/neo-tui-bin/senpi-neo-tui-${platform}-${arch}${exe}`,
+					"For dev, build the crate (cargo build --release --package senpi-neo-tui)",
+					"and re-run with SENPI_NEO_TUI_DEV=1, or set SENPI_NEO_TUI_BIN.",
+				].join("\n"),
+			),
+		);
+		return 1;
+	}
+
+	if (options.parsed.verbose) {
+		console.log(
+			chalk.dim(`neo-tui: launching ${located.path} (source: ${located.source})`),
+		);
+	}
+
+	const backendArgs = options.originalArgv
+		.filter((arg) => arg !== "--neo")
+		.concat(["--mode", "rpc"]);
+
+	const env = {
+		...process.env,
+		SENPI_NEO_BACKEND_BIN: options.senpiBin,
+		SENPI_NEO_BACKEND_ARGS: JSON.stringify(backendArgs),
+	};
+
+	const child: ChildProcess = spawn(located.path, [], {
+		stdio: "inherit",
+		env,
+	});
+
+	return new Promise<number>((resolveExit) => {
+		child.on("exit", (code, signal) => {
+			if (signal) {
+				resolveExit(128 + (signalNumber(signal) ?? 0));
+				return;
+			}
+			resolveExit(code ?? 0);
+		});
+		child.on("error", (err) => {
+			console.error(chalk.red(`neo-tui: failed to launch ${located.path}: ${err.message}`));
+			resolveExit(1);
+		});
+	});
+}
+
+function signalNumber(signal: NodeJS.Signals): number | undefined {
+	const map: Record<string, number> = {
+		SIGHUP: 1,
+		SIGINT: 2,
+		SIGQUIT: 3,
+		SIGTERM: 15,
+	};
+	return map[signal];
+}

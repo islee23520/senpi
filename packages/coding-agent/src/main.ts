@@ -47,6 +47,7 @@ import { SettingsManager } from "./core/settings-manager.js";
 import { printTimings, resetTimings, time } from "./core/timings.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
+import { runNeoMode } from "./modes/neo-mode.js";
 import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.js";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.js";
@@ -457,6 +458,18 @@ export async function main(args: string[], options?: MainOptions) {
 	const shouldTakeOverStdout = appMode !== "interactive";
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
+	}
+
+	// --neo: hand the TTY off to the native Rust ratatui binary and exit
+	// with its status. We do this before runtime/session/auth setup so the
+	// binary boots fast and owns the terminal cleanly.
+	if (parsed.neo && appMode === "interactive") {
+		const code = await runNeoMode({
+			parsed,
+			originalArgv: args,
+			senpiBin: process.execPath,
+		});
+		process.exit(code);
 	}
 
 	if (parsed.version) {
