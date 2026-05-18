@@ -11,6 +11,7 @@ export default defineConfig({
 		globals: true,
 		environment: "node",
 		testTimeout: 30000,
+		setupFiles: ["./test/setup.ts"],
 		server: {
 			deps: {
 				external: [/@silvia-odwyer\/photon-node/],
