@@ -9,8 +9,9 @@ spinner animate at 30 fps.
 | --- | --- | --- |
 | `01-narrow-80x24.png` | 80 × 24 | minimum supported; sidebar collapsed, footer compacts to status + tps |
 | `02-mid-120x40.png` | 120 × 40 | sidebar threshold; tool card and chat full width |
-| `03-mid-140x40.png` | 140 × 40 | typical laptop pane |
+| `03-mid-140x40.png` | 140 × 40 | typical laptop pane (direct binary) |
 | `04-wide-160x50.png` | 160 × 50 | ultrawide / fullscreen; same content, more breathing room |
+| `05-senpi-neo-e2e-140x40.png` | 140 × 40 | end-to-end capture of `senpi --neo --demo` proving the Node → Rust dispatch path works |
 
 Pipeline: tmux capture-pane (with `-e` to keep ANSI) → `aha --no-header` (ANSI to
 HTML with 24-bit color) → Chrome headless (`--screenshot`) at the exact viewport.
