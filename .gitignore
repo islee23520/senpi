@@ -5,6 +5,15 @@ dist/
 *.tsbuildinfo
 .sisyphus/
 
+# Rust workspace artifacts
+target/
+**/*.rs.bk
+
+# Rust workspace
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
 # Generated model catalogs
 packages/ai/src/*.generated.ts
 
