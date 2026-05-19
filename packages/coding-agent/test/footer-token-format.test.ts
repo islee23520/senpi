@@ -38,7 +38,7 @@ function createSession(): unknown {
 			getSessionName: () => "",
 			getCwd: () => "/tmp/project",
 		},
-		getContextUsage: () => ({ contextWindow: 800_000, percent: 5.5 }),
+		getContextUsage: () => ({ tokens: 44_000, contextWindow: 800_000, percent: 5.5 }),
 		modelRegistry: {
 			isUsingOAuth: () => false,
 		},
@@ -73,13 +73,14 @@ describe("FooterComponent token formatting", () => {
 		expect(rendered).toContain("↑49");
 		expect(rendered).toContain("↓6,800");
 		expect(rendered).toContain("cache 1,500,000/44,000");
-		expect(rendered).toContain("5.5%/800,000 (auto)");
+		expect(rendered).toContain("44,000/800,000 (5.5%) (auto)");
 		expect(rendered).not.toContain("23.4K (3%)");
 		expect(rendered).not.toContain("↓6.8k");
 		expect(rendered).not.toContain("R1,500,000");
 		expect(rendered).not.toContain("W44,000");
 		expect(rendered).not.toContain("R1.5M");
 		expect(rendered).not.toContain("W44k");
+		expect(rendered).not.toContain("5.5%/800,000 (auto)");
 		expect(rendered).not.toContain("5.5%/800k (auto)");
 	});
 });
