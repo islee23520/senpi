@@ -36,6 +36,8 @@ pi update npm:@foo/bar      # update one package
 pi update --extension npm:@foo/bar
 ```
 
+These commands manage senpi packages, not the senpi CLI installation. To uninstall senpi itself, see [Quickstart](quickstart.md#uninstall).
+
 By default, `install` and `remove` write to global settings (`~/.senpi/agent/settings.json`). Use `-l` to write to project settings (`.senpi/settings.json`) instead. Project settings can be shared with your team, and senpi installs any missing packages automatically on startup.
 
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:

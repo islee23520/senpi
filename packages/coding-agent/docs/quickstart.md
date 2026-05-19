@@ -10,6 +10,26 @@ Senpi is distributed as an npm package:
 npm install -g @code-yeongyu/senpi
 ```
 
+### Uninstall
+
+Use the package manager that installed senpi:
+
+```bash
+# npm install -g
+npm uninstall -g @code-yeongyu/senpi
+
+# pnpm
+pnpm remove -g @code-yeongyu/senpi
+
+# Yarn
+yarn global remove @code-yeongyu/senpi
+
+# Bun
+bun uninstall -g @code-yeongyu/senpi
+```
+
+Uninstalling senpi leaves settings, credentials, sessions, and installed senpi packages in `~/.senpi/agent/`.
+
 Then start senpi in the project directory you want it to work on:
 
 ```bash

@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Fixed tail truncation for oversized single-line output that ends with a trailing newline ([#4715](https://github.com/earendil-works/pi/issues/4715)).
+- Fixed Windows Node execution environment command spawns to hide helper console windows from background processes ([#4699](https://github.com/earendil-works/pi/issues/4699)).
+
 ## [2026.5.18-2] - 2026-05-18
 
 ### Fixed
@@ -39,6 +42,10 @@
 ## [2026.5.13-2] - 2026-05-13
 
 ## [2026.05.13] - 2026-05-13
+
+## [0.75.3] - 2026-05-18
+
+## [0.75.2] - 2026-05-18
 
 ## [0.75.1] - 2026-05-18
 
