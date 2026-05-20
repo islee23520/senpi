@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Breaking Changes
+
+### Added
+
+### Changed
+
+### Fixed
+
+- Fixed release changelog bookkeeping to recreate next-cycle `[Unreleased]` sections even when the previous release did not capture one, preserving TUI working / Escape / history notes for future release cycles.
+
+### Removed
+
 ## [2026.5.20] - 2026-05-20
 
 ### Added
