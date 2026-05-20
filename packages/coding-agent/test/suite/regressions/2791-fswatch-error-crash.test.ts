@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ENV_AGENT_DIR } from "../../../src/config.js";
+import { ENV_AGENT_DIR } from "../../../src/config.ts";
 
 /**
  * Regression test for https://github.com/earendil-works/pi-mono/issues/2791

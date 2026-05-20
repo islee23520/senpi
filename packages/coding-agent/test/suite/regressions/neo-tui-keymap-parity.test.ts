@@ -21,8 +21,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import type { KeyId } from "../../../src/core/keybindings.js";
-import { KEYBINDINGS } from "../../../src/core/keybindings.js";
+import type { KeyId } from "../../../src/core/keybindings.ts";
+import { KEYBINDINGS } from "../../../src/core/keybindings.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const NEO_KEYMAP_PATH = resolve(__dirname, "..", "..", "..", "..", "neo-tui", "assets", "keymaps", "default.json");

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { CONFIG_DIR_NAME } from "../../../../config.js";
-import type { Rule, Ruleset } from "./types.js";
+import { CONFIG_DIR_NAME } from "../../../../config.ts";
+import type { Rule, Ruleset } from "./types.ts";
 
 const PERMISSIONS_FILE = "permissions-approved.jsonl";
 

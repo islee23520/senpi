@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { printHelp } from "../src/cli/args.js";
-import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.js";
+import { printHelp } from "../src/cli/args.ts";
+import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.ts";
 
 describe("senpi branding", () => {
 	test("uses senpi as the runtime app identity", () => {

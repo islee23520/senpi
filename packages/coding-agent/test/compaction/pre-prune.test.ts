@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Message, ToolResultMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { prePruneToolOutputsToBudget } from "../../src/core/extensions/builtin/compaction/tool-truncation.js";
+import { prePruneToolOutputsToBudget } from "../../src/core/extensions/builtin/compaction/tool-truncation.ts";
 import {
 	type FileEntry,
 	migrateSessionEntries,
 	parseSessionEntries,
 	type SessionMessageEntry,
-} from "../../src/core/session-manager.js";
+} from "../../src/core/session-manager.ts";
 
 const PRE_PRUNE_TARGET_RATIO = 0.6;
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));

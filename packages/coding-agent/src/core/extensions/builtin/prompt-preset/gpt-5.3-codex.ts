@@ -1,5 +1,5 @@
-import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.js";
-import { buildFileOperationsTuning } from "./file-operations.js";
+import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.ts";
+import { buildFileOperationsTuning } from "./file-operations.ts";
 
 function buildGpt53CodexTuning(): string {
 	return `Bias hard toward action. Implement directly with reasonable assumptions rather than stopping to ask. Do not produce upfront plans or preambles before acting — start working immediately.

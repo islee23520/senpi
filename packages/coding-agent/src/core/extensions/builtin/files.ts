@@ -6,9 +6,9 @@
  */
 
 import { Container, Key, matchesKey, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
-import { DynamicBorder } from "../../../modes/interactive/components/dynamic-border.js";
-import type { ExtensionAPI } from "../types.js";
-import { extractPatchedPaths } from "./gpt-apply-patch/index.js";
+import { DynamicBorder } from "../../../modes/interactive/components/dynamic-border.ts";
+import type { ExtensionAPI } from "../types.ts";
+import { extractPatchedPaths } from "./gpt-apply-patch/index.ts";
 
 interface FileEntry {
 	path: string;

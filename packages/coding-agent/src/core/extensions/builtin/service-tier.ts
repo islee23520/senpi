@@ -1,6 +1,6 @@
 import type { Api } from "@earendil-works/pi-ai";
-import { SettingsManager } from "../../settings-manager.js";
-import type { ExtensionAPI, ServiceTier } from "../types.js";
+import { SettingsManager } from "../../settings-manager.ts";
+import type { ExtensionAPI, ServiceTier } from "../types.ts";
 
 export type { ServiceTier };
 type ProviderPayload = Record<string, unknown>;

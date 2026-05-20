@@ -1,6 +1,6 @@
 import type { Component } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
-import promptPresetExtension from "../../src/core/extensions/builtin/prompt-preset/index.js";
+import promptPresetExtension from "../../src/core/extensions/builtin/prompt-preset/index.ts";
 
 type Handler = (event: unknown, context: HeaderContext) => Promise<unknown> | unknown;
 

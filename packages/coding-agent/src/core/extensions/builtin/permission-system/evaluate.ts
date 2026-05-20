@@ -1,5 +1,5 @@
-import type { Rule, Ruleset } from "../permission-system/types.js";
-import { Wildcard } from "./wildcard.js";
+import type { Rule, Ruleset } from "../permission-system/types.ts";
+import { Wildcard } from "./wildcard.ts";
 
 declare global {
 	interface Array<T> {

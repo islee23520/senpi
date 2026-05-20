@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SettingsManager } from "../../src/core/settings-manager.js";
+import { SettingsManager } from "../../src/core/settings-manager.ts";
 
 describe("SettingsManager service tier settings", () => {
 	it("returns undefined when openai service tier is unset", () => {

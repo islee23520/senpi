@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { type CompactionPreparation, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
-import compactionExtension from "../../src/core/extensions/builtin/compaction/index.js";
+import { type CompactionPreparation, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
+import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
@@ -8,8 +8,8 @@ import type {
 	SessionBeforeCompactEvent,
 	SessionBeforeCompactResult,
 	SessionCompactEvent,
-} from "../../src/core/extensions/index.js";
-import type { CompactionEntry, SessionEntry } from "../../src/core/session-manager.js";
+} from "../../src/core/extensions/index.ts";
+import type { CompactionEntry, SessionEntry } from "../../src/core/session-manager.ts";
 
 const CHECKPOINT_CUSTOM_TYPE = "compaction.agent-checkpoint";
 const TODO_SNAPSHOT_CUSTOM_TYPE = "compaction.todo-snapshot";

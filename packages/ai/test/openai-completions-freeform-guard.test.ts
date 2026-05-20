@@ -1,7 +1,7 @@
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { streamOpenAICompletions } from "../src/providers/openai-completions.js";
-import type { Context, Model, Tool } from "../src/types.js";
+import { streamOpenAICompletions } from "../src/providers/openai-completions.ts";
+import type { Context, Model, Tool } from "../src/types.ts";
 
 describe("openai completions freeform guard", () => {
 	it("rejects freeform tools before serializing chat-completions function tools", async () => {

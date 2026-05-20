@@ -7,12 +7,12 @@ import {
 	PATCH_PREVIEW_MAX_LINES,
 	renderPatchPreview,
 	truncatePreview,
-} from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
-import type { ToolRenderContext } from "../../src/core/extensions/types.js";
-import { initTheme, theme } from "../../src/modes/interactive/theme/theme.js";
-import { stripAnsi } from "../../src/utils/ansi.js";
-import type { Harness } from "./harness.js";
-import { createHarness } from "./harness.js";
+} from "../../src/core/extensions/builtin/gpt-apply-patch/index.ts";
+import type { ToolRenderContext } from "../../src/core/extensions/types.ts";
+import { initTheme, theme } from "../../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../../src/utils/ansi.ts";
+import type { Harness } from "./harness.ts";
+import { createHarness } from "./harness.ts";
 
 type ApplyPatchTool = ReturnType<typeof createApplyPatchTool>;
 type ApplyPatchArgs = { input: string };

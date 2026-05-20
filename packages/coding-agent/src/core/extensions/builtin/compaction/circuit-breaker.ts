@@ -1,5 +1,5 @@
-import type { CompactionReason } from "../../types.js";
-import type { CompactionExtensionState } from "./state.js";
+import type { CompactionReason } from "../../types.ts";
+import type { CompactionExtensionState } from "./state.ts";
 
 export const FAILURE_TRIP_THRESHOLD = 3;
 export const COOLDOWN_MS = 60_000;

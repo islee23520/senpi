@@ -1,6 +1,6 @@
 import os from "node:os";
-import type { PermissionConfig, Rule, Ruleset } from "./types.js";
-import { Wildcard } from "./wildcard.js";
+import type { PermissionConfig, Rule, Ruleset } from "./types.ts";
+import { Wildcard } from "./wildcard.ts";
 
 export const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"];
 

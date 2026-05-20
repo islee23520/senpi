@@ -4,8 +4,8 @@ import {
 	createYamlXmlStreamParser,
 	parseYamlXmlGeneratedText,
 	yamlXmlFormatToolCall,
-} from "../../src/tool-call-middleware/protocols/yaml-xml.js";
-import type { Tool } from "../../src/types.js";
+} from "../../src/tool-call-middleware/protocols/yaml-xml.ts";
+import type { Tool } from "../../src/types.ts";
 
 function seededRandom(seed: number): () => number {
 	let current = seed;

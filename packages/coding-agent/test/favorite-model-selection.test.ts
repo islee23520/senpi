@@ -1,11 +1,11 @@
 import { setKeybindings } from "@earendil-works/pi-tui";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { KeybindingsManager } from "../src/core/keybindings.js";
-import { FavoriteModelsSelectorComponent } from "../src/modes/interactive/components/favorite-models-selector.js";
-import { ModelSelectorComponent } from "../src/modes/interactive/components/model-selector.js";
-import { initTheme } from "../src/modes/interactive/theme/theme.js";
-import { stripAnsi } from "../src/utils/ansi.js";
-import { createHarness } from "./suite/harness.js";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
+import { FavoriteModelsSelectorComponent } from "../src/modes/interactive/components/favorite-models-selector.ts";
+import { ModelSelectorComponent } from "../src/modes/interactive/components/model-selector.ts";
+import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
+import { createHarness } from "./suite/harness.ts";
 
 function createFakeTui(): { requestRender: () => void } {
 	return {

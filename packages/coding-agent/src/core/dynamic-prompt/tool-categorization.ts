@@ -1,4 +1,4 @@
-import type { AvailableTool } from "./types.js";
+import type { AvailableTool } from "./types.ts";
 
 function getToolCategory(name: string): AvailableTool["category"] {
 	if (name === "grep" || name === "glob") {

@@ -1,9 +1,9 @@
 import { Box, Container, Spacer, Text } from "@earendil-works/pi-tui";
-import { normalizeApplyPatchArguments } from "./params.js";
-import { renderPatchLine } from "./preview-format.js";
-import { StreamingPatchParser } from "./streaming-parser.js";
-import { extractPatchedPaths } from "./text.js";
-import type { ApplyPatchParams, ApplyPatchRenderState, ApplyPatchTheme, ParsedPatch } from "./types.js";
+import { normalizeApplyPatchArguments } from "./params.ts";
+import { renderPatchLine } from "./preview-format.ts";
+import { StreamingPatchParser } from "./streaming-parser.ts";
+import { extractPatchedPaths } from "./text.ts";
+import type { ApplyPatchParams, ApplyPatchRenderState, ApplyPatchTheme, ParsedPatch } from "./types.ts";
 
 function hunkOperation(hunk: ParsedPatch): string {
 	if (hunk.type === "add") return "Added";

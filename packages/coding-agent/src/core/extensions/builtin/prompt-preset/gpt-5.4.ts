@@ -1,5 +1,5 @@
-import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.js";
-import { buildFileOperationsTuning } from "./file-operations.js";
+import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.ts";
+import { buildFileOperationsTuning } from "./file-operations.ts";
 
 function buildGpt54Tuning(): string {
 	return `Use explicit section structure and step sequences for multi-step tasks — ordered steps with dependencies. When a specific response shape is needed, declare exact fields and order upfront, no extra text.

@@ -1,5 +1,5 @@
-import { PACKAGE_NAME } from "../config.js";
-import { getPiUserAgent } from "./pi-user-agent.js";
+import { PACKAGE_NAME } from "../config.ts";
+import { getPiUserAgent } from "./pi-user-agent.ts";
 
 const LATEST_VERSION_URL = `https://registry.npmjs.org/${encodeURIComponent(PACKAGE_NAME)}/latest`;
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
@@ -7,6 +7,7 @@ const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 export interface LatestPiRelease {
 	version: string;
 	packageName?: string;
+	note?: string;
 }
 
 interface ParsedVersion {
@@ -68,13 +69,14 @@ export async function getLatestPiRelease(
 	});
 	if (!response.ok) return undefined;
 
-	const data = (await response.json()) as { packageName?: unknown; version?: unknown };
+	const data = (await response.json()) as { packageName?: unknown; version?: unknown; note?: unknown };
 	if (typeof data.version !== "string" || !data.version.trim()) {
 		return undefined;
 	}
 	const packageName =
 		typeof data.packageName === "string" && data.packageName.trim() ? data.packageName.trim() : undefined;
-	return { version: data.version.trim(), packageName };
+	const note = typeof data.note === "string" && data.note.trim() ? data.note.trim() : undefined;
+	return { version: data.version.trim(), packageName, note };
 }
 
 export async function getLatestPiVersion(
@@ -84,11 +86,11 @@ export async function getLatestPiVersion(
 	return (await getLatestPiRelease(currentVersion, options))?.version;
 }
 
-export async function checkForNewPiVersion(currentVersion: string): Promise<string | undefined> {
+export async function checkForNewPiVersion(currentVersion: string): Promise<LatestPiRelease | undefined> {
 	try {
-		const latestVersion = await getLatestPiVersion(currentVersion);
-		if (latestVersion && isNewerPackageVersion(latestVersion, currentVersion)) {
-			return latestVersion;
+		const latestRelease = await getLatestPiRelease(currentVersion);
+		if (latestRelease && isNewerPackageVersion(latestRelease.version, currentVersion)) {
+			return latestRelease;
 		}
 		return undefined;
 	} catch {

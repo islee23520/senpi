@@ -1,5 +1,5 @@
-import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.js";
-import { buildFileOperationsTuning } from "./file-operations.js";
+import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.ts";
+import { buildFileOperationsTuning } from "./file-operations.ts";
 
 function buildGpt55Tuning(): string {
 	return `Reason efficiently. Default to low or medium reasoning effort and re-evaluate before escalating; what earlier models needed walked through step by step, you can now hand off as an outcome plus a stopping condition. Skip mechanical step-by-step recitation when the goal is concrete - long process prompts narrow the search space and make answers feel mechanical. Prefer outcome-first framing: define the destination, the constraints, and the stopping condition, then let the path emerge from the work.

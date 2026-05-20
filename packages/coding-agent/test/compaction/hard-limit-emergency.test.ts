@@ -7,8 +7,8 @@ import {
 	type UserMessage,
 } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimateContextTokens } from "../../src/core/compaction/index.js";
-import compactionExtension from "../../src/core/extensions/builtin/compaction/index.js";
+import { estimateContextTokens } from "../../src/core/compaction/index.ts";
+import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -17,8 +17,8 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 	ExtensionHandler,
-} from "../../src/core/extensions/index.js";
-import { SessionManager } from "../../src/core/session-manager.js";
+} from "../../src/core/extensions/index.ts";
+import { SessionManager } from "../../src/core/session-manager.ts";
 
 const registrations: Array<{ unregister: () => void }> = [];
 

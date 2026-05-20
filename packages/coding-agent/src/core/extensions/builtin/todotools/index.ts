@@ -1,9 +1,9 @@
-import type { ExtensionAPI, ExtensionContext } from "../../types.js";
-import { installContinuation } from "./continuation/index.js";
-import { TASK_MANAGEMENT_SECTION } from "./prompt.js";
-import { getLatestTodosFromBranchEntries, getTodoWidgetLines, type TodoItem } from "./state.js";
-import { registerTodoReadTool } from "./tools/todoread.js";
-import { registerTodoWriteTool } from "./tools/todowrite.js";
+import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
+import { installContinuation } from "./continuation/index.ts";
+import { TASK_MANAGEMENT_SECTION } from "./prompt.ts";
+import { getLatestTodosFromBranchEntries, getTodoWidgetLines, type TodoItem } from "./state.ts";
+import { registerTodoReadTool } from "./tools/todoread.ts";
+import { registerTodoWriteTool } from "./tools/todowrite.ts";
 
 function getLatestTodos(ctx: ExtensionContext): TodoItem[] {
 	return getLatestTodosFromBranchEntries(ctx.sessionManager.getBranch());
@@ -47,7 +47,7 @@ export default function todotoolsExtension(pi: ExtensionAPI): void {
 	registerTodoReadTool(pi, getCurrentTodos);
 }
 
-export { TASK_MANAGEMENT_SECTION } from "./prompt.js";
+export { TASK_MANAGEMENT_SECTION } from "./prompt.ts";
 export {
 	getLatestTodosFromBranchEntries,
 	getTodoMarker,
@@ -60,4 +60,4 @@ export {
 	sanitizeTodoText,
 	TODO_STATE_ENTRY_TYPE,
 	type TodoItem,
-} from "./state.js";
+} from "./state.ts";

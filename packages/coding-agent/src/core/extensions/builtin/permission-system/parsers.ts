@@ -1,7 +1,7 @@
-import { extractPatchedPaths } from "../gpt-apply-patch/index.js";
-import { BashArity } from "../permission-system/arity.js";
-import { extractExternalPaths } from "../permission-system/external-dir.js";
-import type { Request } from "../permission-system/types.js";
+import { extractPatchedPaths } from "../gpt-apply-patch/index.ts";
+import { BashArity } from "../permission-system/arity.ts";
+import { extractExternalPaths } from "../permission-system/external-dir.ts";
+import type { Request } from "../permission-system/types.ts";
 
 /** Simplified permission request without ID/session metadata */
 export type PermissionRequest = Pick<Request, "permission" | "patterns" | "always">;

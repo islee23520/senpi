@@ -1,4 +1,4 @@
-import { stripAnsi } from "../../../../utils/ansi.js";
+import { stripAnsi } from "../../../../utils/ansi.ts";
 
 export type TodoItem = {
 	content: string;

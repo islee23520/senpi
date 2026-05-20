@@ -1,9 +1,9 @@
 import { Container } from "@earendil-works/pi-tui";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import type { AgentSessionEvent } from "../src/core/agent-session.js";
-import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
-import { initTheme } from "../src/modes/interactive/theme/theme.js";
-import { stripAnsi } from "../src/utils/ansi.js";
+import type { AgentSessionEvent } from "../src/core/agent-session.ts";
+import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
+import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 type ToolHookStatusEvent = Extract<AgentSessionEvent, { type: "tool_hook_status" }>;
 

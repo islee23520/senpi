@@ -3,7 +3,7 @@ import bashTimeoutExtension, {
 	BASH_DEFAULT_TIMEOUT_SECONDS,
 	BASH_MAX_TIMEOUT_SECONDS,
 	type BashToolInputLike,
-} from "../../src/core/extensions/builtin/bash-timeout/index.js";
+} from "../../src/core/extensions/builtin/bash-timeout/index.ts";
 
 type Handler = (event: unknown) => Promise<unknown> | unknown;
 

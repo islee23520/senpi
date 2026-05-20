@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import promptPresetExtension from "../../src/core/extensions/builtin/prompt-preset/index.js";
-import { createHarness, type Harness } from "./harness.js";
+import promptPresetExtension from "../../src/core/extensions/builtin/prompt-preset/index.ts";
+import { createHarness, type Harness } from "./harness.ts";
 
 function getRequiredModel(harness: Harness, modelId: string) {
 	const model = harness.getModel(modelId);

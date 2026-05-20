@@ -8,8 +8,8 @@ import {
 	getLatestCheckpoint,
 	injectRestorationDirective,
 	persistCheckpoint,
-} from "../../src/core/extensions/builtin/compaction/checkpoint-state.js";
-import { migrateSessionEntries, parseSessionEntries, type SessionEntry } from "../../src/core/session-manager.js";
+} from "../../src/core/extensions/builtin/compaction/checkpoint-state.ts";
+import { migrateSessionEntries, parseSessionEntries, type SessionEntry } from "../../src/core/session-manager.ts";
 
 const RESTORATION_DIRECTIVE = "[restore checkpointed session agent configuration after compaction]";
 const CHECKPOINT_CUSTOM_TYPE = "compaction.agent-checkpoint";

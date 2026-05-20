@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { ProcessTerminal } from "../src/terminal.js";
+import { ProcessTerminal } from "../src/terminal.ts";
 
 function withTerminalProcessPatch<T>(
 	env: Record<string, string | undefined>,

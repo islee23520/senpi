@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { estimateTokens } from "../../../compaction/index.js";
-import type { BeforeAgentStartEventResult, CompactionReason } from "../../types.js";
-import { extractPatchedPaths } from "../gpt-apply-patch/index.js";
+import { estimateTokens } from "../../../compaction/index.ts";
+import type { BeforeAgentStartEventResult, CompactionReason } from "../../types.ts";
+import { extractPatchedPaths } from "../gpt-apply-patch/index.ts";
 
 export const POST_COMPACT_RESTORATION_CUSTOM_TYPE = "compaction.post-compact-restoration";
 

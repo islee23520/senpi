@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeOpenAIResponsesPayload } from "../../src/core/extensions/builtin/tool-pair-guard/sanitize-openai-responses-payload.js";
+import { sanitizeOpenAIResponsesPayload } from "../../src/core/extensions/builtin/tool-pair-guard/sanitize-openai-responses-payload.ts";
 
 describe("sanitizeOpenAIResponsesPayload", () => {
 	it("returns same reference for payload without responses input", () => {

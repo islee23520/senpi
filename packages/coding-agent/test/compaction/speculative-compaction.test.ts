@@ -1,17 +1,17 @@
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { AuthStorage } from "../../src/core/auth-storage.js";
-import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
-import { shouldStartSpeculativeCompaction } from "../../src/core/extensions/builtin/compaction/policy.js";
+import { AuthStorage } from "../../src/core/auth-storage.ts";
+import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
+import { shouldStartSpeculativeCompaction } from "../../src/core/extensions/builtin/compaction/policy.ts";
 import {
 	applyGeneratedCompaction,
 	applySpeculativeCompaction,
 	createSpeculativeCompactionSnapshot,
 	runExtensionCompaction,
 	type SpeculativeCompactionContext,
-} from "../../src/core/extensions/builtin/compaction/speculative.js";
-import { ModelRegistry } from "../../src/core/model-registry.js";
-import { SessionManager } from "../../src/core/session-manager.js";
+} from "../../src/core/extensions/builtin/compaction/speculative.ts";
+import { ModelRegistry } from "../../src/core/model-registry.ts";
+import { SessionManager } from "../../src/core/session-manager.ts";
 
 const registrations: Array<{ unregister: () => void }> = [];
 

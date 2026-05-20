@@ -15,14 +15,14 @@ import {
 	estimateTokens,
 	prepareCompaction,
 	serializeConversation,
-} from "../../../compaction/index.js";
-import { convertToLlm } from "../../../messages.js";
-import type { ModelRegistry } from "../../../model-registry.js";
-import type { ReadonlySessionManager } from "../../../session-manager.js";
-import type { ApplyCompactionResult, ContextUsage } from "../../types.js";
-import { computeEffectiveKeepRecentTokens, computeEffectiveThreshold } from "./policy.js";
-import { buildPrompt, type MergedCompactionPromptVariant } from "./prompts.js";
-import * as truncation from "./tool-truncation.js";
+} from "../../../compaction/index.ts";
+import { convertToLlm } from "../../../messages.ts";
+import type { ModelRegistry } from "../../../model-registry.ts";
+import type { ReadonlySessionManager } from "../../../session-manager.ts";
+import type { ApplyCompactionResult, ContextUsage } from "../../types.ts";
+import { computeEffectiveKeepRecentTokens, computeEffectiveThreshold } from "./policy.ts";
+import { buildPrompt, type MergedCompactionPromptVariant } from "./prompts.ts";
+import * as truncation from "./tool-truncation.ts";
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const COMPACTION_BUDGET_RATIO = 0.6;

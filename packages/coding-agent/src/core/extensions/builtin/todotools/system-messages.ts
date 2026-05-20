@@ -1,5 +1,5 @@
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "../../types.js";
+import type { ExtensionAPI } from "../../types.ts";
 
 export const SENPI_SYSTEM_PREFIX = "[system:senpi]";
 export const SENPI_CONVERSATION_EVENT = "senpi:conversation";

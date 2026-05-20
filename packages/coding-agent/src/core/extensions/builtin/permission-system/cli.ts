@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "../../types.js";
-import type { Action, Rule, Ruleset } from "./types.js";
+import type { ExtensionAPI } from "../../types.ts";
+import type { Action, Rule, Ruleset } from "./types.ts";
 
 export function parsePermissionFlag(value: string): Ruleset {
 	const rules: Rule[] = [];

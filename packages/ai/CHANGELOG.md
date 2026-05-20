@@ -2,16 +2,22 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Changed source syntax to avoid TypeScript constructs that require JavaScript emit, keeping the package compatible with Node.js strip-only TypeScript checks.
+- Removed the package-level development watch scripts now that the root TypeScript check validates strip-only-compatible sources.
+
 ### Fixed
 
 - Fixed Cloudflare Anthropic routes to strip hook-injected native `computer_*` tools before the SDK call.
+- Fixed OpenAI-compatible `streamSimple()` requests to stop sending model-derived default output token caps, avoiding context-window reservation failures on servers such as vLLM while preserving explicit `maxTokens` and required Anthropic `max_tokens` handling ([#4675](https://github.com/earendil-works/pi/issues/4675)).
+- Fixed OpenAI prompt cache keys to clamp session-derived values to the 64-character API limit across OpenAI Responses, Chat Completions, Codex Responses, and Azure OpenAI Responses ([#4720](https://github.com/earendil-works/pi/issues/4720)).
 
 ## [2026.5.19] - 2026-05-19
 
 ## [2026.5.18-2] - 2026-05-18
 
 ## [2026.5.18] - 2026-05-18
-
 ## [0.75.3] - 2026-05-18
 
 ## [0.75.2] - 2026-05-18

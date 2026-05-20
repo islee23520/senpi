@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "../types.js";
+import type { ExtensionAPI } from "../types.ts";
 
 type AssistantMessageLike = {
 	role: "assistant";

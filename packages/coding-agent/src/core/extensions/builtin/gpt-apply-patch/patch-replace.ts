@@ -1,6 +1,6 @@
-import { seekSequenceWithFuzz } from "./seek-sequence.js";
-import { normalizePatchText } from "./text.js";
-import type { PatchChunk } from "./types.js";
+import { seekSequenceWithFuzz } from "./seek-sequence.ts";
+import { normalizePatchText } from "./text.ts";
+import type { PatchChunk } from "./types.ts";
 
 function splitFileLines(content: string): string[] {
 	const lines = normalizePatchText(content).split("\n");

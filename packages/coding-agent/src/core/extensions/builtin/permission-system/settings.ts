@@ -1,7 +1,7 @@
-import type { Settings, SettingsManager } from "../../../settings-manager.js";
-import { fromConfig, merge } from "./config.js";
-import { loadApproved } from "./storage.js";
-import type { PermissionConfig, Ruleset } from "./types.js";
+import type { Settings, SettingsManager } from "../../../settings-manager.ts";
+import { fromConfig, merge } from "./config.ts";
+import { loadApproved } from "./storage.ts";
+import type { PermissionConfig, Ruleset } from "./types.ts";
 
 /**
  * Load permission settings from global and project settings.json files.

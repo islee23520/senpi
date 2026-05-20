@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { ExtensionAPI, ExtensionContext } from "../../types.js";
+import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
 
 const CHECKPOINT_CUSTOM_TYPE = "compaction.agent-checkpoint";
 const CHECKPOINT_SCHEMA = "senpi.compaction.agent-checkpoint.v1";

@@ -1,8 +1,8 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import type { CompactionResult } from "../../src/core/compaction/index.js";
-import type { ExtensionAPI } from "../../src/core/extensions/index.js";
-import { createHarness, type Harness } from "./harness.js";
+import type { CompactionResult } from "../../src/core/compaction/index.ts";
+import type { ExtensionAPI } from "../../src/core/extensions/index.ts";
+import { createHarness, type Harness } from "./harness.ts";
 
 function createPrecomputedCompaction(harness: Harness, summary: string): CompactionResult {
 	const firstEntry = harness.sessionManager.getEntries()[0];

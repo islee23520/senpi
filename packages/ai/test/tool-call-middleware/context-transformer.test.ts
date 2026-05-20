@@ -1,8 +1,8 @@
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { getProtocol, transformContext } from "../../src/tool-call-middleware/context-transformer.js";
-import type { ToolCallProtocol } from "../../src/tool-call-middleware/types.js";
-import type { AssistantMessage, Context, Tool, ToolResultMessage } from "../../src/types.js";
+import { getProtocol, transformContext } from "../../src/tool-call-middleware/context-transformer.ts";
+import type { ToolCallProtocol } from "../../src/tool-call-middleware/types.ts";
+import type { AssistantMessage, Context, Tool, ToolResultMessage } from "../../src/types.ts";
 
 const now = () => Date.now();
 

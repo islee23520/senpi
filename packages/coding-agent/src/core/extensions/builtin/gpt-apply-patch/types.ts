@@ -1,5 +1,5 @@
-import type { ExtensionAPI, ToolDefinition } from "../../types.js";
-import type { APPLY_PATCH_PARAMS } from "./constants.js";
+import type { ExtensionAPI, ToolDefinition } from "../../types.ts";
+import type { APPLY_PATCH_PARAMS } from "./constants.ts";
 
 export type ParsedPatch =
 	| { type: "add"; filePath: string; content: string }

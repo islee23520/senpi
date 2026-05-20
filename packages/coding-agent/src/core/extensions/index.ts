@@ -2,14 +2,14 @@
  * Extension system for lifecycle events and custom tools.
  */
 
-export type { SlashCommandInfo, SlashCommandSource } from "../slash-commands.js";
-export type { SourceInfo } from "../source-info.js";
+export type { SlashCommandInfo, SlashCommandSource } from "../slash-commands.ts";
+export type { SourceInfo } from "../source-info.ts";
 export {
 	createExtensionRuntime,
 	discoverAndLoadExtensions,
 	loadExtensionFromFactory,
 	loadExtensions,
-} from "./loader.js";
+} from "./loader.ts";
 export type {
 	ExtensionErrorListener,
 	ExtensionToolHookLifecycleEvent,
@@ -21,8 +21,8 @@ export type {
 	NewSessionHandler,
 	ShutdownHandler,
 	SwitchSessionHandler,
-} from "./runner.js";
-export { ExtensionRunner } from "./runner.js";
+} from "./runner.ts";
+export { ExtensionRunner } from "./runner.ts";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,
@@ -162,7 +162,7 @@ export type {
 	WorkingIndicatorOptions,
 	WriteToolCallEvent,
 	WriteToolResultEvent,
-} from "./types.js";
+} from "./types.ts";
 // Type guards
 export {
 	defineTool,
@@ -174,5 +174,5 @@ export {
 	isReadToolResult,
 	isToolCallEventType,
 	isWriteToolResult,
-} from "./types.js";
-export { wrapRegisteredTool, wrapRegisteredTools } from "./wrapper.js";
+} from "./types.ts";
+export { wrapRegisteredTool, wrapRegisteredTools } from "./wrapper.ts";

@@ -1,6 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai";
-import { createApplyPatchTool } from "./tool.js";
-import type { ApplyPatchExtensionAPI, BaselineState } from "./types.js";
+import { createApplyPatchTool } from "./tool.ts";
+import type { ApplyPatchExtensionAPI, BaselineState } from "./types.ts";
 
 const GPT_APPLY_PATCH_PROVIDERS = new Set(["openai", "azure-openai-responses", "github-copilot"]);
 const EDIT_TOOL_NAMES = new Set(["write", "edit"]);

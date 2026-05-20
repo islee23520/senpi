@@ -6,7 +6,7 @@ import {
 	isUsageSilentOverflow,
 	LOW_CONFIDENCE_PATTERNS,
 	MEDIUM_CONFIDENCE_PATTERNS,
-} from "../../src/core/extensions/builtin/compaction/overflow-detection.js";
+} from "../../src/core/extensions/builtin/compaction/overflow-detection.ts";
 
 type FauxOverflowProvider = "anthropic" | "openai" | "google" | "bedrock" | "generic";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPiUserAgent } from "../src/utils/pi-user-agent.js";
+import { getPiUserAgent } from "../src/utils/pi-user-agent.ts";
 
 describe("getPiUserAgent", () => {
 	it("formats the user agent with the runtime app name", () => {

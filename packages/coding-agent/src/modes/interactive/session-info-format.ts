@@ -1,5 +1,5 @@
-import type { SessionStats } from "../../core/agent-session.js";
-import { theme } from "./theme/theme.js";
+import type { SessionStats } from "../../core/agent-session.ts";
+import { theme } from "./theme/theme.ts";
 
 const money = new Intl.NumberFormat("en-US", {
 	style: "currency",

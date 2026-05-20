@@ -1,10 +1,10 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "../../../types.js";
-import { readTodoSettings } from "../settings.js";
-import type { TodoItem } from "../state.js";
-import { emitTodoSystemMessageFailure, sendTodoUserMessage } from "../system-messages.js";
-import { resolveContinuationConfig } from "./config.js";
-import { buildContinuationPrompt, CONTINUATION_DIRECTIVE, countIncomplete } from "./prompt.js";
+import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "../../../types.ts";
+import { readTodoSettings } from "../settings.ts";
+import type { TodoItem } from "../state.ts";
+import { emitTodoSystemMessageFailure, sendTodoUserMessage } from "../system-messages.ts";
+import { resolveContinuationConfig } from "./config.ts";
+import { buildContinuationPrompt, CONTINUATION_DIRECTIVE, countIncomplete } from "./prompt.ts";
 
 type ContinuationState = {
 	reEntryFlag: boolean;

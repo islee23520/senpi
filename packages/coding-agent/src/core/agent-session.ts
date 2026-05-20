@@ -32,12 +32,12 @@ import {
 	resetApiProviders,
 	streamSimple,
 } from "@earendil-works/pi-ai";
-import { expandTildePath } from "../config.js";
-import { theme } from "../modes/interactive/theme/theme.js";
-import { stripFrontmatter } from "../utils/frontmatter.js";
-import { sleep } from "../utils/sleep.js";
-import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.js";
-import { type BashResult, executeBashWithOperations } from "./bash-executor.js";
+import { expandTildePath } from "../config.ts";
+import { theme } from "../modes/interactive/theme/theme.ts";
+import { stripFrontmatter } from "../utils/frontmatter.ts";
+import { sleep } from "../utils/sleep.ts";
+import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
+import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import {
 	type CompactionResult,
 	calculateContextTokens,
@@ -48,12 +48,12 @@ import {
 	generateBranchSummary,
 	prepareCompaction,
 	shouldCompact,
-} from "./compaction/index.js";
-import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
-import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "./dynamic-prompt/index.js";
-import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.js";
-import { createToolHtmlRenderer } from "./export-html/tool-renderer.js";
-import type { ServiceTier } from "./extensions/builtin/service-tier.js";
+} from "./compaction/index.ts";
+import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
+import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "./dynamic-prompt/index.ts";
+import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
+import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
+import type { ServiceTier } from "./extensions/builtin/service-tier.ts";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
@@ -80,33 +80,33 @@ import {
 	type TurnEndEvent,
 	type TurnStartEvent,
 	wrapRegisteredTools,
-} from "./extensions/index.js";
-import { emitSessionShutdownEvent } from "./extensions/runner.js";
+} from "./extensions/index.ts";
+import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type {
 	ApplyCompactionOptions,
 	ApplyCompactionResult,
 	CompactionReason,
 	CompactionRejectionCause,
-} from "./extensions/types.js";
-import { type BashExecutionMessage, type CustomMessage, filterContextExcludedMessages } from "./messages.js";
-import type { ModelRegistry } from "./model-registry.js";
-import { getModelNarrowingPatterns, resolveModelScope } from "./model-resolver.js";
-import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
-import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.js";
-import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.js";
+} from "./extensions/types.ts";
+import { type BashExecutionMessage, type CustomMessage, filterContextExcludedMessages } from "./messages.ts";
+import type { ModelRegistry } from "./model-registry.ts";
+import { getModelNarrowingPatterns, resolveModelScope } from "./model-resolver.ts";
+import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
+import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
+import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
 import {
 	buildSessionContext,
 	CURRENT_SESSION_VERSION,
 	getLatestCompactionEntry,
 	type SessionHeader,
-} from "./session-manager.js";
-import type { SettingsManager } from "./settings-manager.js";
-import type { SlashCommandInfo } from "./slash-commands.js";
-import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
-import { getSupportedThinkingLevels, supportsMax, supportsXhigh } from "./thinking-levels.js";
-import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
-import { createAllToolDefinitions } from "./tools/index.js";
-import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.js";
+} from "./session-manager.ts";
+import type { SettingsManager } from "./settings-manager.ts";
+import type { SlashCommandInfo } from "./slash-commands.ts";
+import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
+import { getSupportedThinkingLevels, supportsMax, supportsXhigh } from "./thinking-levels.ts";
+import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
+import { createAllToolDefinitions } from "./tools/index.ts";
+import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 
 // ============================================================================
 // Skill Block Parsing
@@ -136,8 +136,11 @@ export function parseSkillBlock(text: string): ParsedSkillBlock | null {
 }
 
 /** Session-specific events that extend the core AgentEvent */
+type AgentSessionAgentEndEvent = Extract<AgentEvent, { type: "agent_end" }> & { willRetry: boolean };
+
 export type AgentSessionEvent =
-	| AgentEvent
+	| Exclude<AgentEvent, { type: "agent_end" }>
+	| AgentSessionAgentEndEvent
 	| {
 			type: "queue_update";
 			steering: readonly string[];
@@ -228,9 +231,12 @@ type CompactionExecutionResult =
 	  };
 
 class CompactionRejectedError extends Error {
-	constructor(readonly rejectionCause: CompactionRejectionCause) {
+	readonly rejectionCause: CompactionRejectionCause;
+
+	constructor(rejectionCause: CompactionRejectionCause) {
 		super(rejectionCause === "cancelled-by-extension" ? "Compaction cancelled" : "Compaction rejected");
 		this.name = "CompactionRejectedError";
+		this.rejectionCause = rejectionCause;
 	}
 }
 
@@ -601,6 +607,30 @@ export class AgentSession {
 		return undefined;
 	}
 
+	private _willRetryAfterAgentEnd(messages: AgentMessage[]): boolean {
+		const settings = this.settingsManager.getRetrySettings();
+		if (!settings.enabled) {
+			return false;
+		}
+
+		const lastAssistant = this._lastAssistantMessage ?? this._findLastAssistantInMessages(messages);
+		if (!lastAssistant || !this._isRetryableError(lastAssistant)) {
+			return false;
+		}
+
+		if (this._retryAttempt + 1 > settings.maxRetries) {
+			return false;
+		}
+
+		const errorMessage = lastAssistant.errorMessage || "Unknown error";
+		const providerDelayMs = this._getProviderRetryDelayMs(errorMessage);
+		if (providerDelayMs === undefined) {
+			return true;
+		}
+
+		return providerDelayMs <= this.settingsManager.getProviderRetrySettings().maxRetryDelayMs;
+	}
+
 	private async _processAgentEvent(event: AgentEvent): Promise<void> {
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
@@ -628,7 +658,9 @@ export class AgentSession {
 		await this._emitExtensionEvent(event);
 
 		// Notify all listeners
-		this._emit(event);
+		this._emit(
+			event.type === "agent_end" ? { ...event, willRetry: this._willRetryAfterAgentEnd(event.messages) } : event,
+		);
 
 		// Handle session persistence
 		if (event.type === "message_end") {
@@ -688,6 +720,10 @@ export class AgentSession {
 
 			this._resolveRetry();
 			await this._checkCompaction(msg);
+		}
+
+		if (event.type === "agent_end") {
+			this._flushPendingBashMessages();
 		}
 	}
 
@@ -1264,6 +1300,7 @@ export class AgentSession {
 		preflightResult?.(true);
 		await this.agent.prompt(messages);
 		await this.waitForRetry();
+		await this._agentEventQueue;
 	}
 
 	/**
@@ -2267,7 +2304,7 @@ export class AgentSession {
 	/**
 	 * Internal: Run auto-compaction with events.
 	 */
-	private async _runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<void> {
+	private async _runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<boolean> {
 		this._emit({ type: "compaction_start", reason });
 		this._autoCompactionAbortController = new AbortController();
 
@@ -2281,7 +2318,7 @@ export class AgentSession {
 					aborted: false,
 					willRetry: false,
 				});
-				return;
+				return false;
 			}
 
 			const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
@@ -2294,7 +2331,7 @@ export class AgentSession {
 					aborted: false,
 					willRetry: false,
 				});
-				return;
+				return false;
 			}
 
 			const preparation = prepareCompaction(
@@ -2310,13 +2347,13 @@ export class AgentSession {
 					aborted: false,
 					willRetry: false,
 				});
-				return;
+				return false;
 			}
 
 			const execution = await this._executeCompaction({ reason, willRetry });
 			if (!execution.accepted) {
 				if (reason === "overflow") this._overflowRecoveryAttempted = false;
-				return;
+				return false;
 			}
 
 			if (willRetry) {
@@ -2330,13 +2367,17 @@ export class AgentSession {
 				setTimeout(() => {
 					this.agent.continue().catch(() => {});
 				}, 100);
+				return true;
 			} else if (this.agent.hasQueuedMessages()) {
 				// Auto-compaction can complete while follow-up/steering/custom messages are waiting.
 				// Kick the loop so queued messages are actually delivered.
 				setTimeout(() => {
 					this.agent.continue().catch(() => {});
 				}, 100);
+				return true;
 			}
+
+			return false;
 		} catch (error) {
 			if (reason === "overflow") this._overflowRecoveryAttempted = false;
 			const errorMessage = error instanceof Error ? error.message : "compaction failed";
@@ -2354,6 +2395,7 @@ export class AgentSession {
 						? `Context overflow recovery failed: ${errorMessage}`
 						: `Auto-compaction failed: ${errorMessage}`,
 			});
+			return false;
 		} finally {
 			this._autoCompactionAbortController = undefined;
 		}

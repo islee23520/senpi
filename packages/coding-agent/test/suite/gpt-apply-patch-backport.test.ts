@@ -12,10 +12,10 @@ import {
 	formatInFlightCallText,
 	formatPatchPreview,
 	truncatePreview,
-} from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
-import type { AtomicWriteOperations } from "../../src/core/extensions/builtin/gpt-apply-patch/types.js";
-import type { Harness } from "./harness.js";
-import { createHarness } from "./harness.js";
+} from "../../src/core/extensions/builtin/gpt-apply-patch/index.ts";
+import type { AtomicWriteOperations } from "../../src/core/extensions/builtin/gpt-apply-patch/types.ts";
+import type { Harness } from "./harness.ts";
+import { createHarness } from "./harness.ts";
 
 describe("gpt-apply-patch backported behavior", () => {
 	const harnesses: Harness[] = [];

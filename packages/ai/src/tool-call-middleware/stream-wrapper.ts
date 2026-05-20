@@ -5,10 +5,10 @@ import type {
 	Tool,
 	ToolCall,
 	Usage,
-} from "../types.js";
-import { AssistantMessageEventStream as AssistantMessageEventStreamImpl } from "../utils/event-stream.js";
-import { parseStreamingJson } from "../utils/json-parse.js";
-import type { StreamParserEvent, ToolCallProtocol } from "./types.js";
+} from "../types.ts";
+import { AssistantMessageEventStream as AssistantMessageEventStreamImpl } from "../utils/event-stream.ts";
+import { parseStreamingJson } from "../utils/json-parse.ts";
+import type { StreamParserEvent, ToolCallProtocol } from "./types.ts";
 
 type PartialToolCall = ToolCall & {
 	partialJson: string;

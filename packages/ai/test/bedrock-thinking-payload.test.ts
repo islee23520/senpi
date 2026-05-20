@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { type BedrockOptions, streamBedrock } from "../src/providers/amazon-bedrock.js";
-import type { AssistantMessage, Context, Model } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { type BedrockOptions, streamBedrock } from "../src/providers/amazon-bedrock.ts";
+import type { AssistantMessage, Context, Model } from "../src/types.ts";
 
 interface BedrockThinkingPayload {
 	messages?: Array<{ role?: string; content?: Array<Record<string, unknown>> }>;

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CONFIG_DIR_NAME } from "../src/config.js";
-import { SettingsManager } from "../src/core/settings-manager.js";
+import { CONFIG_DIR_NAME } from "../src/config.ts";
+import { SettingsManager } from "../src/core/settings-manager.ts";
 
 describe("SettingsManager", () => {
 	const testDir = join(process.cwd(), "test-settings-tmp");

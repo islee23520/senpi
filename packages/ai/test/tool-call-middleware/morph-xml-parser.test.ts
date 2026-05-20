@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	createMorphXmlStreamParser,
 	parseMorphXmlGeneratedText,
-} from "../../src/tool-call-middleware/protocols/morph-xml.js";
-import type { Tool } from "../../src/types.js";
+} from "../../src/tool-call-middleware/protocols/morph-xml.ts";
+import type { Tool } from "../../src/types.ts";
 
 function seededRandom(seed: number): () => number {
 	let current = seed;

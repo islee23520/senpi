@@ -6,36 +6,36 @@ import type {
 	ThinkingContent,
 	ToolResultMessage,
 	UserMessage,
-} from "../types.js";
+} from "../types.ts";
 import {
 	gemma4CreateStreamParser,
 	gemma4FormatToolCall,
 	gemma4FormatToolResponse,
 	gemma4FormatToolsSystemPrompt,
 	gemma4ParseGeneratedText,
-} from "./protocols/gemma4.js";
+} from "./protocols/gemma4.ts";
 import {
 	hermesCreateStreamParser,
 	hermesFormatToolCall,
 	hermesFormatToolResponse,
 	hermesFormatToolsSystemPrompt,
 	hermesParseGeneratedText,
-} from "./protocols/hermes.js";
+} from "./protocols/hermes.ts";
 import {
 	createMorphXmlStreamParser,
 	morphXmlFormatToolCall,
 	morphXmlFormatToolResponse,
 	morphXmlFormatToolsSystemPrompt,
 	parseMorphXmlGeneratedText,
-} from "./protocols/morph-xml.js";
+} from "./protocols/morph-xml.ts";
 import {
 	createYamlXmlStreamParser,
 	parseYamlXmlGeneratedText,
 	yamlXmlFormatToolCall,
 	yamlXmlFormatToolResponse,
 	yamlXmlFormatToolsSystemPrompt,
-} from "./protocols/yaml-xml.js";
-import type { ToolCallFormat, ToolCallProtocol } from "./types.js";
+} from "./protocols/yaml-xml.ts";
+import type { ToolCallFormat, ToolCallProtocol } from "./types.ts";
 
 /**
  * Hermes protocol implementation for tool call formatting and parsing.

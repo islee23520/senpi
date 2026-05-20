@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getModel } from "../src/models.js";
-import { stream } from "../src/stream.js";
-import type { Context, Model } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { stream } from "../src/stream.ts";
+import type { Context, Model } from "../src/types.ts";
 
 describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 	const originalEnv = process.env.PI_CACHE_RETENTION;
@@ -88,7 +88,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 			// Since we can't easily test this without mocking, we'll skip the actual API call
 			// and just verify the helper logic works correctly
-			const { streamAnthropic } = await import("../src/providers/anthropic.js");
+			const { streamAnthropic } = await import("../src/providers/anthropic.ts");
 
 			try {
 				const s = streamAnthropic(proxyModel, context, {
@@ -119,7 +119,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			};
 			let capturedPayload: any = null;
 
-			const { streamAnthropic } = await import("../src/providers/anthropic.js");
+			const { streamAnthropic } = await import("../src/providers/anthropic.ts");
 
 			try {
 				const s = streamAnthropic(proxyModel, context, {
@@ -145,7 +145,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			const baseModel = getModel("anthropic", "claude-haiku-4-5");
 			let capturedPayload: any = null;
 
-			const { streamAnthropic } = await import("../src/providers/anthropic.js");
+			const { streamAnthropic } = await import("../src/providers/anthropic.ts");
 
 			try {
 				const s = streamAnthropic(baseModel, context, {
@@ -171,7 +171,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			const baseModel = getModel("anthropic", "claude-haiku-4-5");
 			let capturedPayload: any = null;
 
-			const { streamAnthropic } = await import("../src/providers/anthropic.js");
+			const { streamAnthropic } = await import("../src/providers/anthropic.ts");
 
 			try {
 				const s = streamAnthropic(baseModel, context, {
@@ -199,7 +199,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			const baseModel = getModel("anthropic", "claude-haiku-4-5");
 			let capturedPayload: any = null;
 
-			const { streamAnthropic } = await import("../src/providers/anthropic.js");
+			const { streamAnthropic } = await import("../src/providers/anthropic.ts");
 
 			try {
 				const s = streamAnthropic(baseModel, context, {
@@ -280,7 +280,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 			let capturedPayload: any = null;
 
-			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.js");
+			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.ts");
 
 			try {
 				const s = streamOpenAIResponses(proxyModel, context, {
@@ -309,7 +309,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			};
 			let capturedPayload: any = null;
 
-			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.js");
+			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.ts");
 
 			try {
 				const s = streamOpenAIResponses(model, context, {
@@ -336,7 +336,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			const model = getModel("openai", "gpt-4o-mini");
 			let capturedPayload: any = null;
 
-			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.js");
+			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.ts");
 
 			try {
 				const s = streamOpenAIResponses(model, context, {
@@ -364,7 +364,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			const model = getModel("openai", "gpt-4o-mini");
 			let capturedPayload: any = null;
 
-			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.js");
+			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.ts");
 
 			try {
 				const s = streamOpenAIResponses(model, context, {
@@ -408,7 +408,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 		it("should set prompt_cache_retention for non-api.openai.com baseUrl by default", async () => {
 			let capturedPayload: any = null;
-			const { streamOpenAICompletions } = await import("../src/providers/openai-completions.js");
+			const { streamOpenAICompletions } = await import("../src/providers/openai-completions.ts");
 
 			try {
 				const s = streamOpenAICompletions(createCompletionsModel(), context, {
@@ -434,7 +434,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 		it("should omit prompt_cache_retention when supportsLongCacheRetention is false", async () => {
 			let capturedPayload: any = null;
-			const { streamOpenAICompletions } = await import("../src/providers/openai-completions.js");
+			const { streamOpenAICompletions } = await import("../src/providers/openai-completions.ts");
 
 			try {
 				const s = streamOpenAICompletions(createCompletionsModel({ supportsLongCacheRetention: false }), context, {

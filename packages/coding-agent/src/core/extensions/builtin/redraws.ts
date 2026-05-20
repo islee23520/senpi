@@ -5,7 +5,7 @@
  */
 
 import { Text } from "@earendil-works/pi-tui";
-import type { ExtensionAPI } from "../types.js";
+import type { ExtensionAPI } from "../types.ts";
 
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("tui", {

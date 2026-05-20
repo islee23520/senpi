@@ -15,7 +15,7 @@ import {
 } from "fs";
 import { readdir, readFile, stat } from "fs/promises";
 import { join, resolve } from "path";
-import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
+import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.ts";
 
 // Fork change: inlined UUIDv7 (upstream uses the `uuid` npm package). Keeps this
 // package self-contained so consumers don't need a transitive `uuid` install.
@@ -44,7 +44,7 @@ import {
 	createBranchSummaryMessage,
 	createCompactionSummaryMessage,
 	createCustomMessage,
-} from "./messages.js";
+} from "./messages.ts";
 
 export const CURRENT_SESSION_VERSION = 3;
 

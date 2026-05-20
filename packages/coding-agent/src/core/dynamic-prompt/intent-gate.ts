@@ -1,5 +1,5 @@
-import { getToolsPromptDisplay } from "./tool-categorization.js";
-import type { AvailableTool } from "./types.js";
+import { getToolsPromptDisplay } from "./tool-categorization.ts";
+import type { AvailableTool } from "./types.ts";
 
 function buildKeyTriggers(tools: AvailableTool[]): string {
 	const triggerTools = getToolsPromptDisplay(tools);

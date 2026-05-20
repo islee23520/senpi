@@ -1,6 +1,6 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { clampThinkingLevelToModel } from "../../src/core/sdk.js";
+import { clampThinkingLevelToModel } from "../../src/core/sdk.ts";
 
 describe("clampThinkingLevelToModel", () => {
 	it("clamps max to high on Anthropic models that do not expose xhigh/max", () => {

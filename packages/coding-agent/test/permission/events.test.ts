@@ -4,9 +4,9 @@ import {
 	createLocalEventEmitter,
 	type PermissionAskedEvent,
 	type PermissionRepliedEvent,
-} from "../../src/core/extensions/builtin/permission-system/events.js";
-import type { Reply, Request } from "../../src/core/extensions/builtin/permission-system/types.js";
-import type { ExtensionAPI } from "../../src/core/extensions/types.js";
+} from "../../src/core/extensions/builtin/permission-system/events.ts";
+import type { Reply, Request } from "../../src/core/extensions/builtin/permission-system/types.ts";
+import type { ExtensionAPI } from "../../src/core/extensions/types.ts";
 
 describe("createEventEmitter", () => {
 	it("emits permission_asked event via pi.events", () => {

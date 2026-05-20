@@ -1,10 +1,10 @@
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { fauxAssistantMessage, fauxText, registerFauxProvider } from "../../src/providers/faux.js";
-import { complete, stream } from "../../src/stream.js";
-import { getProtocol, transformContext } from "../../src/tool-call-middleware/context-transformer.js";
-import { wrapStreamWithToolCallMiddleware } from "../../src/tool-call-middleware/stream-wrapper.js";
-import type { Context, Tool } from "../../src/types.js";
+import { fauxAssistantMessage, fauxText, registerFauxProvider } from "../../src/providers/faux.ts";
+import { complete, stream } from "../../src/stream.ts";
+import { getProtocol, transformContext } from "../../src/tool-call-middleware/context-transformer.ts";
+import { wrapStreamWithToolCallMiddleware } from "../../src/tool-call-middleware/stream-wrapper.ts";
+import type { Context, Tool } from "../../src/types.ts";
 
 function userMessage(content: string) {
 	return { role: "user" as const, content, timestamp: Date.now() };

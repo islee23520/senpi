@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DefaultResourceLoader } from "../../../src/core/resource-loader.js";
+import { DefaultResourceLoader } from "../../../src/core/resource-loader.ts";
 
 describe("default global extension shims", () => {
 	let tempDir: string;

@@ -2,7 +2,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ExtensionAPI } from "../../src/index.js";
+import type { ExtensionAPI } from "../../src/index.ts";
 import {
 	createHarness,
 	getAssistantTexts,
@@ -10,7 +10,7 @@ import {
 	getUserTexts,
 	type Harness,
 	type HarnessOptions,
-} from "./harness.js";
+} from "./harness.ts";
 
 async function createWaitingHarness(options: Pick<HarnessOptions, "extensionFactories" | "tools"> = {}): Promise<{
 	harness: Harness;

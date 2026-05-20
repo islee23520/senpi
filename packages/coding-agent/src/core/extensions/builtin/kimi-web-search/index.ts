@@ -1,7 +1,7 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { TextContent } from "@earendil-works/pi-ai";
 import { type Static, Type } from "typebox";
-import type { ExtensionAPI, ExtensionContext } from "../../types.js";
+import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
 
 const ENABLE_ENV = "PI_KIMI_WEB_SEARCH";
 const SEARCH_BASE_URL_ENV = "PI_KIMI_SEARCH_BASE_URL";

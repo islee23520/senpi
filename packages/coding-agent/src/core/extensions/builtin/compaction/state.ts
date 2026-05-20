@@ -1,4 +1,4 @@
-import type { RestorationTrackerState } from "./restoration-tracker.js";
+import type { RestorationTrackerState } from "./restoration-tracker.ts";
 
 export interface CompactionYieldSnapshot {
 	savedTokens: number;

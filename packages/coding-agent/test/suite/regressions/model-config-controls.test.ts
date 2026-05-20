@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthStorage } from "../../../src/core/auth-storage.js";
-import { ModelRegistry } from "../../../src/core/model-registry.js";
-import { getModelNarrowingPatterns, resolveModelScope } from "../../../src/core/model-resolver.js";
-import { createAgentSession } from "../../../src/core/sdk.js";
-import { SettingsManager } from "../../../src/core/settings-manager.js";
+import { AuthStorage } from "../../../src/core/auth-storage.ts";
+import { ModelRegistry } from "../../../src/core/model-registry.ts";
+import { getModelNarrowingPatterns, resolveModelScope } from "../../../src/core/model-resolver.ts";
+import { createAgentSession } from "../../../src/core/sdk.ts";
+import { SettingsManager } from "../../../src/core/settings-manager.ts";
 
 function registerOpenAiModels(registry: ModelRegistry, ids: string[]): void {
 	registry.registerProvider("openai", {

@@ -1,7 +1,7 @@
-import type { TextContent, Tool } from "../../types.js";
-import { validateToolArguments } from "../../utils/validation.js";
-import type { ParsedToolCall, ParserOptions, StreamParser, StreamParserEvent } from "../types.js";
-import { findEarliestXmlToolTag, findSelfClosingToolTag, getSafeXmlTextLength } from "./xml-tool-tag-scanner.js";
+import type { TextContent, Tool } from "../../types.ts";
+import { validateToolArguments } from "../../utils/validation.ts";
+import type { ParsedToolCall, ParserOptions, StreamParser, StreamParserEvent } from "../types.ts";
+import { findEarliestXmlToolTag, findSelfClosingToolTag, getSafeXmlTextLength } from "./xml-tool-tag-scanner.ts";
 
 const INDENT = "   ";
 

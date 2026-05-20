@@ -1,9 +1,9 @@
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { getProtocol } from "../../src/tool-call-middleware/context-transformer.js";
-import { wrapStreamWithToolCallMiddleware } from "../../src/tool-call-middleware/stream-wrapper.js";
-import type { AssistantMessage, AssistantMessageEvent, Tool } from "../../src/types.js";
-import { AssistantMessageEventStream } from "../../src/utils/event-stream.js";
+import { getProtocol } from "../../src/tool-call-middleware/context-transformer.ts";
+import { wrapStreamWithToolCallMiddleware } from "../../src/tool-call-middleware/stream-wrapper.ts";
+import type { AssistantMessage, AssistantMessageEvent, Tool } from "../../src/types.ts";
+import { AssistantMessageEventStream } from "../../src/utils/event-stream.ts";
 
 const weatherTool: Tool = {
 	name: "get_weather",

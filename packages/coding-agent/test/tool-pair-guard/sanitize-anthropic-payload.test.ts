@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeAnthropicPayload } from "../../src/core/extensions/builtin/tool-pair-guard/sanitize-anthropic-payload.js";
+import { sanitizeAnthropicPayload } from "../../src/core/extensions/builtin/tool-pair-guard/sanitize-anthropic-payload.ts";
 
 describe("sanitizeAnthropicPayload", () => {
 	it("returns same reference for payload without messages", () => {

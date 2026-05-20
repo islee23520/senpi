@@ -1,5 +1,5 @@
-import { evaluate } from "../permission-system/evaluate.js";
-import type { ReplyInput, Request, Ruleset } from "../permission-system/types.js";
+import { evaluate } from "../permission-system/evaluate.ts";
+import type { ReplyInput, Request, Ruleset } from "../permission-system/types.ts";
 
 /**
  * Handle permission request in no-UI mode (print mode, unbound SDK).

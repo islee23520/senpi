@@ -1,8 +1,8 @@
-import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/build.js";
-import { SettingsManager } from "../../../settings-manager.js";
-import type { ExtensionAPI, ExtensionContext, ModelSelectEvent } from "../../types.js";
-import { resolvePreset, resolvePresetName } from "./presets.js";
-import { loadPromptPresetSettings } from "./settings.js";
+import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/build.ts";
+import { SettingsManager } from "../../../settings-manager.ts";
+import type { ExtensionAPI, ExtensionContext, ModelSelectEvent } from "../../types.ts";
+import { resolvePreset, resolvePresetName } from "./presets.ts";
+import { loadPromptPresetSettings } from "./settings.ts";
 
 interface SystemPromptOptionsLike {
 	cwd?: string;

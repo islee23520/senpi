@@ -7,7 +7,7 @@ import {
 	microCompactAssistantText,
 	reduceContextMessages,
 	shouldApplyContextReduction,
-} from "../../src/core/extensions/builtin/compaction/context-reduction.js";
+} from "../../src/core/extensions/builtin/compaction/context-reduction.ts";
 
 let timestampCounter = 0;
 function ts(): number {

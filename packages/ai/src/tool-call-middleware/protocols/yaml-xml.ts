@@ -1,7 +1,7 @@
 import YAML from "yaml";
-import type { TextContent, Tool } from "../../types.js";
-import type { ParsedToolCall, ParserOptions, StreamParser, StreamParserEvent } from "../types.js";
-import { findEarliestXmlToolTag, getSafeXmlTextLength } from "./xml-tool-tag-scanner.js";
+import type { TextContent, Tool } from "../../types.ts";
+import type { ParsedToolCall, ParserOptions, StreamParser, StreamParserEvent } from "../types.ts";
+import { findEarliestXmlToolTag, getSafeXmlTextLength } from "./xml-tool-tag-scanner.ts";
 
 function escapeRegExp(text: string): string {
 	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

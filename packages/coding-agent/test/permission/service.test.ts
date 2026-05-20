@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createLocalEventEmitter } from "../../src/core/extensions/builtin/permission-system/events.js";
-import { PermissionService } from "../../src/core/extensions/builtin/permission-system/service.js";
+import { createLocalEventEmitter } from "../../src/core/extensions/builtin/permission-system/events.ts";
+import { PermissionService } from "../../src/core/extensions/builtin/permission-system/service.ts";
 import {
 	CorrectedError,
 	DeniedError,
 	RejectedError,
 	type Request,
 	type Ruleset,
-} from "../../src/core/extensions/builtin/permission-system/types.js";
+} from "../../src/core/extensions/builtin/permission-system/types.ts";
 
 function createRequest(overrides: Partial<Request> = {}): Request {
 	return {

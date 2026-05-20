@@ -9,15 +9,15 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Type } from "typebox";
-import { AuthStorage } from "../../coding-agent/src/core/auth-storage.js";
-import { getModel } from "../src/models.js";
+import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
+import { getModel } from "../src/models.ts";
 import {
 	closeOpenAICodexWebSocketSessions,
 	getOpenAICodexWebSocketDebugStats,
 	resetOpenAICodexWebSocketDebugStats,
 	streamOpenAICodexResponses,
-} from "../src/providers/openai-codex-responses.js";
-import type { AssistantMessage, Context, Message, Model, Tool, ToolResultMessage, Transport } from "../src/types.js";
+} from "../src/providers/openai-codex-responses.ts";
+import type { AssistantMessage, Context, Message, Model, Tool, ToolResultMessage, Transport } from "../src/types.ts";
 
 type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
 

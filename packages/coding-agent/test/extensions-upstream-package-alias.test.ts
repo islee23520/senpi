@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverAndLoadExtensions } from "../src/core/extensions/loader.js";
+import { discoverAndLoadExtensions } from "../src/core/extensions/loader.ts";
 
 describe("upstream package name alias for extension loader", () => {
 	let tempDir: string;

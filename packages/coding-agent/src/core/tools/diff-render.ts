@@ -1,5 +1,5 @@
 import * as Diff from "diff";
-import { getLanguageFromPath, highlightCode } from "../../modes/interactive/theme/theme.js";
+import { getLanguageFromPath, highlightCode } from "../../modes/interactive/theme/theme.ts";
 
 export type ToolDiffThemeColor = "muted" | "toolDiffAdded" | "toolDiffContext" | "toolDiffRemoved";
 export type ToolDiffThemeBg = "toolErrorBg" | "toolSuccessBg";

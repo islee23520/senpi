@@ -1,13 +1,16 @@
-import type { IndexedDBConfig, StorageBackend, StorageTransaction } from "../types.js";
+import type { IndexedDBConfig, StorageBackend, StorageTransaction } from "../types.ts";
 
 /**
  * IndexedDB implementation of StorageBackend.
  * Provides multi-store key-value storage with transactions and quota management.
  */
 export class IndexedDBStorageBackend implements StorageBackend {
+	private config: IndexedDBConfig;
 	private dbPromise: Promise<IDBDatabase> | null = null;
 
-	constructor(private config: IndexedDBConfig) {}
+	constructor(config: IndexedDBConfig) {
+		this.config = config;
+	}
 
 	private async getDB(): Promise<IDBDatabase> {
 		if (!this.dbPromise) {

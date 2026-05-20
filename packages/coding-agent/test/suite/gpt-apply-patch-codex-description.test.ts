@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODEX_APPLY_PATCH_DESCRIPTION } from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
+import { CODEX_APPLY_PATCH_DESCRIPTION } from "../../src/core/extensions/builtin/gpt-apply-patch/index.ts";
 
 describe("gpt apply_patch codex JSON description", () => {
 	it("contains codex context rules and grammar markers", () => {

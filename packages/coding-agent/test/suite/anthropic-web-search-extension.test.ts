@@ -3,8 +3,8 @@ import anthropicWebSearchExtension, {
 	ANTHROPIC_WEB_SEARCH_SECTION,
 	addAnthropicWebSearchToPayload,
 	isAnthropicWebSearchEnabled,
-} from "../../src/core/extensions/builtin/anthropic-web-search/index.js";
-import type { ExtensionAPI } from "../../src/core/extensions/types.js";
+} from "../../src/core/extensions/builtin/anthropic-web-search/index.ts";
+import type { ExtensionAPI } from "../../src/core/extensions/types.ts";
 
 const ENABLE_ENV = "PI_ANTHROPIC_WEB_SEARCH";
 const ALLOWED_DOMAINS_ENV = "PI_ANTHROPIC_WEB_SEARCH_ALLOWED_DOMAINS";

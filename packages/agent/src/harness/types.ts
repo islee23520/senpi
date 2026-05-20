@@ -1,6 +1,6 @@
 import type { ImageContent, Model, SimpleStreamOptions, TextContent, Transport } from "@earendil-works/pi-ai";
-import type { AgentEvent, AgentMessage, AgentTool, QueueMode, ThinkingLevel } from "../index.js";
-import type { Session } from "./session/session.js";
+import type { AgentEvent, AgentMessage, AgentTool, QueueMode, ThinkingLevel } from "../index.ts";
+import type { Session } from "./session/session.ts";
 
 /** Result of a fallible operation. Expected failures are returned as `ok: false` instead of thrown. */
 export type Result<TValue, TError> = { ok: true; value: TValue } | { ok: false; error: TError };
@@ -121,17 +121,16 @@ export type FileErrorCode =
 /** Error returned by {@link FileSystem} file operations. */
 export class FileError extends Error {
 	readonly cause?: unknown;
+	/** Backend-independent error code. */
+	public code: FileErrorCode;
+	/** Absolute addressed path associated with the failure, when available. */
+	public path?: string;
 
-	constructor(
-		/** Backend-independent error code. */
-		public code: FileErrorCode,
-		message: string,
-		/** Absolute addressed path associated with the failure, when available. */
-		public path?: string,
-		cause?: Error,
-	) {
-		super(message);
+	constructor(code: FileErrorCode, message: string, path?: string, cause?: Error) {
+		super(message, cause === undefined ? undefined : { cause });
 		this.name = "FileError";
+		this.code = code;
+		this.path = path;
 		if (cause !== undefined) this.cause = cause;
 	}
 }
@@ -148,15 +147,13 @@ export type ExecutionErrorCode =
 /** Error returned by {@link ExecutionEnv.exec}. */
 export class ExecutionError extends Error {
 	readonly cause?: unknown;
+	/** Backend-independent error code. */
+	public code: ExecutionErrorCode;
 
-	constructor(
-		/** Backend-independent error code. */
-		public code: ExecutionErrorCode,
-		message: string,
-		cause?: Error,
-	) {
-		super(message);
+	constructor(code: ExecutionErrorCode, message: string, cause?: Error) {
+		super(message, cause === undefined ? undefined : { cause });
 		this.name = "ExecutionError";
+		this.code = code;
 		if (cause !== undefined) this.cause = cause;
 	}
 }
@@ -167,15 +164,13 @@ export type CompactionErrorCode = "aborted" | "summarization_failed" | "invalid_
 /** Error returned by compaction helpers. */
 export class CompactionError extends Error {
 	readonly cause?: unknown;
+	/** Backend-independent error code. */
+	public code: CompactionErrorCode;
 
-	constructor(
-		/** Backend-independent error code. */
-		public code: CompactionErrorCode,
-		message: string,
-		cause?: Error,
-	) {
-		super(message);
+	constructor(code: CompactionErrorCode, message: string, cause?: Error) {
+		super(message, cause === undefined ? undefined : { cause });
 		this.name = "CompactionError";
+		this.code = code;
 		if (cause !== undefined) this.cause = cause;
 	}
 }
@@ -185,14 +180,13 @@ export type BranchSummaryErrorCode = "aborted" | "summarization_failed" | "inval
 
 /** Error returned by branch summarization helpers. */
 export class BranchSummaryError extends Error {
-	constructor(
-		/** Backend-independent error code. */
-		public code: BranchSummaryErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	/** Backend-independent error code. */
+	public code: BranchSummaryErrorCode;
+
+	constructor(code: BranchSummaryErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "BranchSummaryError";
+		this.code = code;
 	}
 }
 
@@ -206,14 +200,13 @@ export type SessionErrorCode =
 
 /** Error thrown by session storage, repositories, and session tree operations. */
 export class SessionError extends Error {
-	constructor(
-		/** Session subsystem error code. */
-		public code: SessionErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	/** Session subsystem error code. */
+	public code: SessionErrorCode;
+
+	constructor(code: SessionErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "SessionError";
+		this.code = code;
 	}
 }
 
@@ -230,13 +223,12 @@ export type AgentHarnessErrorCode =
 
 /** Public AgentHarness failure with a stable top-level classification. */
 export class AgentHarnessError extends Error {
-	constructor(
-		public code: AgentHarnessErrorCode,
-		message: string,
-		cause?: Error,
-	) {
+	public code: AgentHarnessErrorCode;
+
+	constructor(code: AgentHarnessErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "AgentHarnessError";
+		this.code = code;
 	}
 }
 
@@ -460,7 +452,7 @@ export interface SessionStorage<TMetadata extends SessionMetadata = SessionMetad
 	getEntries(): Promise<SessionTreeEntry[]>;
 }
 
-export type { Session } from "./session/session.js";
+export type { Session } from "./session/session.ts";
 
 export interface SessionCreateOptions {
 	id?: string;
@@ -826,4 +818,4 @@ export interface AgentHarnessOptions<
 	followUpMode?: QueueMode;
 }
 
-export type { AgentHarness } from "./agent-harness.js";
+export type { AgentHarness } from "./agent-harness.ts";

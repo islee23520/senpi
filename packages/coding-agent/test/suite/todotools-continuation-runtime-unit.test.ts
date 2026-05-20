@@ -1,9 +1,9 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SENPI_CONVERSATION_EVENT, SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
-import { buildContinuationPrompt } from "../../src/core/extensions/builtin/todotools/continuation/prompt.js";
-import { installContinuation } from "../../src/core/extensions/builtin/todotools/continuation/runtime.js";
-import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.js";
+import { SENPI_CONVERSATION_EVENT, SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.ts";
+import { buildContinuationPrompt } from "../../src/core/extensions/builtin/todotools/continuation/prompt.ts";
+import { installContinuation } from "../../src/core/extensions/builtin/todotools/continuation/runtime.ts";
+import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.ts";
 import type {
 	AgentEndEvent,
 	BeforeAgentStartEvent,
@@ -11,7 +11,7 @@ import type {
 	ExtensionUIContext,
 	SessionShutdownEvent,
 	SessionStartEvent,
-} from "../../src/core/extensions/types.js";
+} from "../../src/core/extensions/types.ts";
 
 type EventHandler = (event: unknown, ctx: ExtensionContext) => unknown | Promise<unknown>;
 

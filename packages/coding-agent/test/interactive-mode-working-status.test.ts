@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatKeyText } from "../src/modes/interactive/components/keybinding-hints.js";
+import { formatKeyText } from "../src/modes/interactive/components/keybinding-hints.ts";
 import {
 	blendWorkingStatusShimmerRgbColor,
 	formatToolHookStatusMessage,
@@ -7,8 +7,8 @@ import {
 	formatWorkingElapsedSeconds,
 	formatWorkingStatusMessage,
 	formatWorkingStatusMessageFrame,
-} from "../src/modes/interactive/working-status.js";
-import { stripAnsi } from "../src/utils/ansi.js";
+} from "../src/modes/interactive/working-status.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 describe("formatKeyText", () => {
 	test("uses compact escape labels for status hints", () => {

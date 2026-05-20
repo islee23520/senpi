@@ -3,7 +3,7 @@ import {
 	createBuiltinParserRegistry,
 	ParserRegistry,
 	type PermissionRequest,
-} from "../../src/core/extensions/builtin/permission-system/parsers.js";
+} from "../../src/core/extensions/builtin/permission-system/parsers.ts";
 
 describe("permission parsers", () => {
 	describe("ParserRegistry", () => {

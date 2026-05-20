@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExtensionAPI, ExtensionFactory } from "../src/core/extensions/types.js";
-import { DefaultResourceLoader } from "../src/core/resource-loader.js";
+import type { ExtensionAPI, ExtensionFactory } from "../src/core/extensions/types.ts";
+import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 
 type JitiImporter = (path: string) => Promise<ExtensionFactory>;
 type CreateJiti = () => { import: JitiImporter };

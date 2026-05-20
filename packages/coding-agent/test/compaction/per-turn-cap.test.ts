@@ -7,9 +7,9 @@ import {
 	incrementAccepted,
 	shouldRejectByCap,
 	softCap,
-} from "../../src/core/extensions/builtin/compaction/per-turn-cap.js";
-import { resetTurnCounter } from "../../src/core/extensions/builtin/compaction/state.js";
-import { migrateSessionEntries, parseSessionEntries, type SessionEntry } from "../../src/core/session-manager.js";
+} from "../../src/core/extensions/builtin/compaction/per-turn-cap.ts";
+import { resetTurnCounter } from "../../src/core/extensions/builtin/compaction/state.ts";
+import { migrateSessionEntries, parseSessionEntries, type SessionEntry } from "../../src/core/session-manager.ts";
 
 interface FutureCapState {
 	acceptedThisTurn: number;

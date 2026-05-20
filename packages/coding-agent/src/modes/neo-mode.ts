@@ -16,7 +16,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 
-import type { Args } from "../cli/args.js";
+import type { Args } from "../cli/args.ts";
 
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 

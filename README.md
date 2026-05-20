@@ -264,7 +264,6 @@ I regularly publish my own `pi-mono` work sessions here:
 | **mom** | Slack bot runner for dispatching coding-agent work in a target workspace, with host or Docker sandbox modes |
 | **pods** | CLI utilities for managing vLLM models on GPU pods over SSH |
 | **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
-| **[@earendil-works/pi-web-ui](packages/web-ui)** | Web components for AI chat interfaces |
 
 For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
 
@@ -284,7 +283,6 @@ npm run publish      # Publish npm workspaces, including @code-yeongyu/senpi
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).
-
 ## License
 
 MIT

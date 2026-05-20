@@ -7,13 +7,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	repairOrphanedToolResults,
 	TOOL_RESULT_PLACEHOLDER,
-} from "../../src/core/extensions/builtin/compaction/repair-tool-pairs.js";
+} from "../../src/core/extensions/builtin/compaction/repair-tool-pairs.ts";
 import {
 	type FileEntry,
 	migrateSessionEntries,
 	parseSessionEntries,
 	type SessionMessageEntry,
-} from "../../src/core/session-manager.js";
+} from "../../src/core/session-manager.ts";
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 

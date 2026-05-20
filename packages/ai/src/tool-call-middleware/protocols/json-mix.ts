@@ -1,5 +1,5 @@
-import type { Tool } from "../../types.js";
-import type { ParsedToolCall, ParserOptions, StreamParser, StreamParserEvent } from "../types.js";
+import type { Tool } from "../../types.ts";
+import type { ParsedToolCall, ParserOptions, StreamParser, StreamParserEvent } from "../types.ts";
 
 type JsonMixOptions = {
 	toolCallStart: string;

@@ -10,9 +10,9 @@ import {
 	type TextContent,
 	type ToolCall,
 } from "@earendil-works/pi-ai";
-import type { CompactionResult } from "../../../compaction/index.js";
-import type { SessionEntry } from "../../../session-manager.js";
-import type { ServiceTier, SessionBeforeCompactEvent } from "../../types.js";
+import type { CompactionResult } from "../../../compaction/index.ts";
+import type { SessionEntry } from "../../../session-manager.ts";
+import type { ServiceTier, SessionBeforeCompactEvent } from "../../types.ts";
 
 export const OPENAI_REMOTE_COMPACTION_SCHEMA = "senpi.compaction.openai-remote.v1";
 export const SENPI_COMPACTION_EVENT = "senpi:compaction";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { categorizeTools, getToolsPromptDisplay } from "../../src/core/dynamic-prompt/tool-categorization.js";
+import { categorizeTools, getToolsPromptDisplay } from "../../src/core/dynamic-prompt/tool-categorization.ts";
 
 describe("categorizeTools", () => {
 	test("categorizes lsp_ and ast_grep prefixed tools as other", () => {

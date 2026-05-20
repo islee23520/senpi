@@ -3,7 +3,7 @@ import {
 	ANTHROPIC_BASH_SECTION,
 	addAnthropicBashToPayload,
 	isAnthropicBashEnabled,
-} from "../../src/core/extensions/builtin/anthropic-bash/index.js";
+} from "../../src/core/extensions/builtin/anthropic-bash/index.ts";
 
 const ANTHROPIC_BASH_ENV = "PI_ANTHROPIC_BASH";
 

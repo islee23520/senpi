@@ -1,20 +1,20 @@
 import { Box, Container, Spacer, Text } from "@earendil-works/pi-tui";
-import type { AgentToolResult, ToolRenderContext } from "../../types.js";
-import { defineTool } from "../../types.js";
-import { applyPatchDetailed, buildPartialFailureText } from "./apply.js";
-import { APPLY_PATCH_FREEFORM_DESCRIPTION, APPLY_PATCH_LARK_GRAMMAR, APPLY_PATCH_PARAMS } from "./constants.js";
-import { normalizeApplyPatchArguments } from "./params.js";
-import { parsePatch } from "./parser.js";
-import { createPendingPatchUpdate } from "./preview.js";
-import { getApplyPatchRenderState, renderPatchPreview } from "./preview-format.js";
-import { renderStreamingPatchCall } from "./streaming-render.js";
+import type { AgentToolResult, ToolRenderContext } from "../../types.ts";
+import { defineTool } from "../../types.ts";
+import { applyPatchDetailed, buildPartialFailureText } from "./apply.ts";
+import { APPLY_PATCH_FREEFORM_DESCRIPTION, APPLY_PATCH_LARK_GRAMMAR, APPLY_PATCH_PARAMS } from "./constants.ts";
+import { normalizeApplyPatchArguments } from "./params.ts";
+import { parsePatch } from "./parser.ts";
+import { createPendingPatchUpdate } from "./preview.ts";
+import { getApplyPatchRenderState, renderPatchPreview } from "./preview-format.ts";
+import { renderStreamingPatchCall } from "./streaming-render.ts";
 import type {
 	ApplyPatchRenderState,
 	ApplyPatchTheme,
 	ApplyPatchToolDefinition,
 	ApplyPatchToolDetails,
 	FreeformToolFormat,
-} from "./types.js";
+} from "./types.ts";
 
 function renderPreviewBox(
 	title: string,

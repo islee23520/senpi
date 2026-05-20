@@ -1,17 +1,17 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
-import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/build.js";
-import { buildClaudeOpus45Prompt } from "./claude-opus-4-5.js";
-import { buildClaudeOpus46Prompt } from "./claude-opus-4-6.js";
-import { buildClaudeOpus47Prompt } from "./claude-opus-4-7.js";
-import { buildGpt52Prompt } from "./gpt-5.2.js";
-import { buildGpt53CodexPrompt } from "./gpt-5.3-codex.js";
-import { buildGpt54Prompt } from "./gpt-5.4.js";
-import { buildGpt55Prompt } from "./gpt-5.5.js";
-import { buildGpt5Prompt } from "./gpt-5.js";
-import { buildKimiK26Prompt } from "./kimi-k2-6.js";
-import { type PromptPresetName, type PromptPresetSettings, parsePromptPreset } from "./settings.js";
+import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/build.ts";
+import { buildClaudeOpus45Prompt } from "./claude-opus-4-5.ts";
+import { buildClaudeOpus46Prompt } from "./claude-opus-4-6.ts";
+import { buildClaudeOpus47Prompt } from "./claude-opus-4-7.ts";
+import { buildGpt52Prompt } from "./gpt-5.2.ts";
+import { buildGpt53CodexPrompt } from "./gpt-5.3-codex.ts";
+import { buildGpt54Prompt } from "./gpt-5.4.ts";
+import { buildGpt55Prompt } from "./gpt-5.5.ts";
+import { buildGpt5Prompt } from "./gpt-5.ts";
+import { buildKimiK26Prompt } from "./kimi-k2-6.ts";
+import { type PromptPresetName, type PromptPresetSettings, parsePromptPreset } from "./settings.ts";
 
-export type { PromptPresetSettings } from "./settings.js";
+export type { PromptPresetSettings } from "./settings.ts";
 
 type ResolvedPresetName = Exclude<PromptPresetName, "auto">;
 type ModelWithPromptPresetMetadata = Pick<Model<Api>, "id" | "provider"> & {

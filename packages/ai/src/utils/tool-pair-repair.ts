@@ -1,4 +1,4 @@
-import type { Message, TextContent } from "../types.js";
+import type { Message, TextContent } from "../types.ts";
 
 export const TOOL_RESULT_PLACEHOLDER = "Tool output unavailable (context compacted)";
 

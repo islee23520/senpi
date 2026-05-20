@@ -37,9 +37,9 @@ import {
 	getLastAssistantUsage,
 	prepareCompaction,
 	shouldCompact,
-} from "../src/core/compaction/index.js";
-import compactionExtension from "../src/core/extensions/builtin/compaction/index.js";
-import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/index.js";
+} from "../src/core/compaction/index.ts";
+import compactionExtension from "../src/core/extensions/builtin/compaction/index.ts";
+import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/index.ts";
 import {
 	buildSessionContext,
 	type CompactionEntry,
@@ -49,7 +49,7 @@ import {
 	type SessionEntry,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,
-} from "../src/core/session-manager.js";
+} from "../src/core/session-manager.ts";
 
 // ============================================================================
 // Test fixtures

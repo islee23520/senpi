@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { BashArity } from "../../src/core/extensions/builtin/permission-system/arity.js";
+import { BashArity } from "../../src/core/extensions/builtin/permission-system/arity.ts";
 
 test("arity 1 - unknown commands default to first token", () => {
 	expect(BashArity.prefix(["unknown", "command", "subcommand"])).toEqual(["unknown"]);

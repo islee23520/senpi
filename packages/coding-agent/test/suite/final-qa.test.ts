@@ -5,10 +5,10 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONFIG_DIR_NAME } from "../../src/config.js";
-import { parsePermissionFlag } from "../../src/core/extensions/builtin/permission-system/cli.js";
-import { theme } from "../../src/modes/interactive/theme/theme.js";
-import { createHarness, getMessageText, type Harness } from "./harness.js";
+import { CONFIG_DIR_NAME } from "../../src/config.ts";
+import { parsePermissionFlag } from "../../src/core/extensions/builtin/permission-system/cli.ts";
+import { theme } from "../../src/modes/interactive/theme/theme.ts";
+import { createHarness, getMessageText, type Harness } from "./harness.ts";
 
 const PERMISSION_SYSTEM_EXTENSION_PATH = fileURLToPath(
 	new URL("../../src/core/extensions/builtin/permission-system/index.ts", import.meta.url),

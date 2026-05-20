@@ -2,23 +2,23 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import os, { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parsePermissionFlag } from "../../src/core/extensions/builtin/permission-system/cli.js";
-import { disabled, expand, fromConfig, merge } from "../../src/core/extensions/builtin/permission-system/config.js";
-import { evaluate } from "../../src/core/extensions/builtin/permission-system/evaluate.js";
+import { parsePermissionFlag } from "../../src/core/extensions/builtin/permission-system/cli.ts";
+import { disabled, expand, fromConfig, merge } from "../../src/core/extensions/builtin/permission-system/config.ts";
+import { evaluate } from "../../src/core/extensions/builtin/permission-system/evaluate.ts";
 import {
 	createLocalEventEmitter,
 	type PermissionAskedEvent,
 	type PermissionRepliedEvent,
-} from "../../src/core/extensions/builtin/permission-system/events.js";
-import { handleNoUI } from "../../src/core/extensions/builtin/permission-system/non-interactive.js";
-import { createBuiltinParserRegistry } from "../../src/core/extensions/builtin/permission-system/parsers.js";
-import { PermissionService } from "../../src/core/extensions/builtin/permission-system/service.js";
-import { loadPermissionSettings } from "../../src/core/extensions/builtin/permission-system/settings.js";
+} from "../../src/core/extensions/builtin/permission-system/events.ts";
+import { handleNoUI } from "../../src/core/extensions/builtin/permission-system/non-interactive.ts";
+import { createBuiltinParserRegistry } from "../../src/core/extensions/builtin/permission-system/parsers.ts";
+import { PermissionService } from "../../src/core/extensions/builtin/permission-system/service.ts";
+import { loadPermissionSettings } from "../../src/core/extensions/builtin/permission-system/settings.ts";
 import {
 	appendApproved,
 	clearApproved,
 	loadApproved,
-} from "../../src/core/extensions/builtin/permission-system/storage.js";
+} from "../../src/core/extensions/builtin/permission-system/storage.ts";
 import {
 	CorrectedError,
 	DeniedError,
@@ -26,8 +26,8 @@ import {
 	RejectedError,
 	type Request,
 	type Ruleset,
-} from "../../src/core/extensions/builtin/permission-system/types.js";
-import { SettingsManager } from "../../src/core/settings-manager.js";
+} from "../../src/core/extensions/builtin/permission-system/types.ts";
+import { SettingsManager } from "../../src/core/settings-manager.ts";
 
 // Helper to create temp project directory
 function createTempProject(): string {

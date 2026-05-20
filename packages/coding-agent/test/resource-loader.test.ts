@@ -2,16 +2,16 @@ import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.js";
-import { createAgentSessionServices } from "../src/core/agent-session-services.js";
-import { AuthStorage } from "../src/core/auth-storage.js";
-import { ExtensionRunner } from "../src/core/extensions/runner.js";
-import { ModelRegistry } from "../src/core/model-registry.js";
-import { DefaultResourceLoader } from "../src/core/resource-loader.js";
-import { SessionManager } from "../src/core/session-manager.js";
-import { SettingsManager } from "../src/core/settings-manager.js";
-import type { Skill } from "../src/core/skills.js";
-import { createSyntheticSourceInfo } from "../src/core/source-info.js";
+import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.ts";
+import { createAgentSessionServices } from "../src/core/agent-session-services.ts";
+import { AuthStorage } from "../src/core/auth-storage.ts";
+import { ExtensionRunner } from "../src/core/extensions/runner.ts";
+import { ModelRegistry } from "../src/core/model-registry.ts";
+import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
+import { SessionManager } from "../src/core/session-manager.ts";
+import { SettingsManager } from "../src/core/settings-manager.ts";
+import type { Skill } from "../src/core/skills.ts";
+import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 describe("DefaultResourceLoader", () => {
 	let tempDir: string;
@@ -365,6 +365,7 @@ Content`,
 				"<builtin:bash-timeout>",
 				"<builtin:tool-pair-guard>",
 				"<builtin:compaction>",
+				"<builtin:kimi-web-search>",
 			]);
 		});
 

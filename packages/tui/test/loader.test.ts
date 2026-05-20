@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Loader, TUI } from "../src/index.js";
-import { VirtualTerminal } from "./virtual-terminal.js";
+import { Loader, TUI } from "../src/index.ts";
+import { VirtualTerminal } from "./virtual-terminal.ts";
 
 describe("Loader", () => {
 	it("uses a message formatter with elapsed animation time", () => {

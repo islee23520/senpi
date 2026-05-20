@@ -5,7 +5,7 @@ import {
 	expandHome,
 	extractExternalPaths,
 	isExternalPath,
-} from "../../src/core/extensions/builtin/permission-system/external-dir.js";
+} from "../../src/core/extensions/builtin/permission-system/external-dir.ts";
 
 describe("external-dir", () => {
 	describe("expandHome", () => {

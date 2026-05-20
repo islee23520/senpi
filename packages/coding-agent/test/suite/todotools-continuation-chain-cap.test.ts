@@ -4,18 +4,18 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ENV_AGENT_DIR } from "../../src/config.js";
-import { SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
+import { ENV_AGENT_DIR } from "../../src/config.ts";
+import { SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.ts";
 import {
 	buildContinuationPrompt,
 	CONTINUATION_DIRECTIVE,
-} from "../../src/core/extensions/builtin/todotools/continuation/prompt.js";
-import { CONTINUATION_CHAIN_CAP } from "../../src/core/extensions/builtin/todotools/continuation/runtime.js";
-import todotoolsExtension from "../../src/core/extensions/builtin/todotools/index.js";
-import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.js";
-import type { ExtensionRuntime, ExtensionUIContext } from "../../src/core/extensions/types.js";
-import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.js";
-import { createHarness, type Harness } from "./harness.js";
+} from "../../src/core/extensions/builtin/todotools/continuation/prompt.ts";
+import { CONTINUATION_CHAIN_CAP } from "../../src/core/extensions/builtin/todotools/continuation/runtime.ts";
+import todotoolsExtension from "../../src/core/extensions/builtin/todotools/index.ts";
+import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.ts";
+import type { ExtensionRuntime, ExtensionUIContext } from "../../src/core/extensions/types.ts";
+import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.ts";
+import { createHarness, type Harness } from "./harness.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 

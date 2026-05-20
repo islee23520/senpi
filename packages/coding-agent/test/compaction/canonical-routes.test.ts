@@ -1,11 +1,11 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type CompactionResult, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
-import { createEventBus } from "../../src/core/event-bus.js";
-import compactionExtension from "../../src/core/extensions/builtin/compaction/index.js";
-import type { BeforeAgentStartEvent } from "../../src/core/extensions/index.js";
-import { createExtensionRuntime, loadExtensionFromFactory } from "../../src/core/extensions/loader.js";
-import type { SessionEntry, SessionMessageEntry } from "../../src/core/session-manager.js";
+import { type CompactionResult, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
+import { createEventBus } from "../../src/core/event-bus.ts";
+import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
+import type { BeforeAgentStartEvent } from "../../src/core/extensions/index.ts";
+import { createExtensionRuntime, loadExtensionFromFactory } from "../../src/core/extensions/loader.ts";
+import type { SessionEntry, SessionMessageEntry } from "../../src/core/session-manager.ts";
 
 const OPENAI_MODEL = {
 	id: "gpt-5.4",

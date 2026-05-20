@@ -1,6 +1,6 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
+import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
 import {
 	buildOpenAiRemoteCompactionResult,
 	buildOpenAiResponsesStreamCompactionResult,
@@ -9,9 +9,9 @@ import {
 	OPENAI_REMOTE_COMPACTION_SCHEMA,
 	rewriteOpenAiPayloadWithRemoteCompaction,
 	runOpenAiRemoteCompaction,
-} from "../../src/core/extensions/builtin/compaction/openai-remote.js";
-import type { SessionBeforeCompactEvent } from "../../src/core/extensions/types.js";
-import type { SessionEntry, SessionMessageEntry } from "../../src/core/session-manager.js";
+} from "../../src/core/extensions/builtin/compaction/openai-remote.ts";
+import type { SessionBeforeCompactEvent } from "../../src/core/extensions/types.ts";
+import type { SessionEntry, SessionMessageEntry } from "../../src/core/session-manager.ts";
 
 const OPENAI_MODEL = {
 	id: "gpt-5.4",

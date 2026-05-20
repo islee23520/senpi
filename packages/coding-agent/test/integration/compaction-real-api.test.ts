@@ -15,20 +15,20 @@ import { join } from "node:path";
 import { Agent, type ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { getModel, type Model } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AgentSession, type AgentSessionEvent } from "../../src/core/agent-session.js";
-import { AuthStorage } from "../../src/core/auth-storage.js";
+import { AgentSession, type AgentSessionEvent } from "../../src/core/agent-session.ts";
+import { AuthStorage } from "../../src/core/auth-storage.ts";
 import {
 	createExtensionRuntime,
 	type Extension,
 	type SessionBeforeCompactEvent,
 	type SessionCompactEvent,
-} from "../../src/core/extensions/index.js";
-import { ModelRegistry } from "../../src/core/model-registry.js";
-import { SessionManager } from "../../src/core/session-manager.js";
-import { SettingsManager } from "../../src/core/settings-manager.js";
-import { createSyntheticSourceInfo } from "../../src/core/source-info.js";
-import { createCodingTools } from "../../src/index.js";
-import { API_KEY, createTestResourceLoader, getRealAuthStorage } from "../utilities.js";
+} from "../../src/core/extensions/index.ts";
+import { ModelRegistry } from "../../src/core/model-registry.ts";
+import { SessionManager } from "../../src/core/session-manager.ts";
+import { SettingsManager } from "../../src/core/settings-manager.ts";
+import { createSyntheticSourceInfo } from "../../src/core/source-info.ts";
+import { createCodingTools } from "../../src/index.ts";
+import { API_KEY, createTestResourceLoader, getRealAuthStorage } from "../utilities.ts";
 
 describe.skipIf(!process.env.PI_RUN_INTEGRATION)("Compaction extensions (real API)", () => {
 	let session: AgentSession;
@@ -415,13 +415,13 @@ describe.skipIf(!process.env.PI_RUN_INTEGRATION)("Compaction extensions (real AP
 });
 
 import { readFileSync } from "node:fs";
-import { compact, DEFAULT_COMPACTION_SETTINGS, prepareCompaction } from "../../src/core/compaction/index.js";
+import { compact, DEFAULT_COMPACTION_SETTINGS, prepareCompaction } from "../../src/core/compaction/index.ts";
 import {
 	buildSessionContext,
 	type CompactionEntry,
 	migrateSessionEntries,
 	parseSessionEntries,
-} from "../../src/core/session-manager.js";
+} from "../../src/core/session-manager.ts";
 
 function loadLargeSessionEntries() {
 	const sessionPath = join(__dirname, "../fixtures/large-session.jsonl");

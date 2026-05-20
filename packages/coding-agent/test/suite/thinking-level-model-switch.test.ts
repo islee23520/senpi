@@ -1,6 +1,6 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { clampThinkingLevelToModel } from "../../src/core/sdk.js";
+import { clampThinkingLevelToModel } from "../../src/core/sdk.ts";
 
 const THINKING_LEVELS_WITH_XHIGH = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const THINKING_LEVELS_WITH_MAX = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;

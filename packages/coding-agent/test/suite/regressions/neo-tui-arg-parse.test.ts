@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { parseArgs } from "../../../src/cli/args.js";
+import { parseArgs } from "../../../src/cli/args.ts";
 
 describe("--neo flag", () => {
 	test("absent by default", () => {

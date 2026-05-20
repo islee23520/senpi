@@ -6,8 +6,8 @@ import {
 	fauxText,
 	registerFauxProvider,
 	stream,
-} from "../src/index.js";
-import type { AssistantMessageEvent, Context } from "../src/types.js";
+} from "../src/index.ts";
+import type { AssistantMessageEvent, Context } from "../src/types.ts";
 
 const registrations: Array<{ unregister: () => void }> = [];
 

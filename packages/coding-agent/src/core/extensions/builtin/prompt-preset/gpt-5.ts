@@ -1,5 +1,5 @@
-import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.js";
-import { buildFileOperationsTuning } from "./file-operations.js";
+import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "../../../dynamic-prompt/build.ts";
+import { buildFileOperationsTuning } from "./file-operations.ts";
 
 function buildGpt5Tuning(): string {
 	return `Focus on what "done" looks like rather than chaining intermediate confirmations when the goal is already concrete. Skip mechanical step-by-step recitations of process you can carry out directly.

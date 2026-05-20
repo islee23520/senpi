@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildDynamicSystemPrompt } from "../../src/core/dynamic-prompt/build.js";
+import { buildDynamicSystemPrompt } from "../../src/core/dynamic-prompt/build.ts";
 
 describe("buildDynamicSystemPrompt", () => {
 	const baseOptions = {

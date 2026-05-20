@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import openaiWebSearchExtension, {
 	addOpenAiWebSearchToPayload,
 	isOpenaiWebSearchEnabled,
-} from "../../src/core/extensions/builtin/openai-web-search/index.js";
-import type { ExtensionAPI } from "../../src/core/extensions/types.js";
+} from "../../src/core/extensions/builtin/openai-web-search/index.ts";
+import type { ExtensionAPI } from "../../src/core/extensions/types.ts";
 
 const ENABLE_ENV = "PI_OPENAI_WEB_SEARCH";
 const OPENAI_RESPONSES_MODEL = {

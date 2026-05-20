@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import tpsExtension from "../../src/core/extensions/builtin/tps.js";
+import tpsExtension from "../../src/core/extensions/builtin/tps.ts";
 
 type ExtensionContextLike = {
 	hasUI: true;

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { getModel } from "../src/models.js";
-import { streamOpenAIResponses } from "../src/providers/openai-responses.js";
-import type { Context, Model } from "../src/types.js";
+import { getModel } from "../src/models.ts";
+import { streamOpenAIResponses } from "../src/providers/openai-responses.ts";
+import type { Context, Model } from "../src/types.ts";
 
 type CapturedPayload = Record<string, unknown> & {
 	include?: unknown[];

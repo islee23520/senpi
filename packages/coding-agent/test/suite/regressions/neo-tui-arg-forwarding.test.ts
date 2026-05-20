@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { splitNeoArgs } from "../../../src/modes/neo-mode.js";
+import { splitNeoArgs } from "../../../src/modes/neo-mode.ts";
 
 describe("neo-mode arg forwarding via `--` sentinel", () => {
 	test("with no sentinel, every non-`--neo` arg goes to the senpi backend", () => {

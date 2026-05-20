@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBashToolDefinition } from "../src/core/tools/bash.js";
+import { createBashToolDefinition } from "../src/core/tools/bash.ts";
 
 describe("bash tool promptSnippet", () => {
 	// Codex-style guidance (see codex-rs/core/gpt_5_2_prompt.md): when example shell

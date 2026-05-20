@@ -1,4 +1,4 @@
-import { getToolPath } from "../../utils/tools-manager.js";
+import { getToolPath } from "../../utils/tools-manager.ts";
 
 type StartupTool = "fd" | "rg";
 

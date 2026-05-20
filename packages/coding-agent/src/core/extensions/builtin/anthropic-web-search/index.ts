@@ -1,5 +1,5 @@
 import type { Api } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "../../types.js";
+import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
 
 type ToolDefinition = Record<string, unknown>;
 

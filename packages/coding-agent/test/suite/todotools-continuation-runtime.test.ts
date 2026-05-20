@@ -4,20 +4,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../../src/config.js";
-import { CONTINUATION_DIRECTIVE } from "../../src/core/extensions/builtin/todotools/continuation/prompt.js";
-import { installContinuation } from "../../src/core/extensions/builtin/todotools/continuation/runtime.js";
-import todotoolsExtension from "../../src/core/extensions/builtin/todotools/index.js";
-import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.js";
+import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../../src/config.ts";
+import { CONTINUATION_DIRECTIVE } from "../../src/core/extensions/builtin/todotools/continuation/prompt.ts";
+import { installContinuation } from "../../src/core/extensions/builtin/todotools/continuation/runtime.ts";
+import todotoolsExtension from "../../src/core/extensions/builtin/todotools/index.ts";
+import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.ts";
 import type {
 	Extension,
 	ExtensionAPI,
 	ExtensionContext,
 	ExtensionRuntime,
 	ExtensionUIContext,
-} from "../../src/core/extensions/types.js";
-import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.js";
-import { createHarness, getAssistantTexts, getUserTexts, type Harness } from "./harness.js";
+} from "../../src/core/extensions/types.ts";
+import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.ts";
+import { createHarness, getAssistantTexts, getUserTexts, type Harness } from "./harness.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 

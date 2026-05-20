@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ExtensionAPI, ExtensionFactory } from "../src/core/extensions/types.js";
+import type { ExtensionAPI, ExtensionFactory } from "../src/core/extensions/types.ts";
 
 describe("extension loader", () => {
 	afterEach(() => {
@@ -19,7 +19,7 @@ describe("extension loader", () => {
 		}));
 
 		vi.doMock("jiti/static", () => ({ createJiti }));
-		const { loadExtensions } = await import("../src/core/extensions/loader.js");
+		const { loadExtensions } = await import("../src/core/extensions/loader.ts");
 
 		const result = await loadExtensions(["first.js", "second.js"], "/tmp");
 

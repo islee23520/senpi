@@ -1,9 +1,9 @@
 import { mkdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ApplyPatchError } from "./errors.js";
-import { parsePatch } from "./parser.js";
-import { replaceChunks } from "./patch-replace.js";
-import { normalizePatchText } from "./text.js";
+import { ApplyPatchError } from "./errors.ts";
+import { parsePatch } from "./parser.ts";
+import { replaceChunks } from "./patch-replace.ts";
+import { normalizePatchText } from "./text.ts";
 import type {
 	ApplyPatchFailure,
 	ApplyPatchProgressCallback,
@@ -11,8 +11,8 @@ import type {
 	ApplyPatchResult,
 	AtomicWriteOperations,
 	ParsedPatch,
-} from "./types.js";
-import { resolvePatchPath } from "./workspace.js";
+} from "./types.ts";
+import { resolvePatchPath } from "./workspace.ts";
 
 const ATOMIC_WRITE_OPERATIONS: AtomicWriteOperations = { writeFile, rename, unlink };
 

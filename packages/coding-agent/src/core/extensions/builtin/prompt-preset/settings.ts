@@ -1,4 +1,4 @@
-import type { Settings, SettingsManager } from "../../../settings-manager.js";
+import type { Settings, SettingsManager } from "../../../settings-manager.ts";
 
 export type PromptPresetName =
 	| "auto"

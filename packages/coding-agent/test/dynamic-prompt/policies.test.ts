@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildPoliciesSection } from "../../src/core/dynamic-prompt/policies.js";
+import { buildPoliciesSection } from "../../src/core/dynamic-prompt/policies.ts";
 
 describe("buildPoliciesSection", () => {
 	test("includes language-agnostic hard blocks", () => {

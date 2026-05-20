@@ -1,5 +1,5 @@
-import type { CompactionSettings } from "../../../compaction/index.js";
-import type { ContextUsage } from "../../types.js";
+import type { CompactionSettings } from "../../../compaction/index.ts";
+import type { ContextUsage } from "../../types.ts";
 
 const MIN_ADAPTIVE_THRESHOLD_RATIO = 0.4;
 const MAX_ADAPTIVE_THRESHOLD_RATIO = 0.7;

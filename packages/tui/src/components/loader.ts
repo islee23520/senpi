@@ -1,5 +1,5 @@
-import type { TUI } from "../tui.js";
-import { Text } from "./text.js";
+import type { TUI } from "../tui.ts";
+import { Text } from "./text.ts";
 
 export type LoaderMessageFormatter = (message: string, animationElapsedMs: number) => string;
 
@@ -31,16 +31,22 @@ export class Loader extends Text {
 	private messageAnimationStartedAt = 0;
 	private ui: TUI | null = null;
 	private renderIndicatorVerbatim = false;
+	private spinnerColorFn: (str: string) => string;
+	private messageColorFn: (str: string) => string;
+	private message: string = "Loading...";
 
 	constructor(
 		ui: TUI,
-		private spinnerColorFn: (str: string) => string,
-		private messageColorFn: (str: string) => string,
-		private message: string = "Loading...",
+		spinnerColorFn: (str: string) => string,
+		messageColorFn: (str: string) => string,
+		message: string = "Loading...",
 		indicator?: LoaderIndicatorOptions,
 	) {
 		super("", 1, 0);
 		this.ui = ui;
+		this.spinnerColorFn = spinnerColorFn;
+		this.messageColorFn = messageColorFn;
+		this.message = message;
 		this.setIndicator(indicator);
 	}
 

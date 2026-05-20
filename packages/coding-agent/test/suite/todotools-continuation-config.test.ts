@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveContinuationConfig } from "../../src/core/extensions/builtin/todotools/continuation/config.js";
+import { resolveContinuationConfig } from "../../src/core/extensions/builtin/todotools/continuation/config.ts";
 
 function createSettings(enabled: unknown): Record<string, unknown> {
 	return {

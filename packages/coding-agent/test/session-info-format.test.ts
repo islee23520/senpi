@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatSessionInfo } from "../src/modes/interactive/session-info-format.js";
-import { stripAnsi } from "../src/utils/ansi.js";
+import { formatSessionInfo } from "../src/modes/interactive/session-info-format.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 vi.mock("../src/modes/interactive/theme/theme.js", () => ({
 	theme: {

@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
 	APPLY_PATCH_FREEFORM_DESCRIPTION,
 	APPLY_PATCH_LARK_GRAMMAR,
-} from "../../coding-agent/src/core/extensions/builtin/gpt-apply-patch/index.js";
-import { convertResponsesTools } from "../src/providers/openai-responses-shared.js";
-import type { Tool } from "../src/types.js";
+} from "../../coding-agent/src/core/extensions/builtin/gpt-apply-patch/index.ts";
+import { convertResponsesTools } from "../src/providers/openai-responses-shared.ts";
+import type { Tool } from "../src/types.ts";
 
 describe("codex apply_patch wire schema", () => {
 	it("emits apply_patch as a Responses custom grammar tool without function parameters", () => {
