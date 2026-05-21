@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * Manual SDK probe for OpenAI Codex prompt caching through the tool loop.
  *
@@ -123,7 +123,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 function printHelp(): void {
-	console.log(`Usage: npx tsx test/sdk-codex-cache-probe-tool-loop.ts [options]
+	console.log(`Usage: node test/sdk-codex-cache-probe-tool-loop.ts [options]
 
 Options:
   --turns <n>         Number of turns to run. Must be between ${MIN_TURNS} and ${MAX_TURNS}. Default: ${DEFAULT_TURNS}

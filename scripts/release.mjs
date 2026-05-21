@@ -17,15 +17,16 @@
  *      same-day re-releases looks like a prerelease tag to npm.
  *   4. Run `scripts/sync-versions.js` to propagate the new version to source
  *      inter-package deps.
- *   5. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
+ *   5. Regenerate `packages/coding-agent/npm-shrinkwrap.json` for the published CLI.
+ *   6. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
  *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
- *      (`### Added`, `### Fixed`, ...) for re-insertion in step 7.
- *   6. `git add -A`, `git commit -m "release: v<version>"` (husky pre-commit runs),
+ *      (`### Added`, `### Fixed`, ...) for re-insertion in step 8.
+ *   7. `git add -A`, `git commit -m "release: v<version>"` (husky pre-commit runs),
  *      `git tag v<version>`.
- *   7. Run `npm run publish`. The public `@code-yeongyu/senpi` package
+ *   8. Run `npm run publish`. The public `@code-yeongyu/senpi` package
  *      keeps lockstep workspace dependency ranges and bundles the private
  *      forked `@earendil-works/pi-*` workspaces into the npm tarball.
- *   8. Re-insert a fresh `## [Unreleased]` block with the same subsection placeholders
+ *   9. Re-insert a fresh `## [Unreleased]` block with the same subsection placeholders
  *      or the standard placeholders if none were captured, commit, then push `main`
  *      and the new tag.
  */
@@ -208,6 +209,15 @@ function runPublish(dryRun) {
 	runCommand("npm", ["run", "publish"]);
 }
 
+function runShrinkwrap(dryRun) {
+	if (dryRun) {
+		dryRunLog("node scripts/generate-coding-agent-shrinkwrap.mjs");
+		return;
+	}
+	log("node scripts/generate-coding-agent-shrinkwrap.mjs");
+	runCommand("node", ["scripts/generate-coding-agent-shrinkwrap.mjs"]);
+}
+
 function main() {
 	const args = parseArgs(process.argv.slice(2));
 	if (args.help) {
@@ -227,6 +237,7 @@ function main() {
 
 	applyWorkspaceVersions(version, args.dryRun, log, dryRunLog);
 	runSyncVersions(args.dryRun, runCommand, log, dryRunLog);
+	runShrinkwrap(args.dryRun);
 	stampChangelogs(version, date, args.dryRun, capturedChangelogSubsections, log, dryRunLog);
 
 	gitAddAll(args.dryRun);

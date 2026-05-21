@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * Live probe for OpenAI Codex Responses websocket-cached mode.
  *
@@ -85,7 +85,7 @@ function required(value: string | undefined, flag: string): string {
 }
 
 function printHelp(): void {
-	console.log(`Usage: npx tsx test/codex-websocket-cached-probe.ts [options]
+	console.log(`Usage: node test/codex-websocket-cached-probe.ts [options]
 
 Options:
   --turns <n>          Number of user turns. Default: ${DEFAULT_TURNS}

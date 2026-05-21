@@ -18,6 +18,7 @@ type SourcedSkill = Skill & { source: Source };
 type SourcedPromptTemplate = PromptTemplate & { source: Source };
 
 const env = new NodeExecutionEnv({ cwd: process.cwd() });
+
 const source = (type: Source["type"], dir: string) => ({ path: dir, source: { type, dir } });
 const { skills: sourcedSkills } = await loadSourcedSkills<Source, SourcedSkill>(
 	env,
