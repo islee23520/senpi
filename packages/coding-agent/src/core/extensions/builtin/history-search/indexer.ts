@@ -121,25 +121,44 @@ async function appendSessionEntries(sessionFile: string, entries: HistoryEntry[]
 	}
 }
 
-export async function indexSessions(sessionsDir: string): Promise<readonly HistoryEntry[]> {
-	const entries: HistoryEntry[] = [];
-	const cwdDirs = await readDirIfExists(sessionsDir);
+type DiscoveredSessionFile = {
+	readonly path: string;
+	readonly basename: string;
+};
 
-	for (const cwdDirName of [...cwdDirs].sort()) {
-		const cwdDir = join(sessionsDir, cwdDirName);
-		const cwdDirStat = await statIfExists(cwdDir);
-		if (!cwdDirStat?.isDirectory()) continue;
-
-		const fileNames = await readDirIfExists(cwdDir);
-		for (const fileName of [...fileNames].sort().reverse()) {
-			if (!fileName.endsWith(".jsonl")) continue;
-			const sessionFile = join(cwdDir, fileName);
-			const sessionFileStat = await statIfExists(sessionFile);
-			if (!sessionFileStat?.isFile()) continue;
-			await appendSessionEntries(sessionFile, entries);
-			if (entries.length >= MAX_HISTORY_ENTRIES) return dedupeNewest(entries);
-		}
+async function collectJsonlFilesInDir(dir: string): Promise<readonly DiscoveredSessionFile[]> {
+	const fileNames = await readDirIfExists(dir);
+	const files: DiscoveredSessionFile[] = [];
+	for (const fileName of fileNames) {
+		if (!fileName.endsWith(".jsonl")) continue;
+		const path = join(dir, fileName);
+		const fileStat = await statIfExists(path);
+		if (!fileStat?.isFile()) continue;
+		files.push({ path, basename: fileName });
 	}
+	return files;
+}
 
+async function discoverSessionFiles(rootDir: string): Promise<readonly DiscoveredSessionFile[]> {
+	const topLevel = await readDirIfExists(rootDir);
+	const all: DiscoveredSessionFile[] = [...(await collectJsonlFilesInDir(rootDir))];
+	for (const name of topLevel) {
+		if (name.endsWith(".jsonl")) continue;
+		const subDir = join(rootDir, name);
+		const subStat = await statIfExists(subDir);
+		if (!subStat?.isDirectory()) continue;
+		all.push(...(await collectJsonlFilesInDir(subDir)));
+	}
+	all.sort((left, right) => right.basename.localeCompare(left.basename));
+	return all;
+}
+
+export async function indexSessions(rootDir: string): Promise<readonly HistoryEntry[]> {
+	const sessionFiles = await discoverSessionFiles(rootDir);
+	const entries: HistoryEntry[] = [];
+	for (const file of sessionFiles) {
+		await appendSessionEntries(file.path, entries);
+		if (entries.length >= MAX_HISTORY_ENTRIES) break;
+	}
 	return dedupeNewest(entries);
 }

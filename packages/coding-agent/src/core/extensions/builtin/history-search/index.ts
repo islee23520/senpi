@@ -1,9 +1,18 @@
-import { join } from "node:path";
-import { getAgentDir } from "../../../../config.ts";
+import { resolve } from "node:path";
+import { getSessionsDir } from "../../../../config.ts";
 import type { ExtensionAPI } from "../../types.ts";
 import { indexSessions } from "./indexer.ts";
 import { HistorySearchOverlay } from "./overlay.ts";
 import type { HistoryEntry } from "./types.ts";
+
+function resolveSearchRoot(currentSessionDir: string): string {
+	const defaultRoot = resolve(getSessionsDir());
+	if (!currentSessionDir) return defaultRoot;
+	const current = resolve(currentSessionDir);
+	if (current === defaultRoot) return defaultRoot;
+	if (current.startsWith(`${defaultRoot}/`)) return defaultRoot;
+	return current;
+}
 
 export default function historySearchExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("history", {
@@ -16,7 +25,8 @@ export default function historySearchExtension(pi: ExtensionAPI): void {
 
 			let entries: readonly HistoryEntry[];
 			try {
-				entries = await indexSessions(join(getAgentDir(), "sessions"));
+				const searchRoot = resolveSearchRoot(ctx.sessionManager.getSessionDir());
+				entries = await indexSessions(searchRoot);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				ctx.ui.notify(`Failed to read prompt history: ${message}`, "error");

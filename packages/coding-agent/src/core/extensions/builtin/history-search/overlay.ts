@@ -27,10 +27,6 @@ type HistorySearchOverlayOptions = {
 	readonly done: (entry: HistoryEntry | undefined) => void;
 };
 
-function shortSessionId(sessionId: string): string {
-	return sessionId.length <= 8 ? sessionId : sessionId.slice(0, 8);
-}
-
 function relativeTime(timestamp: number, now = Date.now()): string {
 	const seconds = Math.max(0, Math.floor((now - timestamp) / 1_000));
 	if (seconds < 60) return "now";
@@ -46,8 +42,9 @@ function relativeTime(timestamp: number, now = Date.now()): string {
 }
 
 function describeEntry(entry: HistoryEntry): string {
+	const shortId = entry.sessionId.length <= 8 ? entry.sessionId : entry.sessionId.slice(0, 8);
 	const cwdName = basename(entry.cwd);
-	const sessionLabel = cwdName ? `${cwdName}/${shortSessionId(entry.sessionId)}` : shortSessionId(entry.sessionId);
+	const sessionLabel = cwdName ? `${cwdName}/${shortId}` : shortId;
 	return `${sessionLabel} · ${relativeTime(entry.timestamp)}`;
 }
 
