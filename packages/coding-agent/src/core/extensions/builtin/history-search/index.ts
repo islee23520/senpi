@@ -5,8 +5,8 @@ import { indexSessions } from "./indexer.ts";
 import { HistorySearchOverlay } from "./overlay.ts";
 import type { HistoryEntry } from "./types.ts";
 
-function resolveSearchRoot(currentSessionDir: string): string {
-	const defaultRoot = resolve(getSessionsDir());
+export function resolveSearchRoot(currentSessionDir: string, defaultSessionsRoot: string = getSessionsDir()): string {
+	const defaultRoot = resolve(defaultSessionsRoot);
 	if (!currentSessionDir) return defaultRoot;
 	const current = resolve(currentSessionDir);
 	if (current === defaultRoot) return defaultRoot;

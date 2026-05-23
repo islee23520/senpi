@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { filterHistory } from "../../src/core/extensions/builtin/history-search/filter.ts";
-import historySearchExtension from "../../src/core/extensions/builtin/history-search/index.ts";
+import historySearchExtension, { resolveSearchRoot } from "../../src/core/extensions/builtin/history-search/index.ts";
 import { indexSessions } from "../../src/core/extensions/builtin/history-search/indexer.ts";
 import { HistorySearchOverlay } from "../../src/core/extensions/builtin/history-search/overlay.ts";
 import type { HistoryEntry } from "../../src/core/extensions/builtin/history-search/types.ts";
@@ -265,6 +265,28 @@ describe("HistorySearchOverlay", () => {
 		expect(renderedLines.some((line) => line.includes("> b"))).toBe(true);
 		expect(renderedLines.some((line) => line.includes("1/3 prompts"))).toBe(true);
 		expect(renderRequests).toBe(1);
+	});
+});
+
+describe("resolveSearchRoot", () => {
+	const defaultRoot = "/home/user/.senpi/agent/sessions";
+
+	it("returns default root when sessionDir is empty (in-memory mode)", () => {
+		expect(resolveSearchRoot("", defaultRoot)).toBe(defaultRoot);
+	});
+
+	it("returns default root when sessionDir equals default root", () => {
+		expect(resolveSearchRoot(defaultRoot, defaultRoot)).toBe(defaultRoot);
+	});
+
+	it("returns default root for cwd-subdir layout (cross-cwd search)", () => {
+		expect(resolveSearchRoot(`${defaultRoot}/-encoded-cwd`, defaultRoot)).toBe(defaultRoot);
+		expect(resolveSearchRoot(`${defaultRoot}/deep/nested/path`, defaultRoot)).toBe(defaultRoot);
+	});
+
+	it("returns the custom dir when sessionDir is outside default root", () => {
+		expect(resolveSearchRoot("/custom/session/dir", defaultRoot)).toBe("/custom/session/dir");
+		expect(resolveSearchRoot("/tmp/my-sessions", defaultRoot)).toBe("/tmp/my-sessions");
 	});
 });
 
