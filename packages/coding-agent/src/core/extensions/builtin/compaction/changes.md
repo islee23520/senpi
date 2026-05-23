@@ -1,5 +1,17 @@
 # Builtin compaction extension changes
 
+## Speculative compaction invalidation on abort and model switch (2026-05-23)
+
+- `index.ts` now invalidates the in-memory speculative compaction job on `model_select` and on assistant
+  `message_end` events with `stopReason: "aborted"`.
+- This prevents a summary generated under the old context-window assumptions from being reused by the next blocking
+  compaction route after the user aborts or switches models.
+- This stays in the builtin extension because speculative generation ownership lives in the extension closure; core only
+  owns the visible compaction abort controllers and message revision.
+
+Expected upstream conflict zones: `builtin/compaction/index.ts` around speculative job lifecycle events and
+`message_end` degradation-monitor wiring.
+
 ## OpenAI remote compaction timeout fallback (2026-05-19)
 
 - Added a bounded timeout around both OpenAI Responses WebSocket compaction and `/responses/compact` remote compaction.

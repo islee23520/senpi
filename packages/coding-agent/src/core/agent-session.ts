@@ -556,6 +556,17 @@ export class AgentSession {
 		return this._messageRevision;
 	}
 
+	private _modelSelectionChangesContext(previousModel: Model<any> | undefined, nextModel: Model<any>): boolean {
+		if (!modelsAreEqual(previousModel, nextModel)) return true;
+		return previousModel?.contextWindow !== nextModel.contextWindow;
+	}
+
+	private _invalidateCompactionForModelSelection(): void {
+		this.abortCompaction();
+		this.abortBranchSummary();
+		this._incrementMessageRevision();
+	}
+
 	// Track last assistant message for auto-compaction check
 	private _lastAssistantMessage: AssistantMessage | undefined = undefined;
 
@@ -889,6 +900,10 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
+		this.abortRetry();
+		this.abortCompaction();
+		this.abortBranchSummary();
+		this.abortBash();
 		this._extensionRunner.invalidate(
 			"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
 		);
@@ -1580,6 +1595,8 @@ export class AgentSession {
 	 */
 	async abort(): Promise<void> {
 		this.abortRetry();
+		this.abortCompaction();
+		this.abortBranchSummary();
 		if (this._userAbortPromise) {
 			this.agent.abort();
 			await this._userAbortPromise;
@@ -1609,7 +1626,7 @@ export class AgentSession {
 		previousModel: Model<any> | undefined,
 		source: "set" | "cycle" | "restore",
 	): Promise<SystemPromptChangeEvent | undefined> {
-		if (modelsAreEqual(previousModel, nextModel)) return undefined;
+		if (!this._modelSelectionChangesContext(previousModel, nextModel)) return undefined;
 		const result = await this._extensionRunner.emitModelSelect({
 			type: "model_select",
 			model: nextModel,
@@ -1656,6 +1673,10 @@ export class AgentSession {
 		}
 
 		const previousModel = this.model;
+		const invalidatesCompaction = this._modelSelectionChangesContext(previousModel, model);
+		if (invalidatesCompaction) {
+			this._invalidateCompactionForModelSelection();
+		}
 		const thinkingLevel = this._getThinkingLevelForModelSwitch();
 		this.agent.state.model = model;
 		this.sessionManager.appendModelChange(model.provider, model.id);
@@ -1700,6 +1721,10 @@ export class AgentSession {
 			nextIndex = direction === "forward" ? (currentIndex + 1) % len : (currentIndex - 1 + len) % len;
 		}
 		const next = favoriteModels[nextIndex];
+		const invalidatesCompaction = this._modelSelectionChangesContext(currentModel, next.model);
+		if (invalidatesCompaction) {
+			this._invalidateCompactionForModelSelection();
+		}
 		const thinkingLevel = this._getThinkingLevelForModelSwitch(next.thinkingLevel);
 
 		this.agent.state.model = next.model;

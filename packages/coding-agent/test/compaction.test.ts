@@ -39,7 +39,12 @@ import {
 	shouldCompact,
 } from "../src/core/compaction/index.ts";
 import compactionExtension from "../src/core/extensions/builtin/compaction/index.ts";
-import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/index.ts";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	MessageEndEvent,
+	ModelSelectEvent,
+} from "../src/core/extensions/index.ts";
 import {
 	buildSessionContext,
 	type CompactionEntry,
@@ -168,6 +173,13 @@ type BeforeAgentStartHandler = (
 	event: { type: "before_agent_start"; systemPrompt: string },
 	ctx: ExtensionContext,
 ) => Promise<{ systemPrompt?: string } | undefined> | { systemPrompt?: string } | undefined;
+type ModelSelectHandler = (event: ModelSelectEvent, ctx: ExtensionContext) => Promise<unknown> | unknown;
+type MessageEndHandler = (event: MessageEndEvent, ctx: ExtensionContext) => Promise<unknown> | unknown;
+interface CapturedCompactionHandlers {
+	beforeAgentStart: BeforeAgentStartHandler;
+	messageEnd: MessageEndHandler;
+	modelSelect: ModelSelectHandler;
+}
 
 function captureBeforeAgentStartHandler(): BeforeAgentStartHandler {
 	let handler: BeforeAgentStartHandler | undefined;
@@ -187,6 +199,33 @@ function captureBeforeAgentStartHandler(): BeforeAgentStartHandler {
 		throw new Error("before_agent_start handler was not registered");
 	}
 	return handler;
+}
+
+function captureCompactionHandlers(): CapturedCompactionHandlers {
+	let beforeAgentStart: BeforeAgentStartHandler | undefined;
+	let messageEnd: MessageEndHandler | undefined;
+	let modelSelect: ModelSelectHandler | undefined;
+	const api: ExtensionAPI = Object.assign(Object.create(null), {
+		on: (event: string, currentHandler: BeforeAgentStartHandler | MessageEndHandler | ModelSelectHandler) => {
+			if (event === "before_agent_start") {
+				beforeAgentStart = currentHandler as BeforeAgentStartHandler;
+			} else if (event === "message_end") {
+				messageEnd = currentHandler as MessageEndHandler;
+			} else if (event === "model_select") {
+				modelSelect = currentHandler as ModelSelectHandler;
+			}
+		},
+		appendEntry: vi.fn(),
+		events: { emit: vi.fn() },
+		getActiveTools: () => [],
+		getThinkingLevel: () => "off" as const,
+	});
+
+	compactionExtension(api);
+	if (!beforeAgentStart || !messageEnd || !modelSelect) {
+		throw new Error("builtin compaction handlers were not registered");
+	}
+	return { beforeAgentStart, messageEnd, modelSelect };
 }
 
 function createExtensionContext(overrides: Partial<ExtensionContext>): ExtensionContext {
@@ -215,6 +254,94 @@ function createExtensionContext(overrides: Partial<ExtensionContext>): Extension
 		getSystemPrompt: () => "",
 		...overrides,
 	};
+}
+
+function createAnthropicModel(id: string, contextWindow: number): Model<"anthropic-messages"> {
+	return {
+		id,
+		name: id,
+		api: "anthropic-messages",
+		provider: "anthropic",
+		baseUrl: "https://api.anthropic.com",
+		reasoning: false,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow,
+		maxTokens: 8192,
+	};
+}
+
+async function expectSpeculativeCompactionInvalidatedBy(
+	trigger: (
+		handlers: CapturedCompactionHandlers,
+		ctx: ExtensionContext,
+		previousModel: Model<"anthropic-messages">,
+		nextModel: Model<"anthropic-messages">,
+	) => Promise<void> | void,
+): Promise<void> {
+	const handlers = captureCompactionHandlers();
+	const previousModel = createAnthropicModel("claude-small", 200_000);
+	const nextModel = createAnthropicModel("claude-large", 800_000);
+	const firstUser = createMessageEntry(createUserMessage("first request"));
+	const firstAssistant = createMessageEntry(createAssistantMessage("first answer", createMockUsage(4000, 500)));
+	const secondUser = createMessageEntry(createUserMessage("second request"));
+	const secondAssistant = createMessageEntry(createAssistantMessage("second answer", createMockUsage(5000, 500)));
+	const branchEntries = [firstUser, firstAssistant, secondUser, secondAssistant];
+	const appliedSummaries: string[] = [];
+	let currentModel = previousModel;
+	let usageTokens = 100_000;
+	let releaseStale: (() => void) | undefined;
+	const speculativeStarted = new Promise<void>((resolveStarted) => {
+		completeMock.mockImplementationOnce(async (_model: Model<string>, _context: Context, options: StreamOptions) => {
+			return await new Promise<AssistantMessage>((resolve) => {
+				releaseStale = () => resolve(createAssistantMessage("stale summary"));
+				options.signal?.addEventListener(
+					"abort",
+					() => {
+						resolve({ ...createAssistantMessage(""), stopReason: "aborted" });
+					},
+					{ once: true },
+				);
+				resolveStarted();
+			});
+		});
+	});
+	completeMock.mockResolvedValueOnce(createAssistantMessage("fresh summary"));
+	const ctx = createExtensionContext({
+		model: currentModel,
+		sessionManager: Object.assign(Object.create(null), {
+			getEntries: () => branchEntries,
+			getBranch: () => branchEntries,
+		}) as ExtensionContext["sessionManager"],
+		modelRegistry: Object.assign(Object.create(null), {
+			getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }),
+		}) as ExtensionContext["modelRegistry"],
+		applyCompaction: async (compaction) => {
+			appliedSummaries.push(compaction.summary);
+			return { applied: true, reason: "ok" };
+		},
+		getContextUsage: () => ({
+			tokens: usageTokens,
+			contextWindow: currentModel.contextWindow,
+			percent: (usageTokens / currentModel.contextWindow) * 100,
+		}),
+		getCompactionSettings: () => ({ ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 }),
+	});
+
+	// given
+	await handlers.beforeAgentStart({ type: "before_agent_start", systemPrompt: "system" }, ctx);
+	await speculativeStarted;
+
+	// when
+	currentModel = nextModel;
+	ctx.model = nextModel;
+	await trigger(handlers, ctx, previousModel, nextModel);
+	releaseStale?.();
+	usageTokens = 790_000;
+	await handlers.beforeAgentStart({ type: "before_agent_start", systemPrompt: "system" }, ctx);
+
+	// then
+	expect(appliedSummaries).toEqual(["fresh summary"]);
 }
 
 function extractText(messages: AgentMessage[]): string {
@@ -711,6 +838,36 @@ describe("builtin compaction extension threshold regressions", () => {
 
 		// then
 		expect(order).toEqual(["begin-extension", "auth-start", "apply-called", "hook-returned"]);
+	});
+
+	it("drops speculative compaction when a model switch happens before a blocking compaction route", async () => {
+		await expectSpeculativeCompactionInvalidatedBy(async (handlers, ctx, previousModel, nextModel) => {
+			// given
+			const event: ModelSelectEvent = {
+				type: "model_select",
+				model: nextModel,
+				previousModel,
+				source: "set",
+				systemPrompt: "system",
+				systemPromptOptions: { cwd: process.cwd() },
+			};
+
+			// when
+			await handlers.modelSelect(event, ctx);
+		});
+	});
+
+	it("drops speculative compaction when an assistant message is aborted before a blocking compaction route", async () => {
+		await expectSpeculativeCompactionInvalidatedBy(async (handlers, ctx) => {
+			// given
+			const event: MessageEndEvent = {
+				type: "message_end",
+				message: { ...createAssistantMessage(""), stopReason: "aborted" },
+			};
+
+			// when
+			await handlers.messageEnd(event, ctx);
+		});
 	});
 });
 

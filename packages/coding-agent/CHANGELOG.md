@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed stale compaction jobs surviving aborts or model switches and surfacing alongside the next assistant response.
+
 ### Removed
 
 ## [0.75.5] - 2026-05-23

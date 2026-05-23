@@ -44,6 +44,31 @@ describe("AgentSession model and extension characterization", () => {
 		).toEqual([`${nextModel.provider}/${nextModel.id}`]);
 	});
 
+	it("emits model_select when a same-id model changes context window", async () => {
+		// given
+		const modelEvents: string[] = [];
+		const harness = await createHarness({
+			models: [{ id: "faux-1", name: "One", contextWindow: 32_000 }],
+			extensionFactories: [
+				(pi) => {
+					pi.on("model_select", async (event) => {
+						modelEvents.push(`${event.previousModel?.contextWindow ?? 0}->${event.model.contextWindow}`);
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		const initialRevision = harness.session.getMessageRevision();
+		const expandedModel = { ...harness.getModel(), contextWindow: 800_000 };
+
+		// when
+		await harness.session.setModel(expandedModel);
+
+		// then
+		expect(modelEvents).toEqual(["32000->800000"]);
+		expect(harness.session.getMessageRevision()).toBeGreaterThan(initialRevision);
+	});
+
 	it("uses a newly selected model for queued steering after the active turn finishes", async () => {
 		// given
 		let releaseToolExecution!: () => void;

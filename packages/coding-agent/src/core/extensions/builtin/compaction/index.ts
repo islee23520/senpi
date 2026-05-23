@@ -80,6 +80,10 @@ function isMonitorableMessageEvent(event: { message: AgentMessage }): event is {
 	return "content" in event.message && Array.isArray(event.message.content);
 }
 
+function isAbortedAssistantMessage(event: { message: AgentMessage }): boolean {
+	return event.message.role === "assistant" && "stopReason" in event.message && event.message.stopReason === "aborted";
+}
+
 function updateLastYield(state: CompactionExtensionState, entry: CompactionEntry): CompactionExtensionState {
 	const savedTokens = Math.max(0, entry.tokensBefore - approxTokens(entry.summary));
 	return { ...state, lastYield: { savedTokens, tokensBefore: entry.tokensBefore } };
@@ -316,6 +320,10 @@ export default function compactionExtension(pi: ExtensionAPI): void {
 		};
 	});
 
+	pi.on("model_select", () => {
+		invalidateSpeculativeCompaction();
+	});
+
 	pi.on("session_compact", async (event, ctx) => {
 		invalidateSpeculativeCompaction();
 		if (event.accepted) {
@@ -419,6 +427,9 @@ export default function compactionExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("message_end", async (event, ctx) => {
+		if (isAbortedAssistantMessage(event)) {
+			invalidateSpeculativeCompaction();
+		}
 		if (isMonitorableMessageEvent(event)) {
 			await handleMessageEnd(degradationState, event, {
 				applyCompaction: async (options) => {

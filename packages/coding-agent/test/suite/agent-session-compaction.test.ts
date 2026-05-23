@@ -1,5 +1,6 @@
 import { type AssistantMessage, createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ExtensionAPI } from "../../src/core/extensions/index.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 type CheckCompaction = (
@@ -8,6 +9,11 @@ type CheckCompaction = (
 	requestReason?: "pre_prompt",
 ) => Promise<void>;
 type RunAutoCompaction = (reason: "overflow" | "threshold", willRetry: boolean) => Promise<void>;
+interface BlockingBeforeCompactExtension {
+	extension: (pi: ExtensionAPI) => void;
+	releaseCancel(): void;
+	started: Promise<AbortSignal>;
+}
 
 function getCheckCompaction(session: Harness["session"]): CheckCompaction {
 	const value = Reflect.get(session, "_checkCompaction");
@@ -101,6 +107,29 @@ function useSummaryStreamFn(harness: Harness, summary: string): () => number {
 		return stream;
 	};
 	return () => callCount;
+}
+
+function createBlockingBeforeCompactExtension(): BlockingBeforeCompactExtension {
+	let release: ((value: { cancel: true }) => void) | undefined;
+	let resolveStarted: ((signal: AbortSignal) => void) | undefined;
+	const started = new Promise<AbortSignal>((resolve) => {
+		resolveStarted = resolve;
+	});
+	return {
+		started,
+		releaseCancel() {
+			release?.({ cancel: true });
+		},
+		extension(pi) {
+			pi.on("session_before_compact", async (event) => {
+				return await new Promise<{ cancel: true }>((resolve) => {
+					release = resolve;
+					resolveStarted?.(event.signal);
+					event.signal.addEventListener("abort", () => resolve({ cancel: true }), { once: true });
+				});
+			});
+		},
+	};
 }
 
 function seedCompactableSession(harness: Harness): void {
@@ -240,6 +269,24 @@ describe("AgentSession compaction characterization", () => {
 		expect(getStreamCallCount()).toBe(1);
 	});
 
+	it("does not emit compaction events for a normal response below the threshold", async () => {
+		// given
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, reserveTokens: 1000 } },
+			models: [{ id: "faux-1", contextWindow: 200_000 }],
+		});
+		harnesses.push(harness);
+		harness.setResponses([fauxAssistantMessage("plain response")]);
+
+		// when
+		await harness.session.prompt("hello");
+
+		// then
+		expect(harness.session.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+		expect(harness.eventsOfType("compaction_start")).toHaveLength(0);
+		expect(harness.eventsOfType("compaction_end")).toHaveLength(0);
+	});
+
 	it("cancels in-progress manual compaction when abortCompaction is called", async () => {
 		const harness = await createHarness({
 			settings: { compaction: { keepRecentTokens: 1 } },
@@ -263,6 +310,61 @@ describe("AgentSession compaction characterization", () => {
 		harness.session.abortCompaction();
 
 		await expect(compactPromise).rejects.toThrow("Compaction cancelled");
+	});
+
+	it("cancels in-progress manual compaction when the session is aborted", async () => {
+		// given
+		const blocker = createBlockingBeforeCompactExtension();
+		const harness = await createHarness({
+			settings: { compaction: { keepRecentTokens: 1 } },
+			extensionFactories: [blocker.extension],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+
+		const compactPromise = harness.session.compact();
+		const signal = await blocker.started;
+
+		// when
+		await harness.session.abort();
+		const signalWasAborted = signal.aborted;
+		blocker.releaseCancel();
+
+		// then
+		await expect(compactPromise).rejects.toThrow("Compaction cancelled");
+		expect(signalWasAborted).toBe(true);
+	});
+
+	it("cancels in-progress manual compaction when switching to a larger-context model", async () => {
+		// given
+		const blocker = createBlockingBeforeCompactExtension();
+		const harness = await createHarness({
+			settings: { compaction: { keepRecentTokens: 1 } },
+			models: [
+				{ id: "small", contextWindow: 32_000 },
+				{ id: "large", contextWindow: 800_000 },
+			],
+			extensionFactories: [blocker.extension],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const largeModel = harness.getModel("large");
+		if (!largeModel) {
+			throw new Error("Expected large model");
+		}
+
+		const compactPromise = harness.session.compact();
+		const signal = await blocker.started;
+
+		// when
+		await harness.session.setModel(largeModel);
+		const signalWasAborted = signal.aborted;
+		blocker.releaseCancel();
+
+		// then
+		await expect(compactPromise).rejects.toThrow("Compaction cancelled");
+		expect(signalWasAborted).toBe(true);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 	});
 
 	it("resumes after threshold compaction when only agent-level queued messages exist", async () => {

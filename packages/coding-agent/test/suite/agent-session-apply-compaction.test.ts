@@ -70,6 +70,37 @@ describe("AgentSession applyCompaction", () => {
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
 	});
 
+	it("rejects precomputed compaction created before a model switch", async () => {
+		// given
+		const harness = await createHarness({
+			models: [
+				{ id: "small", contextWindow: 32_000 },
+				{ id: "large", contextWindow: 800_000 },
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([fauxAssistantMessage("one")]);
+		await harness.session.prompt("one");
+		const expectedRevision = harness.session.getMessageRevision();
+		const precomputed = createPrecomputedCompaction(harness, "stale after model switch");
+		const largeModel = harness.getModel("large");
+		if (!largeModel) {
+			throw new Error("Expected large model");
+		}
+
+		// when
+		await harness.session.setModel(largeModel);
+		const result = await harness.session.applyCompaction(precomputed, {
+			reason: "extension",
+			expectedRevision,
+		});
+
+		// then
+		expect(result).toEqual({ applied: false, reason: "stale" });
+		expect(harness.session.getMessageRevision()).toBeGreaterThan(expectedRevision);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+	});
+
 	it("increments message revision monotonically for message and compaction mutations", async () => {
 		// given
 		const harness = await createHarness();

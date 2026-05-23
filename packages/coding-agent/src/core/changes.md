@@ -1,5 +1,32 @@
 # changes
 
+## Compaction cancellation across abort and model changes (2026-05-23)
+
+### What changed
+
+- `src/core/agent-session.ts`: `abort()` and `dispose()` now cancel in-flight manual/auto compaction and branch
+  summarization controllers along with retry/agent cleanup.
+- `src/core/agent-session.ts`: `setModel()` and favorite model cycling invalidate compaction state and bump the
+  message revision whenever the selected model identity or context window changes.
+- `src/core/agent-session.ts`: `model_select` now emits for same provider/model-id selections that change the effective
+  context window, so extensions can drop stale model-bound work.
+
+### Why
+
+- An aborted over-context turn could leave a compaction request alive. If the user then switched to a larger-context
+  model, stale compaction could finish beside the next normal assistant response and surface duplicate Working/status
+  state.
+
+### Why extension system couldn't handle this
+
+- Extensions can observe model and compaction events, but the session owns the abort controllers and the monotonic
+  message revision that guards precomputed compaction snapshots.
+
+### Expected merge conflict zones
+
+- MEDIUM: `AgentSession.abort()`, `setModel()`, and `_cycleFavoriteModel()` lifecycle paths.
+- LOW: `AgentSession.dispose()` cleanup path and `_emitModelSelect()` early-return logic.
+
 ## Tool hook lifecycle status events (2026-05-19)
 
 ### What changed
