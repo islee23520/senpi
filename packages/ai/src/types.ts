@@ -497,9 +497,9 @@ export interface AnthropicMessagesCompat {
 	 * `output_config.effort`) regardless of the model id. Built-in models that
 	 * require adaptive thinking set this in generated metadata. Custom
 	 * Anthropic-compatible providers can set this to `true` for any model whose
-	 * upstream requires the adaptive format. Set to `false` to
-	 * opt out on overridden built-in models.
-	 * Default: false.
+	 * upstream requires the adaptive format. Set to `false` to opt out on
+	 * overridden built-in models and disable model id/name inference.
+	 * Default: infer from adaptive Claude model ids/names when possible.
 	 */
 	forceAdaptiveThinking?: boolean;
 }

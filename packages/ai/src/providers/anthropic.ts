@@ -166,6 +166,7 @@ const FINE_GRAINED_TOOL_STREAMING_BETA = "fine-grained-tool-streaming-2025-05-14
 const INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14";
 const COMPUTER_USE_BETA_PREFIX = "computer-use-";
 const NATIVE_COMPUTER_TOOL_TYPE = "computer_20250124";
+const ADAPTIVE_THINKING_MODEL_MARKERS = ["opus-4-6", "opus-4-7", "sonnet-4-6"] as const;
 
 function getAnthropicCompat(
 	model: Model<"anthropic-messages">,
@@ -352,14 +353,14 @@ function rejectsNativeComputerTool(model: Model<"anthropic-messages">, toolType:
 	if (model.provider === "cloudflare-ai-gateway" && model.baseUrl.includes("anthropic")) {
 		return toolType.startsWith("computer_");
 	}
-	return (isOpus46(model.id) || isOpus47(model.id)) && toolType === NATIVE_COMPUTER_TOOL_TYPE;
+	return (isOpus46(model) || isOpus47(model)) && toolType === NATIVE_COMPUTER_TOOL_TYPE;
 }
 
 function rejectsComputerUseBeta(model: Model<"anthropic-messages">): boolean {
 	return (
 		(model.provider === "cloudflare-ai-gateway" && model.baseUrl.includes("anthropic")) ||
-		isOpus46(model.id) ||
-		isOpus47(model.id)
+		isOpus46(model) ||
+		isOpus47(model)
 	);
 }
 
@@ -895,12 +896,34 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
  * Opus-specific feature checks use provider model ids because those behaviors
  * are model-tier details, not custom-provider compatibility toggles.
  */
-function isOpus46(modelId: string): boolean {
-	return modelId.includes("opus-4-6") || modelId.includes("opus-4.6");
+function getModelMatchCandidates(model: Pick<Model<"anthropic-messages">, "id" | "name">): string[] {
+	return [model.id, model.name].flatMap((value) => {
+		const lower = value.toLowerCase();
+		return [lower, lower.replace(/[\s_.:]+/g, "-")];
+	});
 }
 
-function isOpus47(modelId: string): boolean {
-	return modelId.includes("opus-4-7") || modelId.includes("opus-4.7");
+function matchesModelMarker(
+	model: Pick<Model<"anthropic-messages">, "id" | "name">,
+	markers: readonly string[],
+): boolean {
+	const candidates = getModelMatchCandidates(model);
+	return candidates.some((candidate) => markers.some((marker) => candidate.includes(marker)));
+}
+
+function isOpus46(model: Pick<Model<"anthropic-messages">, "id" | "name">): boolean {
+	return matchesModelMarker(model, ["opus-4-6"]);
+}
+
+function isOpus47(model: Pick<Model<"anthropic-messages">, "id" | "name">): boolean {
+	return matchesModelMarker(model, ["opus-4-7"]);
+}
+
+function supportsAdaptiveThinking(model: Model<"anthropic-messages">): boolean {
+	if (model.compat?.forceAdaptiveThinking !== undefined) {
+		return model.compat.forceAdaptiveThinking;
+	}
+	return matchesModelMarker(model, ADAPTIVE_THINKING_MODEL_MARKERS);
 }
 
 /**
@@ -927,11 +950,11 @@ function mapThinkingLevelToEffort(
 		case "high":
 			return "high";
 		case "xhigh":
-			if (isOpus47(model.id)) return "xhigh";
-			if (isOpus46(model.id)) return "max";
+			if (isOpus47(model)) return "xhigh";
+			if (isOpus46(model)) return "max";
 			return "high";
 		case "max":
-			if (isOpus47(model.id) || isOpus46(model.id)) return "max";
+			if (isOpus47(model) || isOpus46(model)) return "max";
 			return "high";
 		default:
 			return "high";
@@ -955,7 +978,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 
 	// For models with adaptive thinking: use an effort level.
 	// For older models: use budget-based thinking.
-	if (model.compat?.forceAdaptiveThinking === true) {
+	if (supportsAdaptiveThinking(model)) {
 		const effort = mapThinkingLevelToEffort(model, options.reasoning);
 		return streamAnthropic(model, context, {
 			...base,
@@ -995,7 +1018,7 @@ function createClient(
 	sessionId?: string,
 ): { client: Anthropic; isOAuthToken: boolean } {
 	// Adaptive thinking models have interleaved thinking built in, so skip the beta header.
-	const needsInterleavedBeta = interleavedThinking && model.compat?.forceAdaptiveThinking !== true;
+	const needsInterleavedBeta = interleavedThinking && !supportsAdaptiveThinking(model);
 	const betaFeatures: string[] = [];
 	if (useFineGrainedToolStreamingBeta) {
 		betaFeatures.push(FINE_GRAINED_TOOL_STREAMING_BETA);
@@ -1162,7 +1185,7 @@ function buildParams(
 			// Default to "summarized" so Opus 4.7 and Mythos Preview behave like
 			// older Claude 4 models (whose API default is also "summarized").
 			const display: AnthropicThinkingDisplay = options.thinkingDisplay ?? "summarized";
-			if (model.compat?.forceAdaptiveThinking === true) {
+			if (supportsAdaptiveThinking(model)) {
 				// Adaptive thinking: Claude decides when and how much to think.
 				params.thinking = { type: "adaptive", display } as MessageCreateParamsStreaming["thinking"];
 				if (options.effort) {

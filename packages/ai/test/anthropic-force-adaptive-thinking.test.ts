@@ -83,6 +83,22 @@ describe("Anthropic forceAdaptiveThinking compat override", () => {
 		expect(payload.output_config).toEqual({ effort: "medium" });
 	});
 
+	it("sends adaptive thinking payload for Claude Opus 4.6 ids when metadata is missing", async () => {
+		// given
+		const model: Model<"anthropic-messages"> = {
+			...makeCustomModel(),
+			id: "claude-opus-4-6",
+			name: "Claude Opus 4.6",
+		};
+
+		// when
+		const payload = await capturePayload(model, { reasoning: "high" });
+
+		// then
+		expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
+		expect(payload.output_config).toEqual({ effort: "high" });
+	});
+
 	it("allows built-in adaptive models to opt out with compat.forceAdaptiveThinking false", async () => {
 		const model: Model<"anthropic-messages"> = {
 			...getModel("anthropic", "claude-opus-4-7"),
