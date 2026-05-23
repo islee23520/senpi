@@ -1,16 +1,23 @@
-import { resolve } from "node:path";
+import * as path from "node:path";
 import { getSessionsDir } from "../../../../config.ts";
 import type { ExtensionAPI } from "../../types.ts";
 import { indexSessions } from "./indexer.ts";
 import { HistorySearchOverlay } from "./overlay.ts";
 import type { HistoryEntry } from "./types.ts";
 
-export function resolveSearchRoot(currentSessionDir: string, defaultSessionsRoot: string = getSessionsDir()): string {
-	const defaultRoot = resolve(defaultSessionsRoot);
+type PathLike = Pick<typeof path, "resolve" | "relative" | "isAbsolute">;
+
+export function resolveSearchRoot(
+	currentSessionDir: string,
+	defaultSessionsRoot: string = getSessionsDir(),
+	pathImpl: PathLike = path,
+): string {
+	const defaultRoot = pathImpl.resolve(defaultSessionsRoot);
 	if (!currentSessionDir) return defaultRoot;
-	const current = resolve(currentSessionDir);
+	const current = pathImpl.resolve(currentSessionDir);
 	if (current === defaultRoot) return defaultRoot;
-	if (current.startsWith(`${defaultRoot}/`)) return defaultRoot;
+	const rel = pathImpl.relative(defaultRoot, current);
+	if (rel && !rel.startsWith("..") && !pathImpl.isAbsolute(rel)) return defaultRoot;
 	return current;
 }
 

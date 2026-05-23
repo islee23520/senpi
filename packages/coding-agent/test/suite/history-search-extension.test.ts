@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { filterHistory } from "../../src/core/extensions/builtin/history-search/filter.ts";
 import historySearchExtension, { resolveSearchRoot } from "../../src/core/extensions/builtin/history-search/index.ts";
@@ -83,6 +84,14 @@ describe("resolveSearchRoot", () => {
 	it("returns the custom dir when sessionDir is outside default root", () => {
 		expect(resolveSearchRoot("/custom/session/dir", defaultRoot)).toBe("/custom/session/dir");
 		expect(resolveSearchRoot("/tmp/my-sessions", defaultRoot)).toBe("/tmp/my-sessions");
+	});
+
+	it("treats cwd-subdirs as descendants on Windows path semantics", () => {
+		const winRoot = "C:\\Users\\u\\.senpi\\agent\\sessions";
+		expect(resolveSearchRoot(`${winRoot}\\encoded-cwd`, winRoot, path.win32)).toBe(path.win32.resolve(winRoot));
+		expect(resolveSearchRoot("D:\\other\\sessions", winRoot, path.win32)).toBe(
+			path.win32.resolve("D:\\other\\sessions"),
+		);
 	});
 });
 
