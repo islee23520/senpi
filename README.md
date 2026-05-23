@@ -270,8 +270,8 @@ For Slack/chat automation and workflows see [earendil-works/pi-chat](https://git
 ## Development
 
 ```bash
-npm install          # Install all dependencies
-npm run build        # Build all packages (dependency order)
+npm install --ignore-scripts  # Install all dependencies without running lifecycle scripts
+npm run build        # Build all packages
 npm run check        # Lint, format, and type check
 npm test             # Run tests (skips LLM-dependent tests without API keys)
 ./pi-test.sh         # Live-API integration suite (env-gated; requires API keys)

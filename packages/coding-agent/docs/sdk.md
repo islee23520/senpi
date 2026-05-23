@@ -472,6 +472,8 @@ Specify which built-in tools to enable:
 - `noTools: "all"` disables all tools
 - `noTools: "builtin"` disables default built-ins while keeping extension and custom tools enabled
 
+The `edit` tool returns `details.diff` for Pi's TUI display and `details.patch` as a standard unified patch for SDK consumers.
+
 ```typescript
 import { createAgentSession } from "@code-yeongyu/senpi";
 

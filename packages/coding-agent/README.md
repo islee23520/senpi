@@ -403,7 +403,7 @@ senpi update npm:@foo/senpi-tools             # update one package
 senpi config                                  # enable/disable extensions, skills, prompts, themes
 ```
 
-Packages install to `~/.senpi/agent/git/` (git) or global npm. Use `-l` for project-local installs (`.senpi/git/`, `.senpi/npm/`). Git packages install dependencies with `npm install --omit=dev` by default, so runtime deps must be listed under `dependencies`; when `npmCommand` is configured, git packages use plain `install` for compatibility with wrappers. If you use a Node version manager and want package installs to reuse a stable npm context, set `npmCommand` in `settings.json`, for example `["mise", "exec", "node@20", "--", "npm"]`.
+Packages install to `~/.senpi/agent/git/` (git) or global npm. Use `-l` for project-local installs (`.senpi/git/`, `.senpi/npm/`). Git `@ref` values are pinned tags or commits; pinned packages are skipped by `senpi update`, so use `senpi install git:host/user/repo@new-ref` to move an existing package to a new ref. Git packages install dependencies with `npm install --omit=dev` by default, so runtime deps must be listed under `dependencies`; when `npmCommand` is configured, git packages use plain `install` for compatibility with wrappers. If you use a Node version manager and want package installs to reuse a stable npm context, set `npmCommand` in `settings.json`, for example `["mise", "exec", "node@20", "--", "npm"]`.
 
 Create a package by adding a `pi` key to `package.json`:
 
