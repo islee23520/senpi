@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed managed npm extension updates to avoid package managers installing or resolving pi host packages as peer dependencies ([#4907](https://github.com/earendil-works/pi/issues/4907)).
+
 ### Removed
 
 ## [2026.5.23-2] - 2026-05-23
