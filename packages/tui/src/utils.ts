@@ -834,6 +834,48 @@ function breakLongWord(word: string, width: number, tracker: AnsiCodeTracker): s
 	return lines.length > 0 ? lines : [""];
 }
 
+function sgrLeavesDefaultBackground(params: string): boolean {
+	if (params === "") {
+		return true;
+	}
+
+	const parts = params.split(";");
+	let backgroundIsDefault = false;
+	let index = 0;
+	while (index < parts.length) {
+		const part = parts[index] ?? "";
+		const code = part === "" ? 0 : Number.parseInt(part, 10);
+		if (Number.isNaN(code)) {
+			index++;
+			continue;
+		}
+		if (code === 0 || code === 49) {
+			backgroundIsDefault = true;
+			index++;
+			continue;
+		}
+		if ((code === 38 || code === 48) && parts[index + 1] === "5" && parts[index + 2] !== undefined) {
+			if (code === 48) {
+				backgroundIsDefault = false;
+			}
+			index += 3;
+			continue;
+		}
+		if ((code === 38 || code === 48) && parts[index + 1] === "2" && parts[index + 4] !== undefined) {
+			if (code === 48) {
+				backgroundIsDefault = false;
+			}
+			index += 5;
+			continue;
+		}
+		if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) {
+			backgroundIsDefault = false;
+		}
+		index++;
+	}
+	return backgroundIsDefault;
+}
+
 /**
  * Apply background color to a line, padding to full width.
  *
@@ -859,12 +901,18 @@ export function applyBackgroundToLine(line: string, width: number, bgFn: (text: 
 
 	const bgStart = wrappedMarker.slice(0, markerIndex);
 	const bgEnd = wrappedMarker.slice(markerIndex + marker.length);
-	const restored = withPadding.replace(/\x1b\[([0-9;]*)m/g, (sequence: string, params: string) => {
-		if (params === "" || params.split(";").some((param) => param === "0" || param === "49")) {
+	const restoredLine = line.replace(/\x1b\[([0-9;]*)m/g, (sequence: string, params: string) => {
+		if (sgrLeavesDefaultBackground(params)) {
 			return `${sequence}${bgStart}`;
 		}
 		return sequence;
 	});
+	const tracker = new AnsiCodeTracker();
+	updateTrackerFromText(line, tracker);
+	const restored =
+		paddingNeeded > 0 && tracker.hasActiveCodes()
+			? `${restoredLine}\x1b[0m${tracker.getLineEndReset()}${bgStart}${padding}`
+			: restoredLine + padding;
 	return `${bgStart}${restored}${bgEnd}`;
 }
 

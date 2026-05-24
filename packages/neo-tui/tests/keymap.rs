@@ -69,6 +69,8 @@ const LEGACY_REGISTRY: &[(&str, &[&str])] = &[
     ("app.model.cycleForward", &["ctrl+p"]),
     ("app.model.cycleBackward", &["shift+ctrl+p"]),
     ("app.model.select", &["ctrl+l"]),
+    ("app.history.search", &["ctrl+r"]),
+    ("app.sessions.observe", &["ctrl+s"]),
     ("app.tools.expand", &["ctrl+o"]),
     ("app.thinking.toggle", &["ctrl+t"]),
     ("app.session.toggleNamedFilter", &["ctrl+n"]),

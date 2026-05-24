@@ -17,6 +17,89 @@ describe("wrapTextWithAnsi", () => {
 			// then
 			assert.ok(rendered.includes(`${bgReset}${outerBg} tail`));
 		});
+
+		it("#given full reset inside outer background #when applying line background #then outer background resumes", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const reset = "\x1b[0m";
+			const line = `left ${reset}tail`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 20, (text) => `${outerBg}${text}\x1b[49m`);
+
+			// then
+			assert.ok(rendered.includes(`${reset}${outerBg}tail`));
+		});
+
+		it("#given compound background reset inside outer background #when applying line background #then outer background resumes", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const compoundReset = "\x1b[39;49m";
+			const line = `left ${compoundReset}tail`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 20, (text) => `${outerBg}${text}\x1b[49m`);
+
+			// then
+			assert.ok(rendered.includes(`${compoundReset}${outerBg}tail`));
+		});
+
+		it("#given rgb inner background contains zero channels #when applying line background #then inner background is preserved", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const innerBg = "\x1b[48;2;0;30;30m";
+			const line = `${innerBg}chip`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 8, (text) => `${outerBg}${text}\x1b[49m`);
+
+			// then
+			assert.ok(rendered.includes(`${innerBg}chip`));
+			assert.ok(!rendered.includes(`${innerBg}${outerBg}chip`));
+		});
+
+		it("#given rgb foreground contains zero channels inside inner background #when applying line background #then inner background is preserved", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const innerBg = "\x1b[48;2;60;30;30m";
+			const foreground = "\x1b[38;2;0;200;0m";
+			const line = `${innerBg}${foreground}chip`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 8, (text) => `${outerBg}${text}\x1b[49m`);
+
+			// then
+			assert.ok(rendered.includes(`${foreground}chip`));
+			assert.ok(!rendered.includes(`${foreground}${outerBg}chip`));
+		});
+
+		it("#given sgr reset also sets a new background #when applying line background #then new background is preserved", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const resetThenInnerBg = "\x1b[0;48;2;0;30;30m";
+			const line = `${resetThenInnerBg}chip`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 8, (text) => `${outerBg}${text}\x1b[49m`);
+
+			// then
+			assert.ok(rendered.includes(`${resetThenInnerBg}chip`));
+			assert.ok(!rendered.includes(`${resetThenInnerBg}${outerBg}chip`));
+		});
+
+		it("#given unclosed inner background reaches line padding #when applying line background #then padding uses outer background", () => {
+			// given
+			const outerBg = "\x1b[48;2;40;50;40m";
+			const innerBg = "\x1b[48;2;60;30;30m";
+			const reset = "\x1b[0m";
+			const line = `${innerBg}tool`;
+
+			// when
+			const rendered = applyBackgroundToLine(line, 8, (text) => `${outerBg}${text}\x1b[49m`);
+
+			// then
+			assert.ok(rendered.includes(`${innerBg}tool${reset}${outerBg}    `));
+		});
 	});
 
 	describe("underline styling", () => {
