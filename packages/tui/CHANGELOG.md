@@ -20,6 +20,10 @@
 
 ### Changed
 
+### Added
+
+- Added an opt-in Markdown renderer option to preserve source ordered-list markers for transcript rendering ([#5013](https://github.com/earendil-works/pi/issues/5013)).
+
 ### Fixed
 
 - Fixed `Shift+Enter` in Apple Terminal by detecting local macOS modifier state when Terminal.app sends plain Return.

@@ -750,7 +750,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			const requestOptions = {
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
-				...(options?.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+				maxRetries: options?.maxRetries ?? 0,
 				...(payloadRequestMetadata.headers ? { headers: payloadRequestMetadata.headers } : {}),
 			};
 			const response = await client.messages.create({ ...params, stream: true }, requestOptions).asResponse();
