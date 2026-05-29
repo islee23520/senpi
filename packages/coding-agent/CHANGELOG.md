@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed senpi local release and publish artifacts so package installs expose the `senpi` CLI shim, publish validation targets `@code-yeongyu/senpi`, and macOS Bun binaries are ad-hoc signed for local execution.
+
 ## [0.77.0] - 2026-05-28
 
 ### New Features
