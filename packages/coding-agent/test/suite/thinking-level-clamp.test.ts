@@ -23,6 +23,16 @@ describe("clampThinkingLevelToModel", () => {
 		expect(clampThinkingLevelToModel("xhigh", model)).toBe("xhigh");
 	});
 
+	it("Given Opus 4.8 when max is selected then preserves max", () => {
+		const model = getModel("anthropic", "claude-opus-4-8");
+		expect(clampThinkingLevelToModel("max", model)).toBe("max");
+	});
+
+	it("Given Opus 4.8 when xhigh is selected then preserves xhigh", () => {
+		const model = getModel("anthropic", "claude-opus-4-8");
+		expect(clampThinkingLevelToModel("xhigh", model)).toBe("xhigh");
+	});
+
 	it("preserves max on Opus 4.6 (legacy max tier)", () => {
 		const model = getModel("anthropic", "claude-opus-4-6");
 		expect(clampThinkingLevelToModel("max", model)).toBe("max");

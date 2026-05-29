@@ -61,7 +61,7 @@ type OpenAICompletionsRequestParams = Omit<
 	tool_stream?: boolean;
 	enable_thinking?: boolean;
 	chat_template_kwargs?: { enable_thinking: boolean; preserve_thinking: boolean };
-	thinking?: { type: "enabled" | "disabled" };
+	thinking?: { type: "enabled" | "disabled" } | string;
 	reasoning_effort?: string;
 	provider?: OpenAICompletionsCompat["openRouterRouting"];
 	providerOptions?: { gateway: Record<string, string[]> };
@@ -641,6 +641,12 @@ function buildParams(
 		togetherParams.reasoning = { enabled: !!options?.reasoningEffort };
 		if (options?.reasoningEffort && compat.supportsReasoningEffort) {
 			togetherParams.reasoning_effort = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+		}
+	} else if (compat.thinkingFormat === "string-thinking" && model.reasoning) {
+		if (options?.reasoningEffort) {
+			params.thinking = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+		} else if (model.thinkingLevelMap?.off !== null) {
+			params.thinking = model.thinkingLevelMap?.off ?? "none";
 		}
 	} else if (options?.reasoningEffort && model.reasoning && compat.supportsReasoningEffort) {
 		// OpenAI-style reasoning_effort

@@ -226,14 +226,14 @@ describe("SettingsManager", () => {
 	});
 
 	describe("retry", () => {
-		it("should default provider timeout to five minutes", () => {
+		it("should leave provider timeout unset by default", () => {
 			const givenSettingsPath = join(agentDir, "settings.json");
 			writeFileSync(givenSettingsPath, JSON.stringify({ theme: "dark" }));
 
 			const whenManager = SettingsManager.create(projectDir, agentDir);
 			const thenRetrySettings = whenManager.getProviderRetrySettings();
 
-			expect(thenRetrySettings.timeoutMs).toBe(300_000);
+			expect(thenRetrySettings.timeoutMs).toBeUndefined();
 		});
 
 		it("should preserve explicit provider timeout", () => {

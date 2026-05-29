@@ -17,18 +17,14 @@
  *      same-day re-releases looks like a prerelease tag to npm.
  *   4. Run `scripts/sync-versions.js` to propagate the new version to source
  *      inter-package deps.
- *   5. Regenerate `packages/coding-agent/npm-shrinkwrap.json` for the published CLI.
+ *   5. Regenerate AI model artifacts and `packages/coding-agent/npm-shrinkwrap.json`.
  *   6. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
  *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
  *      (`### Added`, `### Fixed`, ...) for re-insertion in step 8.
- *   7. `git add -A`, `git commit -m "release: v<version>"` (husky pre-commit runs),
- *      `git tag v<version>`.
- *   8. Run `npm run publish`. The public `@code-yeongyu/senpi` package
- *      keeps lockstep workspace dependency ranges and bundles the private
- *      forked `@earendil-works/pi-*` workspaces into the npm tarball.
- *   9. Re-insert a fresh `## [Unreleased]` block with the same subsection placeholders
- *      or the standard placeholders if none were captured, commit, then push `main`
- *      and the new tag.
+ *   7. Run `npm run check`.
+ *   8. Commit the release, tag it, re-insert a fresh `## [Unreleased]` block,
+ *      commit the next-cycle changelog update, then push `main` and the new tag.
+ *      GitHub Actions builds binaries and publishes from the pushed tag.
  */
 
 import { execFileSync } from "node:child_process";
@@ -163,13 +159,19 @@ function todayISO() {
 
 const capturedChangelogSubsections = new Map();
 
-function gitAddAll(dryRun) {
+function stageChangedFiles(dryRun) {
 	if (dryRun) {
-		dryRunLog("git add -A");
+		dryRunLog("git add -- <changed files>");
 		return;
 	}
-	log("git add -A");
-	runCommand("git", ["add", "-A"]);
+	const output = captureCommand("git", ["ls-files", "-m", "-o", "-d", "--exclude-standard"]);
+	const paths = [...new Set(output.split("\n").map((line) => line.trim()).filter(Boolean))];
+	if (paths.length === 0) {
+		log("no changed files to stage");
+		return;
+	}
+	log(`git add ${paths.length} changed file(s)`);
+	runCommand("git", ["add", "--", ...paths]);
 }
 
 function gitCommit(message, dryRun) {
@@ -200,13 +202,22 @@ function gitPush(refspec, dryRun) {
 	runCommand("git", ["push", "origin", refspec]);
 }
 
-function runPublish(dryRun) {
+function runGenerateModels(dryRun) {
 	if (dryRun) {
-		dryRunLog("npm run publish");
+		dryRunLog("npm --prefix packages/ai run generate-models");
 		return;
 	}
-	log("npm run publish");
-	runCommand("npm", ["run", "publish"]);
+	log("npm --prefix packages/ai run generate-models");
+	runCommand("npm", ["--prefix", "packages/ai", "run", "generate-models"]);
+}
+
+function runGenerateImageModels(dryRun) {
+	if (dryRun) {
+		dryRunLog("npm --prefix packages/ai run generate-image-models");
+		return;
+	}
+	log("npm --prefix packages/ai run generate-image-models");
+	runCommand("npm", ["--prefix", "packages/ai", "run", "generate-image-models"]);
 }
 
 function runShrinkwrap(dryRun) {
@@ -216,6 +227,15 @@ function runShrinkwrap(dryRun) {
 	}
 	log("node scripts/generate-coding-agent-shrinkwrap.mjs");
 	runCommand("node", ["scripts/generate-coding-agent-shrinkwrap.mjs"]);
+}
+
+function runCheck(dryRun) {
+	if (dryRun) {
+		dryRunLog("npm run check");
+		return;
+	}
+	log("npm run check");
+	runCommand("npm", ["run", "check"]);
 }
 
 function main() {
@@ -237,26 +257,27 @@ function main() {
 
 	applyWorkspaceVersions(version, args.dryRun, log, dryRunLog);
 	runSyncVersions(args.dryRun, runCommand, log, dryRunLog);
+	runGenerateModels(args.dryRun);
+	runGenerateImageModels(args.dryRun);
 	runShrinkwrap(args.dryRun);
 	stampChangelogs(version, date, args.dryRun, capturedChangelogSubsections, log, dryRunLog);
+	runCheck(args.dryRun);
 
-	gitAddAll(args.dryRun);
+	stageChangedFiles(args.dryRun);
 	gitCommit(`release: v${version}`, args.dryRun);
 	gitTag(version, args.dryRun);
 
-	runPublish(args.dryRun);
-
 	reAddUnreleasedSections(version, date, args.dryRun, capturedChangelogSubsections, log, dryRunLog);
-	gitAddAll(args.dryRun);
+	stageChangedFiles(args.dryRun);
 	gitCommit("Add [Unreleased] section for next cycle", args.dryRun);
 
 	gitPush("main", args.dryRun);
 	gitPush(`v${version}`, args.dryRun);
 
 	if (args.dryRun) {
-		log(`dry-run complete; would have published v${version}`);
+		log(`dry-run complete; would have prepared v${version}`);
 	} else {
-		log(`published v${version}`);
+		log(`prepared v${version}; CI publishing starts after the tag push`);
 	}
 }
 

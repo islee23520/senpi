@@ -130,6 +130,11 @@ describe("parseArgs", () => {
 			expect(result.session).toBe("/path/to/session.jsonl");
 		});
 
+		test("parses --session-id", () => {
+			const result = parseArgs(["--session-id", "orchestrated-session"]);
+			expect(result.sessionId).toBe("orchestrated-session");
+		});
+
 		test("parses --fork", () => {
 			const result = parseArgs(["--fork", "1234abcd"]);
 			expect(result.fork).toBe("1234abcd");
@@ -301,6 +306,16 @@ describe("parseArgs", () => {
 		test("parses -t shorthand", () => {
 			const result = parseArgs(["-t", "read,bash"]);
 			expect(result.tools).toEqual(["read", "bash"]);
+		});
+
+		test("parses --exclude-tools flag", () => {
+			const result = parseArgs(["--exclude-tools", "read,bash"]);
+			expect(result.excludeTools).toEqual(["read", "bash"]);
+		});
+
+		test("parses -xt shorthand", () => {
+			const result = parseArgs(["-xt", "read,bash"]);
+			expect(result.excludeTools).toEqual(["read", "bash"]);
 		});
 
 		test("parses --no-tools with explicit --tools flags", () => {

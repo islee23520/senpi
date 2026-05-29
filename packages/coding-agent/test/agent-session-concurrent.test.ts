@@ -67,6 +67,7 @@ type TestExtensionRunner = {
 		text: string,
 		images: unknown,
 		source: "interactive" | "rpc" | "extension",
+		streamingBehavior?: "steer" | "followUp",
 	) => Promise<{ action: "continue" }>;
 	emitBeforeAgentStart: (
 		prompt: string,

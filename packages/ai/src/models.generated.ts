@@ -185,6 +185,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -271,6 +272,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -461,6 +463,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.eu-central-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -600,6 +603,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -703,6 +707,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -1437,6 +1442,7 @@ export const MODELS = {
 			provider: "amazon-bedrock",
 			baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -1935,7 +1941,9 @@ export const MODELS = {
 			api: "anthropic-messages",
 			provider: "anthropic",
 			baseUrl: "https://api.anthropic.com",
+			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -2625,7 +2633,7 @@ export const MODELS = {
 			provider: "azure-openai-responses",
 			baseUrl: "",
 			reasoning: true,
-			thinkingLevelMap: {"off":null,"xhigh":"xhigh"},
+			thinkingLevelMap: {"off":null,"xhigh":"xhigh","minimal":null,"low":null},
 			input: ["text", "image"],
 			cost: {
 				input: 30,
@@ -4000,7 +4008,9 @@ export const MODELS = {
 			provider: "github-copilot",
 			baseUrl: "https://api.individual.githubcopilot.com",
 			headers: {"User-Agent":"GitHubCopilotChat/0.35.0","Editor-Version":"vscode/1.107.0","Editor-Plugin-Version":"copilot-chat/0.35.0","Copilot-Integration-Id":"vscode-chat"},
+			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 0,
@@ -6969,7 +6979,7 @@ export const MODELS = {
 			provider: "openai",
 			baseUrl: "https://api.openai.com/v1",
 			reasoning: true,
-			thinkingLevelMap: {"off":null,"xhigh":"xhigh"},
+			thinkingLevelMap: {"off":null,"xhigh":"xhigh","minimal":null,"low":null},
 			input: ["text", "image"],
 			cost: {
 				input: 30,
@@ -7340,7 +7350,9 @@ export const MODELS = {
 			api: "anthropic-messages",
 			provider: "opencode",
 			baseUrl: "https://opencode.ai/zen",
+			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -7787,7 +7799,7 @@ export const MODELS = {
 			provider: "opencode",
 			baseUrl: "https://opencode.ai/zen/v1",
 			reasoning: true,
-			thinkingLevelMap: {"off":null,"xhigh":"xhigh"},
+			thinkingLevelMap: {"off":null,"xhigh":"xhigh","minimal":null,"low":null},
 			input: ["text", "image"],
 			cost: {
 				input: 30,
@@ -8048,7 +8060,9 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "opencode-go",
 			baseUrl: "https://opencode.ai/zen/go/v1",
+			compat: {"thinkingFormat":"string-thinking"},
 			reasoning: true,
+			thinkingLevelMap: {"off":"none"},
 			input: ["text", "image"],
 			cost: {
 				input: 0.95,
@@ -8465,6 +8479,7 @@ export const MODELS = {
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -8482,6 +8497,7 @@ export const MODELS = {
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 10,
@@ -8889,9 +8905,9 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true},
 			reasoning: true,
-			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"max"},
+			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"xhigh"},
 			input: ["text"],
 			cost: {
 				input: 0.09999999999999999,
@@ -8908,9 +8924,9 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true},
 			reasoning: true,
-			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"max"},
+			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"xhigh"},
 			input: ["text"],
 			cost: {
 				input: 0,
@@ -8927,9 +8943,9 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true},
 			reasoning: true,
-			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"max"},
+			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"xhigh"},
 			input: ["text"],
 			cost: {
 				input: 0.435,
@@ -10897,7 +10913,7 @@ export const MODELS = {
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null,"minimal":null,"low":null},
 			input: ["text", "image"],
 			cost: {
 				input: 30,
@@ -13556,7 +13572,9 @@ export const MODELS = {
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
+			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
+			thinkingLevelMap: {"xhigh":"xhigh"},
 			input: ["text", "image"],
 			cost: {
 				input: 5,
@@ -15167,7 +15185,7 @@ export const MODELS = {
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null,"minimal":null,"low":null},
 			input: ["text", "image"],
 			cost: {
 				input: 30,
@@ -16022,24 +16040,6 @@ export const MODELS = {
 		} satisfies Model<"openai-completions">,
 	},
 	"xiaomi-token-plan-ams": {
-		"mimo-v2-flash": {
-			id: "mimo-v2-flash",
-			name: "MiMo-V2-Flash",
-			api: "openai-completions",
-			provider: "xiaomi-token-plan-ams",
-			baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0.1,
-				output: 0.3,
-				cacheRead: 0.01,
-				cacheWrite: 0,
-			},
-			contextWindow: 262144,
-			maxTokens: 65536,
-		} satisfies Model<"openai-completions">,
 		"mimo-v2-omni": {
 			id: "mimo-v2-omni",
 			name: "MiMo-V2-Omni",
@@ -16114,24 +16114,6 @@ export const MODELS = {
 		} satisfies Model<"openai-completions">,
 	},
 	"xiaomi-token-plan-cn": {
-		"mimo-v2-flash": {
-			id: "mimo-v2-flash",
-			name: "MiMo-V2-Flash",
-			api: "openai-completions",
-			provider: "xiaomi-token-plan-cn",
-			baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0.1,
-				output: 0.3,
-				cacheRead: 0.01,
-				cacheWrite: 0,
-			},
-			contextWindow: 262144,
-			maxTokens: 65536,
-		} satisfies Model<"openai-completions">,
 		"mimo-v2-omni": {
 			id: "mimo-v2-omni",
 			name: "MiMo-V2-Omni",
@@ -16206,24 +16188,6 @@ export const MODELS = {
 		} satisfies Model<"openai-completions">,
 	},
 	"xiaomi-token-plan-sgp": {
-		"mimo-v2-flash": {
-			id: "mimo-v2-flash",
-			name: "MiMo-V2-Flash",
-			api: "openai-completions",
-			provider: "xiaomi-token-plan-sgp",
-			baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0.1,
-				output: 0.3,
-				cacheRead: 0.01,
-				cacheWrite: 0,
-			},
-			contextWindow: 262144,
-			maxTokens: 65536,
-		} satisfies Model<"openai-completions">,
 		"mimo-v2-omni": {
 			id: "mimo-v2-omni",
 			name: "MiMo-V2-Omni",

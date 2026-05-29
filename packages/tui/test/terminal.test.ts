@@ -1,5 +1,6 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
+import { setKittyProtocolActive } from "../src/keys.ts";
 import { normalizeAppleTerminalInput, ProcessTerminal } from "../src/terminal.ts";
 
 describe("normalizeAppleTerminalInput", () => {
@@ -21,82 +22,184 @@ describe("normalizeAppleTerminalInput", () => {
 	});
 });
 
-function withTerminalProcessPatch<T>(
-	env: Record<string, string | undefined>,
-	fn: () => T,
-): { result: T; writes: string[] } {
-	const writes: string[] = [];
-	const previousEnv = new Map<string, string | undefined>();
-	for (const [name, value] of Object.entries(env)) {
-		previousEnv.set(name, process.env[name]);
-		if (value === undefined) delete process.env[name];
-		else process.env[name] = value;
-	}
+describe("ProcessTerminal Kitty keyboard protocol negotiation", () => {
+	type NegotiationHarness = {
+		terminal: ProcessTerminal;
+		writes: string[];
+		send(data: string): void;
+		getInput(): string | undefined;
+		cleanup(): void;
+	};
 
-	const stdoutWriteDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "write");
-	const stdinSetRawModeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "setRawMode");
-	const stdinIsRawDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "isRaw");
-	const stdinResumeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "resume");
-	const processKillDescriptor = Object.getOwnPropertyDescriptor(process, "kill");
-	const setTimeoutDescriptor = Object.getOwnPropertyDescriptor(globalThis, "setTimeout");
+	function setupNegotiation(env: Record<string, string | undefined> = {}): NegotiationHarness {
+		const terminal = new ProcessTerminal();
+		const writes: string[] = [];
+		let input: string | undefined;
+		let dataHandler: ((data: string) => void) | undefined;
+		let cleaned = false;
+		const previousWrite = process.stdout.write;
+		const previousOn = process.stdin.on;
+		const previousEnv = new Map<string, string | undefined>();
+		const effectiveEnv = { TMUX: undefined, TMUX_PANE: undefined, ...env };
 
-	try {
-		Object.defineProperty(process.stdout, "write", {
-			configurable: true,
-			value: (
-				chunk: string | Uint8Array,
-				encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void),
-				callback?: (error?: Error | null) => void,
-			): boolean => {
-				writes.push(typeof chunk === "string" ? chunk : chunk.toString());
-				if (typeof encodingOrCallback === "function") {
-					encodingOrCallback();
-				} else {
-					callback?.();
-				}
-				return true;
-			},
-		});
-		Object.defineProperty(process.stdin, "setRawMode", {
-			configurable: true,
-			value: () => process.stdin,
-		});
-		Object.defineProperty(process.stdin, "isRaw", {
-			configurable: true,
-			value: false,
-		});
-		Object.defineProperty(process.stdin, "resume", {
-			configurable: true,
-			value: () => process.stdin,
-		});
-		Object.defineProperty(process, "kill", {
-			configurable: true,
-			value: () => true,
-		});
-		Object.defineProperty(globalThis, "setTimeout", {
-			configurable: true,
-			value: () => undefined,
-		});
-		return { result: fn(), writes };
-	} finally {
-		for (const [name, value] of previousEnv) {
+		for (const [name, value] of Object.entries(effectiveEnv)) {
+			previousEnv.set(name, process.env[name]);
 			if (value === undefined) delete process.env[name];
 			else process.env[name] = value;
 		}
-		if (stdoutWriteDescriptor) Object.defineProperty(process.stdout, "write", stdoutWriteDescriptor);
-		else Reflect.deleteProperty(process.stdout, "write");
-		if (stdinSetRawModeDescriptor) Object.defineProperty(process.stdin, "setRawMode", stdinSetRawModeDescriptor);
-		else Reflect.deleteProperty(process.stdin, "setRawMode");
-		if (stdinIsRawDescriptor) Object.defineProperty(process.stdin, "isRaw", stdinIsRawDescriptor);
-		else Reflect.deleteProperty(process.stdin, "isRaw");
-		if (stdinResumeDescriptor) Object.defineProperty(process.stdin, "resume", stdinResumeDescriptor);
-		else Reflect.deleteProperty(process.stdin, "resume");
-		if (processKillDescriptor) Object.defineProperty(process, "kill", processKillDescriptor);
-		else Reflect.deleteProperty(process, "kill");
-		if (setTimeoutDescriptor) Object.defineProperty(globalThis, "setTimeout", setTimeoutDescriptor);
-		else Reflect.deleteProperty(globalThis, "setTimeout");
+		process.stdout.write = ((chunk: string | Uint8Array) => {
+			writes.push(String(chunk));
+			return true;
+		}) as typeof process.stdout.write;
+		process.stdin.on = ((event: string | symbol, listener: (...args: unknown[]) => void) => {
+			if (event === "data") dataHandler = listener as (data: string) => void;
+			return process.stdin;
+		}) as typeof process.stdin.on;
+
+		(
+			terminal as unknown as {
+				inputHandler?: (data: string) => void;
+				queryAndEnableKittyProtocol(): void;
+			}
+		).inputHandler = (data) => {
+			input = data;
+		};
+		(terminal as unknown as { queryAndEnableKittyProtocol(): void }).queryAndEnableKittyProtocol();
+
+		return {
+			terminal,
+			writes,
+			send(data: string): void {
+				dataHandler?.(data);
+			},
+			getInput(): string | undefined {
+				return input;
+			},
+			cleanup(): void {
+				if (cleaned) return;
+				cleaned = true;
+				try {
+					terminal.stop();
+				} finally {
+					for (const [name, value] of previousEnv) {
+						if (value === undefined) delete process.env[name];
+						else process.env[name] = value;
+					}
+					process.stdout.write = previousWrite;
+					process.stdin.on = previousOn;
+					setKittyProtocolActive(false);
+				}
+			},
+		};
 	}
-}
+
+	it("activates Kitty mode for non-zero negotiated flags", () => {
+		mock.timers.enable({ apis: ["setTimeout"] });
+		const harness = setupNegotiation();
+		try {
+			harness.send("\x1b[?1u");
+			mock.timers.tick(150);
+
+			assert.equal(harness.writes[0], "\x1b[>7u\x1b[?u\x1b[c");
+			assert.equal(harness.writes.includes("\x1b[>4;2m"), false);
+			assert.equal(harness.getInput(), undefined);
+			assert.equal(harness.terminal.kittyProtocolActive, true);
+
+			harness.cleanup();
+			assert.equal(harness.writes.filter((write) => write === "\x1b[<u").length, 1);
+		} finally {
+			harness.cleanup();
+			mock.timers.reset();
+		}
+	});
+
+	it("falls back to modifyOtherKeys for unsupported or silent terminals", () => {
+		const unsupported = setupNegotiation();
+		try {
+			unsupported.send("\x1b[?62;4;52c");
+
+			assert.equal(unsupported.writes[0], "\x1b[>7u\x1b[?u\x1b[c");
+			assert.equal(unsupported.writes.includes("\x1b[>4;2m"), true);
+			assert.equal(unsupported.getInput(), undefined);
+			assert.equal(unsupported.terminal.kittyProtocolActive, false);
+		} finally {
+			unsupported.cleanup();
+		}
+
+		mock.timers.enable({ apis: ["setTimeout"] });
+		const silent = setupNegotiation();
+		try {
+			mock.timers.tick(150);
+
+			assert.equal(silent.writes[0], "\x1b[>7u\x1b[?u\x1b[c");
+			assert.equal(silent.writes.includes("\x1b[>4;2m"), true);
+			assert.equal(silent.terminal.kittyProtocolActive, false);
+		} finally {
+			silent.cleanup();
+			mock.timers.reset();
+		}
+	});
+
+	it("tracks late split Kitty confirmation after fallback", () => {
+		mock.timers.enable({ apis: ["setTimeout"] });
+		const harness = setupNegotiation();
+		try {
+			mock.timers.tick(150);
+			harness.send("\x1b[?7");
+			mock.timers.tick(10);
+
+			assert.equal(harness.getInput(), undefined);
+
+			harness.send("u");
+
+			assert.equal(harness.writes.includes("\x1b[>4;2m"), true);
+			assert.equal(harness.terminal.kittyProtocolActive, true);
+
+			harness.cleanup();
+			assert.equal(harness.writes.filter((write) => write === "\x1b[<u").length, 1);
+			assert.equal(harness.writes.filter((write) => write === "\x1b[>4;0m").length, 1);
+		} finally {
+			harness.cleanup();
+			mock.timers.reset();
+		}
+	});
+
+	it("replays buffered CSI-prefix input after fallback", () => {
+		mock.timers.enable({ apis: ["setTimeout"] });
+		const harness = setupNegotiation();
+		try {
+			harness.send("\x1b[");
+			mock.timers.tick(150);
+
+			assert.equal(harness.writes.includes("\x1b[>4;2m"), true);
+			assert.equal(harness.getInput(), undefined);
+
+			mock.timers.tick(150);
+
+			assert.equal(harness.getInput(), "\x1b[");
+		} finally {
+			harness.cleanup();
+			mock.timers.reset();
+		}
+	});
+
+	it("requests modifyOtherKeys immediately when running inside tmux", () => {
+		const harness = setupNegotiation({ TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" });
+		try {
+			const modifyOtherKeysIndex = harness.writes.indexOf("\x1b[>4;2m");
+			const queryIndex = harness.writes.indexOf("\x1b[>7u\x1b[?u\x1b[c");
+
+			assert.notStrictEqual(modifyOtherKeysIndex, -1);
+			assert.notStrictEqual(queryIndex, -1);
+			assert.ok(modifyOtherKeysIndex < queryIndex);
+
+			harness.cleanup();
+			assert.equal(harness.writes.filter((write) => write === "\x1b[>4;0m").length, 1);
+		} finally {
+			harness.cleanup();
+		}
+	});
+});
 
 describe("ProcessTerminal dimensions", () => {
 	it("falls back to COLUMNS and LINES before default dimensions", () => {
@@ -137,30 +240,5 @@ describe("ProcessTerminal dimensions", () => {
 				process.env.LINES = previousLines;
 			}
 		}
-	});
-});
-
-describe("ProcessTerminal keyboard negotiation", () => {
-	it("requests modifyOtherKeys immediately when running inside tmux", () => {
-		const givenTmuxEnv = { TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" };
-		const { writes } = withTerminalProcessPatch(givenTmuxEnv, () => {
-			const terminal = new ProcessTerminal();
-
-			terminal.start(
-				() => {},
-				() => {},
-			);
-			terminal.stop();
-		});
-
-		const whenModifyOtherKeysIndex = writes.indexOf("\x1b[>4;2m");
-		const whenBracketedPasteIndex = writes.indexOf("\x1b[?2004h");
-		const whenQueryIndex = writes.indexOf("\x1b[?u");
-		const whenDisableIndex = writes.indexOf("\x1b[>4;0m");
-
-		assert.notStrictEqual(whenModifyOtherKeysIndex, -1);
-		assert.ok(whenModifyOtherKeysIndex > whenBracketedPasteIndex);
-		assert.ok(whenModifyOtherKeysIndex < whenQueryIndex);
-		assert.notStrictEqual(whenDisableIndex, -1);
 	});
 });
