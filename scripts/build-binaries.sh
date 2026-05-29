@@ -95,12 +95,13 @@ if [[ "$SKIP_DEPS" == "false" ]]; then
     # Use --force to bypass platform checks (os/cpu restrictions in package.json)
     # Install all in one command to avoid npm removing packages from previous installs
     npm install --no-save --package-lock=false --force --ignore-scripts \
-        @mariozechner/clipboard-darwin-arm64@0.3.6 \
-        @mariozechner/clipboard-darwin-x64@0.3.6 \
-        @mariozechner/clipboard-linux-x64-gnu@0.3.6 \
-        @mariozechner/clipboard-linux-arm64-gnu@0.3.6 \
-        @mariozechner/clipboard-win32-x64-msvc@0.3.6 \
-        @mariozechner/clipboard-win32-arm64-msvc@0.3.6
+        @mariozechner/clipboard@0.3.9 \
+        @mariozechner/clipboard-darwin-arm64@0.3.9 \
+        @mariozechner/clipboard-darwin-x64@0.3.9 \
+        @mariozechner/clipboard-linux-x64-gnu@0.3.9 \
+        @mariozechner/clipboard-linux-arm64-gnu@0.3.9 \
+        @mariozechner/clipboard-win32-x64-msvc@0.3.9 \
+        @mariozechner/clipboard-win32-arm64-msvc@0.3.9
 else
     echo "==> Skipping cross-platform native bindings (--skip-deps)"
 fi
