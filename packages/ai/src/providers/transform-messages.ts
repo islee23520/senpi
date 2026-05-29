@@ -63,6 +63,7 @@ export interface TransformMessagesOptions {
 	 * thinking attached to tool calls is preserved for provider validation.
 	 */
 	preserveThinking?: boolean;
+	preserveTextSignatures?: boolean;
 	/**
 	 * Preserve same-model thinking blocks that do not carry a usable signature
 	 * so provider adapters can downgrade them to plain text or provider-specific
@@ -86,6 +87,7 @@ export function transformMessages<TApi extends Api>(
 	const toolCallIdMap = new Map<string, string>();
 	const imageAwareMessages = downgradeUnsupportedImages(messages, model);
 	const preserveThinking = options.preserveThinking ?? true;
+	const preserveTextSignatures = options.preserveTextSignatures ?? false;
 	const preserveUnsignedThinking = options.preserveUnsignedThinking ?? false;
 
 	// First pass: transform messages (unsupported image downgrade, thinking blocks, tool call ID normalization)
@@ -138,7 +140,7 @@ export function transformMessages<TApi extends Api>(
 				}
 
 				if (block.type === "text") {
-					if (isSameModel && preserveProviderState) return { ...block };
+					if (isSameModel && (preserveProviderState || preserveTextSignatures)) return { ...block };
 					return {
 						type: "text" as const,
 						text: block.text,

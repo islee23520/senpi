@@ -79,6 +79,7 @@ export interface OpenAIResponsesStreamOptions {
 export interface ConvertResponsesMessagesOptions {
 	includeSystemPrompt?: boolean;
 	preserveThinking?: boolean;
+	preserveTextSignatures?: boolean;
 }
 
 export interface ConvertResponsesToolsOptions {
@@ -158,6 +159,7 @@ export function convertResponsesMessages<TApi extends Api>(
 
 	const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId, {
 		preserveThinking: options?.preserveThinking,
+		preserveTextSignatures: options?.preserveTextSignatures,
 	});
 
 	const includeSystemPrompt = options?.includeSystemPrompt ?? true;

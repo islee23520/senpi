@@ -444,6 +444,7 @@ function buildRequestBody(
 	const messages = convertResponsesMessages(model, context, CODEX_TOOL_CALL_PROVIDERS, {
 		includeSystemPrompt: false,
 		preserveThinking: reasoningRequested,
+		preserveTextSignatures: true,
 	});
 
 	const body: RequestBody = {
