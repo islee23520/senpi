@@ -119,7 +119,7 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		await expect(runAutoCompaction("threshold", false)).resolves.toBe(true);
 
-		expect(continueSpy).not.toHaveBeenCalled();
+		expect(continueSpy).toHaveBeenCalledTimes(1);
 	});
 
 	it("should not compact repeatedly after overflow recovery already attempted", async () => {

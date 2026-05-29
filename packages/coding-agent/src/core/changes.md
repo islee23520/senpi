@@ -8,7 +8,7 @@
   compaction work before starting a fresh provider request.
 - `src/core/agent-session.ts`: overflow retry and user-visible queued follow-up/steering recovery now await the
   post-compaction continuation instead of scheduling an unobserved delayed `continue()`.
-- `src/core/agent-session.ts`: agent-level custom-only queues keep their prior non-immediate continuation behavior.
+- `src/core/agent-session.ts`: agent-level custom-only queues also use the awaited post-compaction continuation path.
 - `src/core/session-work-barrier.ts`: centralizes nested session-work barriers used by compaction settlement.
 
 ### Why

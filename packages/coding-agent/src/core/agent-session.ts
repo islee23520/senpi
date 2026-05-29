@@ -2429,7 +2429,7 @@ export class AgentSession {
 			} else if (this.pendingMessageCount > 0) {
 				return await this._continueAgentAfterCurrentRun();
 			} else if (this.agent.hasQueuedMessages()) {
-				return true;
+				return await this._continueAgentAfterCurrentRun();
 			}
 
 			return false;
