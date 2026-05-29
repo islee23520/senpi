@@ -110,6 +110,8 @@ for (const pkg of packages) {
 		continue;
 	}
 
-	run("npm", ["publish", "--access", "public", "--provenance", "--ignore-scripts"], { cwd: pkg.directory });
+	run("npm", ["publish", "--access", "public", "--tag", "latest", "--provenance", "--ignore-scripts"], {
+		cwd: pkg.directory,
+	});
 	console.log();
 }
