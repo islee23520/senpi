@@ -19,6 +19,7 @@ import {
 	type SystemContentBlock,
 	type ToolChoice,
 	type ToolConfiguration,
+	type ToolResultContentBlock,
 	ToolResultStatus,
 } from "@aws-sdk/client-bedrock-runtime";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
@@ -29,6 +30,7 @@ import type {
 	AssistantMessage,
 	CacheRetention,
 	Context,
+	ImageContent,
 	Model,
 	SimpleStreamOptions,
 	StopReason,
@@ -92,6 +94,8 @@ export interface BedrockOptions extends StreamOptions {
 }
 
 type Block = (TextContent | ThinkingContent | ToolCall) & { index?: number; partialJson?: string };
+
+const EMPTY_TEXT_PLACEHOLDER = "<empty>";
 
 export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOptions> = (
 	model: Model<"bedrock-converse-stream">,
@@ -189,6 +193,9 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 
 		try {
 			const client = new BedrockRuntimeClient(config);
+			if (options.headers && Object.keys(options.headers).length > 0) {
+				addCustomHeadersMiddleware(client, options.headers);
+			}
 			const cacheRetention = resolveCacheRetention(options.cacheRetention);
 			const inferenceMaxTokens = options.maxTokens ?? (isAnthropicClaudeModel(model) ? model.maxTokens : undefined);
 			let commandInput: ConverseStreamCommandInput & Record<string, unknown> = {
@@ -304,6 +311,51 @@ function formatBedrockError(error: unknown): string {
 		return `${prefix}: ${message}`;
 	}
 	return message;
+}
+
+/**
+ * Header keys that must never be overwritten by caller-supplied headers.
+ * `host` and `x-amz-*` participate in the SigV4 canonical request; `authorization`
+ * is owned by SigV4 or the bearer-token path (config.token + authSchemePreference).
+ * Compared case-insensitively (caller key is lower-cased before lookup).
+ */
+const RESERVED_HEADER_EXACT = new Set(["authorization", "host"]);
+
+function isReservedHeader(key: string): boolean {
+	const lower = key.toLowerCase();
+	return lower.startsWith("x-amz-") || RESERVED_HEADER_EXACT.has(lower);
+}
+
+function hasHeaders(request: unknown): request is { headers: Record<string, string> } {
+	if (typeof request !== "object" || request === null || !("headers" in request)) {
+		return false;
+	}
+	return typeof request.headers === "object" && request.headers !== null;
+}
+
+/**
+ * Attach caller-supplied headers to the outgoing Bedrock request via a Smithy
+ * `build`-step middleware. The `build` step runs after request serialisation but
+ * before SigV4 signing, so injected headers are covered by the signature. Reserved
+ * SigV4 / auth headers (`x-amz-*`, `authorization`, `host`) are silently skipped;
+ * all other caller headers override any existing same-named header on the request.
+ */
+function addCustomHeadersMiddleware(client: BedrockRuntimeClient, headers: Record<string, string>): void {
+	client.middlewareStack.add(
+		(next) => async (args) => {
+			const request = args.request;
+			if (hasHeaders(request)) {
+				const requestHeaders = request.headers;
+				for (const [key, value] of Object.entries(headers)) {
+					if (!isReservedHeader(key)) {
+						requestHeaders[key] = value;
+					}
+				}
+			}
+			return next(args);
+		},
+		{ step: "build", name: "pi-ai-custom-headers", priority: "low" },
+	);
 }
 
 export const streamSimpleBedrock: StreamFunction<"bedrock-converse-stream", SimpleStreamOptions> = (
@@ -631,6 +683,29 @@ function normalizeToolCallId(id: string): string {
 	return sanitized.length > 64 ? sanitized.slice(0, 64) : sanitized;
 }
 
+function createNonBlankTextBlock(text: string): ContentBlock.TextMember | undefined {
+	const sanitized = sanitizeSurrogates(text);
+	return sanitized.trim().length === 0 ? undefined : { text: sanitized };
+}
+
+function createRequiredTextBlock(text: string): ContentBlock.TextMember {
+	return createNonBlankTextBlock(text) ?? { text: EMPTY_TEXT_PLACEHOLDER };
+}
+
+function convertToolResultContent(content: (TextContent | ImageContent)[]): ToolResultContentBlock[] {
+	const result: ToolResultContentBlock[] = [];
+	for (const c of content) {
+		if (c.type === "image") {
+			result.push({ image: createImageBlock(c.mimeType, c.data) });
+		} else {
+			const textBlock = createNonBlankTextBlock(c.text);
+			if (textBlock) result.push(textBlock);
+		}
+	}
+	if (result.length === 0) result.push({ text: EMPTY_TEXT_PLACEHOLDER });
+	return result;
+}
+
 function convertMessages(
 	context: Context,
 	model: Model<"bedrock-converse-stream">,
@@ -649,13 +724,15 @@ function convertMessages(
 			case "user": {
 				const content: ContentBlock[] = [];
 				if (typeof m.content === "string") {
-					content.push({ text: sanitizeSurrogates(m.content) });
+					content.push(createRequiredTextBlock(m.content));
 				} else {
 					for (const c of m.content) {
 						switch (c.type) {
-							case "text":
-								content.push({ text: sanitizeSurrogates(c.text) });
+							case "text": {
+								const textBlock = createNonBlankTextBlock(c.text);
+								if (textBlock) content.push(textBlock);
 								break;
+							}
 							case "image":
 								content.push({ image: createImageBlock(c.mimeType, c.data) });
 								break;
@@ -663,8 +740,8 @@ function convertMessages(
 								continue;
 						}
 					}
+					if (content.length === 0) content.push({ text: EMPTY_TEXT_PLACEHOLDER });
 				}
-				if (content.length === 0) continue;
 				result.push({
 					role: ConversationRole.USER,
 					content,
@@ -680,19 +757,22 @@ function convertMessages(
 				const contentBlocks: ContentBlock[] = [];
 				for (const c of m.content) {
 					switch (c.type) {
-						case "text":
+						case "text": {
 							// Skip empty text blocks
-							if (c.text.trim().length === 0) continue;
-							contentBlocks.push({ text: sanitizeSurrogates(c.text) });
+							const textBlock = createNonBlankTextBlock(c.text);
+							if (!textBlock) continue;
+							contentBlocks.push(textBlock);
 							break;
+						}
 						case "toolCall":
 							contentBlocks.push({
 								toolUse: { toolUseId: c.id, name: c.name, input: c.arguments },
 							});
 							break;
-						case "thinking":
+						case "thinking": {
 							// Skip empty thinking blocks
-							if (c.thinking.trim().length === 0) continue;
+							const thinking = sanitizeSurrogates(c.thinking);
+							if (thinking.trim().length === 0) continue;
 							// Only Anthropic models support the signature field in reasoningText.
 							// For other models, we omit the signature to avoid errors like:
 							// "This model doesn't support the reasoningContent.reasoningText.signature field"
@@ -701,12 +781,12 @@ function convertMessages(
 								// persisted message lacks a signature, Bedrock rejects the replayed
 								// reasoning block. Fall back to plain text, matching Anthropic.
 								if (!c.thinkingSignature || c.thinkingSignature.trim().length === 0) {
-									contentBlocks.push({ text: sanitizeSurrogates(c.thinking) });
+									contentBlocks.push({ text: thinking });
 								} else {
 									contentBlocks.push({
 										reasoningContent: {
 											reasoningText: {
-												text: sanitizeSurrogates(c.thinking),
+												text: thinking,
 												signature: c.thinkingSignature,
 											},
 										},
@@ -715,11 +795,12 @@ function convertMessages(
 							} else {
 								contentBlocks.push({
 									reasoningContent: {
-										reasoningText: { text: sanitizeSurrogates(c.thinking) },
+										reasoningText: { text: thinking },
 									},
 								});
 							}
 							break;
+						}
 						default:
 							continue;
 					}
@@ -743,11 +824,7 @@ function convertMessages(
 				toolResults.push({
 					toolResult: {
 						toolUseId: m.toolCallId,
-						content: m.content.map((c) =>
-							c.type === "image"
-								? { image: createImageBlock(c.mimeType, c.data) }
-								: { text: sanitizeSurrogates(c.text) },
-						),
+						content: convertToolResultContent(m.content),
 						status: m.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
 					},
 				});
@@ -759,11 +836,7 @@ function convertMessages(
 					toolResults.push({
 						toolResult: {
 							toolUseId: nextMsg.toolCallId,
-							content: nextMsg.content.map((c) =>
-								c.type === "image"
-									? { image: createImageBlock(c.mimeType, c.data) }
-									: { text: sanitizeSurrogates(c.text) },
-							),
+							content: convertToolResultContent(nextMsg.content),
 							status: nextMsg.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
 						},
 					});

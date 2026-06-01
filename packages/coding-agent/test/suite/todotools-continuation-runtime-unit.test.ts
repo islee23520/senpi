@@ -61,6 +61,7 @@ function createMockContext(options?: {
 	return {
 		cwd: options?.cwd ?? "/tmp/project",
 		hasUI: options?.hasUI ?? true,
+		mode: options?.hasUI === false ? "print" : "tui",
 		isIdle: options?.isIdle ?? (() => true),
 		sessionManager: {
 			getSessionId: () => options?.sessionId ?? "session-1",

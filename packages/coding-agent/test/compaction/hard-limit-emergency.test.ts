@@ -92,6 +92,7 @@ function createContext(contextWindow: number, compact = vi.fn()): ExtensionConte
 	sessionManager.getBranch = vi.fn(() => []);
 	return {
 		hasUI: false,
+		mode: "print",
 		ui: Object.create(null) as ExtensionContext["ui"],
 		cwd: process.cwd(),
 		sessionManager,
@@ -139,6 +140,7 @@ function createCompactionContext(): ExtensionContext {
 	const applyCompaction = vi.fn(async () => ({ applied: true as const, reason: "ok" as const }));
 	return {
 		hasUI: false,
+		mode: "print",
 		ui: Object.create(null) as ExtensionContext["ui"],
 		cwd: process.cwd(),
 		sessionManager,

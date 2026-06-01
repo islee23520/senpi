@@ -231,6 +231,7 @@ function captureCompactionHandlers(): CapturedCompactionHandlers {
 function createExtensionContext(overrides: Partial<ExtensionContext>): ExtensionContext {
 	return {
 		hasUI: false,
+		mode: "print",
 		ui: {} as ExtensionContext["ui"],
 		cwd: process.cwd(),
 		sessionManager: Object.assign(Object.create(null), {

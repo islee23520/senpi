@@ -208,6 +208,7 @@ function createExtensionContext(harness: Harness, uiContext: ExtensionUIContext)
 	return {
 		cwd: harness.tempDir,
 		hasUI: true,
+		mode: "tui",
 		sessionManager: harness.sessionManager,
 		modelRegistry: undefined as never,
 		model: undefined,

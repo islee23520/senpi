@@ -232,6 +232,7 @@ Sessions auto-save to `~/.senpi/agent/sessions/` organized by working directory.
 senpi -c                  # Continue most recent session
 senpi -r                  # Browse and select from past sessions
 senpi --no-session        # Ephemeral mode (don't save)
+senpi --name "my task"    # Set session display name at startup
 senpi --session <path|id> # Use specific session file or ID
 senpi --fork <path|id>    # Fork specific session file or ID into a new session
 ```
@@ -545,6 +546,7 @@ cat README.md | senpi -p "Summarize this text"
 | `--fork <path\|id>` | Fork specific session file or partial UUID into a new session |
 | `--session-dir <dir>` | Custom session storage directory |
 | `--no-session` | Ephemeral mode (don't save) |
+| `--name <name>`, `-n <name>` | Set session display name at startup |
 
 ### Tool Options
 
@@ -604,6 +606,9 @@ senpi -p "Summarize this codebase"
 
 # Non-interactive with piped stdin
 cat README.md | senpi -p "Summarize this text"
+
+# Named one-shot session
+pi --name "release audit" -p "Audit this repository"
 
 # Different model
 senpi --provider openai --model gpt-4o "Help me refactor"

@@ -64,6 +64,7 @@ function createExtensionContext(entries: SessionEntry[]): ExtensionContext {
 
 	return {
 		hasUI: false,
+		mode: "print",
 		ui: Object.assign(Object.create(null), {
 			notify: vi.fn(),
 		}) as ExtensionContext["ui"],

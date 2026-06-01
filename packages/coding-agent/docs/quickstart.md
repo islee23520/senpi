@@ -134,6 +134,7 @@ Sessions are saved automatically:
 ```bash
 senpi -c                  # Continue most recent session
 senpi -r                  # Browse previous sessions
+senpi --name "my task"    # Set session display name at startup
 senpi --session <path|id> # Open a specific session
 ```
 

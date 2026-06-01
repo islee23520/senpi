@@ -66,6 +66,7 @@ function createMockContext(overrides: { hasUI?: boolean; ui?: ExtensionUIContext
 	return {
 		ui: overrides.ui ?? createMockUI(),
 		hasUI: overrides.hasUI ?? true,
+		mode: overrides.hasUI === false ? "print" : "tui",
 		cwd: "/tmp/test",
 		sessionManager: {} as ExtensionContext["sessionManager"],
 		modelRegistry: {} as ExtensionContext["modelRegistry"],
