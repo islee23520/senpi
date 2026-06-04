@@ -22,6 +22,7 @@ export type ImagesApi = KnownImagesApi | (string & {});
 
 export type KnownProvider =
 	| "amazon-bedrock"
+	| "ant-ling"
 	| "anthropic"
 	| "google"
 	| "google-vertex"
@@ -37,6 +38,7 @@ export type KnownProvider =
 	| "openrouter"
 	| "vercel-ai-gateway"
 	| "zai"
+	| "zai-coding-cn"
 	| "mistral"
 	| "minimax"
 	| "minimax-cn"
@@ -428,7 +430,7 @@ export interface OpenAICompletionsCompat {
 	requiresThinkingAsText?: boolean;
 	/** Whether all replayed assistant messages must include an empty reasoning_content field when reasoning is enabled. Default: auto-detected from URL. */
 	requiresReasoningContentOnAssistantMessages?: boolean;
-	/** Format for reasoning/thinking parameter. "openai" uses reasoning_effort, "openrouter" uses reasoning: { effort }, "deepseek" uses thinking: { type } plus reasoning_effort when supported, "together" uses reasoning: { enabled } plus reasoning_effort when supported, "zai" uses top-level enable_thinking: boolean, "qwen" uses top-level enable_thinking: boolean, "qwen-chat-template" uses chat_template_kwargs.enable_thinking, and "string-thinking" uses top-level thinking: string. Default: "openai". */
+	/** Format for reasoning/thinking parameter. "openai" uses reasoning_effort, "openrouter" uses reasoning: { effort }, "deepseek" uses thinking: { type } plus reasoning_effort when supported, "together" uses reasoning: { enabled } plus reasoning_effort when supported, "zai" uses top-level enable_thinking: boolean, "qwen" uses top-level enable_thinking: boolean, "qwen-chat-template" uses chat_template_kwargs.enable_thinking, "string-thinking" uses top-level thinking: string, and "ant-ling" uses reasoning: { effort } only when the mapped effort is non-null. Default: "openai". */
 	thinkingFormat?:
 		| "openai"
 		| "openrouter"
@@ -437,7 +439,8 @@ export interface OpenAICompletionsCompat {
 		| "zai"
 		| "qwen"
 		| "qwen-chat-template"
-		| "string-thinking";
+		| "string-thinking"
+		| "ant-ling";
 	/** Whether the provider accepts explicit disabled-thinking markers when thinking is off. Default: true. */
 	supportsDisabledThinking?: boolean;
 	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */

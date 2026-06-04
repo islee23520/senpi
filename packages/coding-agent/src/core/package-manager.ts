@@ -1,7 +1,7 @@
 import type { ChildProcess, ChildProcessByStdio } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 
 function getEnv(): NodeJS.ProcessEnv {
 	if (process.platform !== "linux" || Object.keys(process.env).length > 0) {
@@ -204,6 +204,13 @@ function toPosixPath(p: string): string {
 
 function getHomeDir(): string {
 	return process.env.HOME || homedir();
+}
+
+export function getExtensionTempFolder(agentDir: string): string {
+	const tempFolder = join(agentDir, "tmp", "extensions");
+	mkdirSync(tempFolder, { recursive: true, mode: 0o700 });
+	chmodSync(tempFolder, 0o700);
+	return tempFolder;
 }
 
 function prefixIgnorePattern(line: string, prefix: string): string | null {
@@ -1955,10 +1962,11 @@ export class DefaultPackageManager implements PackageManager {
 		if (scope === "temporary") {
 			return this.getTemporaryDir(`git-${source.host}`, source.path);
 		}
-		if (scope === "project") {
-			return join(this.cwd, CONFIG_DIR_NAME, "git", source.host, source.path);
+		const installRoot = this.getGitInstallRoot(scope);
+		if (!installRoot) {
+			throw new Error("Missing git install root");
 		}
-		return join(this.agentDir, "git", source.host, source.path);
+		return this.resolveManagedPath(installRoot, source.host, source.path);
 	}
 
 	private getGitInstallRoot(scope: SourceScope): string | undefined {
@@ -1972,11 +1980,21 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private getTemporaryDir(prefix: string, suffix?: string): string {
+		const root = this.resolveManagedPath(getExtensionTempFolder(this.agentDir), prefix);
 		const hash = createHash("sha256")
 			.update(`${prefix}-${suffix ?? ""}`)
 			.digest("hex")
 			.slice(0, 8);
-		return join(tmpdir(), "pi-extensions", prefix, hash, suffix ?? "");
+		return this.resolveManagedPath(root, hash, suffix ?? "");
+	}
+
+	private resolveManagedPath(root: string, ...parts: string[]): string {
+		const resolvedRoot = resolve(root);
+		const resolvedPath = resolve(resolvedRoot, ...parts);
+		if (resolvedPath !== resolvedRoot && !resolvedPath.startsWith(`${resolvedRoot}${sep}`)) {
+			throw new Error(`Refusing to use path outside package install root: ${resolvedPath}`);
+		}
+		return resolvedPath;
 	}
 
 	private getBaseDirForScope(scope: SourceScope): string {

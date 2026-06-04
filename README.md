@@ -267,6 +267,20 @@ I regularly publish my own `pi-mono` work sessions here:
 
 For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
 
+## Permissions & Containerization
+
+senpi does not include a built-in container boundary for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
+
+If you need stronger boundaries, containerize or sandbox senpi. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
+
+- **OpenShell**: run the whole `senpi` process in a policy-controlled sandbox.
+- **Gondolin extension**: keep `senpi` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
+- **Plain Docker**: run the whole `senpi` process in a local container for simple isolation.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).
+
 ## Development
 
 ```bash

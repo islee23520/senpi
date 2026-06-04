@@ -103,6 +103,7 @@ For each built-in provider, senpi maintains a list of tool-capable models, updat
 
 **API keys:**
 - Anthropic
+- Ant Ling
 - OpenAI
 - Azure OpenAI
 - DeepSeek
@@ -119,6 +120,7 @@ For each built-in provider, senpi maintains a list of tool-capable models, updat
 - OpenRouter
 - Vercel AI Gateway
 - ZAI
+- ZAI Coding Plan (China)
 - OpenCode Zen
 - OpenCode Go
 - Hugging Face

@@ -169,6 +169,15 @@ const DEEPSEEK_V4_THINKING_LEVEL_MAP = {
 	xhigh: "max",
 } as const;
 
+const ANT_LING_RING_THINKING_LEVEL_MAP = {
+	off: null,
+	minimal: null,
+	low: null,
+	medium: null,
+	high: "high",
+	xhigh: "xhigh",
+} as const;
+
 const OPENAI_RESPONSES_NONE_REASONING_MODELS = new Set([
 	"gpt-5.1",
 	"gpt-5.2",
@@ -329,6 +338,10 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (model.provider === "opencode" && model.id === "grok-build-0.1") {
 		// OpenCode Zen Grok Build reasons by default but rejects explicit reasoningEffort.
 		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null, medium: null });
+	}
+	if (model.provider === "ant-ling" && model.reasoning) {
+		// Ring reasons by default. Only high/xhigh have documented explicit effort controls.
+		mergeThinkingLevelMap(model, ANT_LING_RING_THINKING_LEVEL_MAP);
 	}
 }
 
@@ -775,34 +788,41 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 		}
 
 		// Process zAi models
-		if (data["zai-coding-plan"]?.models) {
-			for (const [modelId, model] of Object.entries(data["zai-coding-plan"].models)) {
-				const m = model as ModelsDevModel;
-				if (m.tool_call !== true) continue;
-				const supportsImage = m.modalities?.input?.includes("image");
+		const zaiCodingPlanVariants = [
+			{ provider: "zai", baseUrl: "https://api.z.ai/api/coding/paas/v4" },
+			{ provider: "zai-coding-cn", baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4" },
+		] as const;
 
-				models.push({
-					id: modelId,
-					name: m.name || modelId,
-					api: "openai-completions",
-					provider: "zai",
-					baseUrl: "https://api.z.ai/api/coding/paas/v4",
-					reasoning: m.reasoning === true,
-					input: supportsImage ? ["text", "image"] : ["text"],
-					cost: {
-						input: m.cost?.input || 0,
-						output: m.cost?.output || 0,
-						cacheRead: m.cost?.cache_read || 0,
-						cacheWrite: m.cost?.cache_write || 0,
-					},
-					compat: {
-						supportsDeveloperRole: false,
-						thinkingFormat: "zai",
-						...(!ZAI_TOOL_STREAM_UNSUPPORTED_MODELS.has(modelId) ? { zaiToolStream: true } : {}),
-					},
-					contextWindow: m.limit?.context || 4096,
-					maxTokens: m.limit?.output || 4096,
-				});
+		if (data["zai-coding-plan"]?.models) {
+			for (const { provider, baseUrl } of zaiCodingPlanVariants) {
+				for (const [modelId, model] of Object.entries(data["zai-coding-plan"].models)) {
+					const m = model as ModelsDevModel;
+					if (m.tool_call !== true) continue;
+					const supportsImage = m.modalities?.input?.includes("image");
+
+					models.push({
+						id: modelId,
+						name: m.name || modelId,
+						api: "openai-completions",
+						provider,
+						baseUrl,
+						reasoning: m.reasoning === true,
+						input: supportsImage ? ["text", "image"] : ["text"],
+						cost: {
+							input: m.cost?.input || 0,
+							output: m.cost?.output || 0,
+							cacheRead: m.cost?.cache_read || 0,
+							cacheWrite: m.cost?.cache_write || 0,
+						},
+						compat: {
+							supportsDeveloperRole: false,
+							thinkingFormat: "zai",
+							...(!ZAI_TOOL_STREAM_UNSUPPORTED_MODELS.has(modelId) ? { zaiToolStream: true } : {}),
+						},
+						contextWindow: m.limit?.context || 4096,
+						maxTokens: m.limit?.output || 4096,
+					});
+				}
 			}
 		}
 
@@ -1675,6 +1695,56 @@ async function generateModels() {
 	];
 	allModels.push(...deepseekV4Models);
 
+	const antLingCompat: OpenAICompletionsCompat = {
+		supportsStore: false,
+		supportsDeveloperRole: false,
+		supportsReasoningEffort: false,
+		maxTokensField: "max_tokens",
+		supportsLongCacheRetention: false,
+	};
+	const antLingModels: Model<"openai-completions">[] = [
+		{
+			id: "Ling-2.6-flash",
+			name: "Ling 2.6 Flash",
+			api: "openai-completions",
+			baseUrl: "https://api.ant-ling.com/v1",
+			provider: "ant-ling",
+			reasoning: false,
+			input: ["text"],
+			cost: { input: 0.01, output: 0.02, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 262144,
+			maxTokens: 65536,
+			compat: antLingCompat,
+		},
+		{
+			id: "Ling-2.6-1T",
+			name: "Ling 2.6 1T",
+			api: "openai-completions",
+			baseUrl: "https://api.ant-ling.com/v1",
+			provider: "ant-ling",
+			reasoning: false,
+			input: ["text"],
+			cost: { input: 0.06, output: 0.25, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 262144,
+			maxTokens: 65536,
+			compat: antLingCompat,
+		},
+		{
+			id: "Ring-2.6-1T",
+			name: "Ring 2.6 1T",
+			api: "openai-completions",
+			baseUrl: "https://api.ant-ling.com/v1",
+			provider: "ant-ling",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0.06, output: 0.25, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 262144,
+			maxTokens: 65536,
+			compat: { ...antLingCompat, thinkingFormat: "ant-ling" },
+		},
+	];
+	allModels.push(...antLingModels);
+
 	for (const candidate of allModels) {
 		if (candidate.api === "openai-completions" && candidate.id.includes("deepseek-v4")) {
 			candidate.compat = {
@@ -1709,30 +1779,6 @@ async function generateModels() {
 	const CODEX_SPARK_CONTEXT = 128000;
 	const CODEX_MAX_TOKENS = 128000;
 	const codexModels: Model<"openai-codex-responses">[] = [
-		{
-			id: "gpt-5.2",
-			name: "GPT-5.2",
-			api: "openai-codex-responses",
-			provider: "openai-codex",
-			baseUrl: CODEX_BASE_URL,
-			reasoning: true,
-			input: ["text", "image"],
-			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
-			contextWindow: CODEX_CONTEXT,
-			maxTokens: CODEX_MAX_TOKENS,
-		},
-		{
-			id: "gpt-5.3-codex",
-			name: "GPT-5.3 Codex",
-			api: "openai-codex-responses",
-			provider: "openai-codex",
-			baseUrl: CODEX_BASE_URL,
-			reasoning: true,
-			input: ["text", "image"],
-			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
-			contextWindow: CODEX_CONTEXT,
-			maxTokens: CODEX_MAX_TOKENS,
-		},
 		{
 			id: "gpt-5.3-codex-spark",
 			name: "GPT-5.3 Codex Spark",
