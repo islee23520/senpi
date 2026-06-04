@@ -190,7 +190,7 @@ Create provider file exporting:
 
 ### Steps
 
-1. **Update CHANGELOGs**: ask the user whether they ran the `/cl` prompt on the latest commit on `main`. If not, they must run `/cl` first to audit and update each package's `[Unreleased]` section before releasing.
+1. **Update CHANGELOGs**: Run the `/cl` prompt yourself on the latest commit on `main` to audit and update each package's `[Unreleased]` section before releasing. If `/cl` is unavailable, run the changelog audit steps manually: compare commits since the latest release tag against the package changelogs, add missing entries, and record the audit evidence before continuing.
 
 2. **Local smoke test**: build an unpublished release and smoke test from outside the repo so it cannot resolve workspace files:
    ```bash
