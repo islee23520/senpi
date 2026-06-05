@@ -94,7 +94,7 @@ async function assertSecondToolCallWithInterleavedThinking<TApi extends Api>(
 
 	const firstToolCall = firstResponse.content.find((block) => block.type === "toolCall");
 	expect(firstToolCall?.type).toBe("toolCall");
-	if (!firstToolCall || firstToolCall.type !== "toolCall") {
+	if (firstToolCall?.type !== "toolCall") {
 		throw new Error("Expected first response to include a tool call");
 	}
 

@@ -25,13 +25,13 @@
 		"@earendil-works/pi-ai": "^2026.6.4",
 		"@earendil-works/pi-tui": "^2026.6.4",
 		"@lmstudio/sdk": "1.5.0",
-		"typebox": "1.1.38",
 		"docx-preview": "0.3.7",
 		"highlight.js": "11.11.1",
 		"jszip": "3.10.1",
 		"lucide": "0.544.0",
 		"ollama": "0.6.3",
 		"pdfjs-dist": "5.4.394",
+		"typebox": "1.1.38",
 		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
 	},
 	"peerDependencies": {
@@ -43,7 +43,7 @@
 		"@tailwindcss/cli": "4.3.0",
 		"concurrently": "9.2.1",
 		"tailwindcss": "4.3.0",
-		"typescript": "5.9.3"
+		"typescript": "6.0.3"
 	},
 	"keywords": [
 		"ai",

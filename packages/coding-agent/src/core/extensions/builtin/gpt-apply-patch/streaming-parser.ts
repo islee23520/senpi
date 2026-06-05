@@ -50,7 +50,7 @@ export class StreamingPatchParser {
 
 	private ensureUpdateHunkIsNotEmpty(line: string): void {
 		const hunk = this.hunks[this.hunks.length - 1];
-		if (!hunk || hunk.type !== "update") return;
+		if (hunk?.type !== "update") return;
 		if (hunk.chunks.length === 0 && this.mode === "update") {
 			throw new Error(`Update file hunk for path '${hunk.filePath}' is empty`);
 		}
@@ -96,7 +96,7 @@ export class StreamingPatchParser {
 
 	private currentUpdate(): Extract<ParsedPatch, { type: "update" }> {
 		const hunk = this.hunks[this.hunks.length - 1];
-		if (!hunk || hunk.type !== "update") throw new Error("Internal parser state error: expected update hunk");
+		if (hunk?.type !== "update") throw new Error("Internal parser state error: expected update hunk");
 		return hunk;
 	}
 

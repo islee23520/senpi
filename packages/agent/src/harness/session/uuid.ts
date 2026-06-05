@@ -1,7 +1,7 @@
 let lastTimestamp = -Infinity;
 let sequence = 0;
 
-function fillRandomBytes(bytes: Uint8Array): void {
+function fillRandomBytes(bytes: Uint8Array<ArrayBuffer>): void {
 	const crypto = globalThis.crypto;
 	if (crypto?.getRandomValues) {
 		crypto.getRandomValues(bytes);
@@ -13,7 +13,7 @@ function fillRandomBytes(bytes: Uint8Array): void {
 }
 
 export function uuidv7(): string {
-	const random = new Uint8Array(16);
+	const random: Uint8Array<ArrayBuffer> = new Uint8Array(16);
 	fillRandomBytes(random);
 	const timestamp = Date.now();
 
@@ -27,7 +27,7 @@ export function uuidv7(): string {
 		}
 	}
 
-	const bytes = new Uint8Array(16);
+	const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(16);
 	bytes[0] = (lastTimestamp / 0x10000000000) & 0xff;
 	bytes[1] = (lastTimestamp / 0x100000000) & 0xff;
 	bytes[2] = (lastTimestamp / 0x1000000) & 0xff;
@@ -48,7 +48,7 @@ export function uuidv7(): string {
 	return formatUuid(bytes);
 }
 
-function formatUuid(bytes: Uint8Array): string {
+function formatUuid(bytes: Uint8Array<ArrayBuffer>): string {
 	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
 	return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
 }

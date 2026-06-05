@@ -3,6 +3,7 @@ import { SettingsManager } from "../../settings-manager.ts";
 import type { ExtensionAPI, ServiceTier } from "../types.ts";
 
 export type { ServiceTier };
+
 type ProviderPayload = Record<string, unknown>;
 
 const SERVICE_TIER_APIS: ReadonlySet<Api> = new Set(["openai-responses"]);

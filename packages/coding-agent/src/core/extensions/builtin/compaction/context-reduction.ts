@@ -286,7 +286,7 @@ function collectCollapsibleOperations(
 		}
 		const next = messages[i + 1];
 		const resultInWindow = i + 1 < collapseLimit;
-		if (!next || next.role !== "toolResult" || next.toolCallId !== call.id || !resultInWindow) {
+		if (next?.role !== "toolResult" || next.toolCallId !== call.id || !resultInWindow) {
 			i += 1;
 			continue;
 		}

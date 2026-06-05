@@ -2113,7 +2113,7 @@ export class AgentSession {
 				fromExtension,
 			);
 			const savedEntry = this.sessionManager.getEntry(compactionEntryId);
-			if (!savedEntry || savedEntry.type !== "compaction") {
+			if (savedEntry?.type !== "compaction") {
 				throw new Error("Compaction entry was not saved");
 			}
 

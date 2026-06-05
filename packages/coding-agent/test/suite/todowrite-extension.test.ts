@@ -50,7 +50,7 @@ function getLatestToolResult(harness: Harness, toolName: "todowrite" | "todoread
 		(message) => message.role === "toolResult" && message.toolName === toolName,
 	);
 	const latest = results[results.length - 1];
-	if (!latest || latest.role !== "toolResult") {
+	if (latest?.role !== "toolResult") {
 		throw new Error(`Expected a ${toolName} tool result`);
 	}
 	return latest;

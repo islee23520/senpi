@@ -3,7 +3,7 @@ import { getModel } from "../src/models.ts";
 import { streamOpenAIResponses } from "../src/providers/openai-responses.ts";
 import type { AssistantMessage, Context, Model } from "../src/types.ts";
 
-type CapturedHeaders = Headers | string[][] | Record<string, string | readonly string[]> | undefined;
+type CapturedHeaders = Headers | string[][] | Record<string, string | readonly string[] | undefined> | undefined;
 type ResponsePayload = { input?: Array<{ type?: string; role?: string; content?: unknown }> };
 
 function getHeader(headers: CapturedHeaders, name: string): string | null {
@@ -17,7 +17,7 @@ function getHeader(headers: CapturedHeaders, name: string): string | null {
 	}
 
 	for (const [key, value] of Object.entries(headers)) {
-		if (key.toLowerCase() === lowerName) return typeof value === "string" ? value : value.join(", ");
+		if (key.toLowerCase() === lowerName) return typeof value === "string" ? value : (value?.join(", ") ?? null);
 	}
 	return null;
 }
@@ -153,79 +153,89 @@ describe("openai-responses provider defaults", () => {
 		expect(capturedPayload?.input?.some((item) => item.type === "reasoning")).toBe(false);
 	});
 
-	it.each(["gpt-5.1", "gpt-5.2", "gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.5"] as const)(
-		"sends none reasoning effort for OpenAI %s when no reasoning is requested",
-		async (modelId) => {
-			const model = getModel("openai", modelId);
-			let capturedPayload: unknown;
+	it.each([
+		"gpt-5.1",
+		"gpt-5.2",
+		"gpt-5.3-codex",
+		"gpt-5.4",
+		"gpt-5.4-mini",
+		"gpt-5.4-nano",
+		"gpt-5.5",
+	] as const)("sends none reasoning effort for OpenAI %s when no reasoning is requested", async (modelId) => {
+		const model = getModel("openai", modelId);
+		let capturedPayload: unknown;
 
-			vi.spyOn(globalThis, "fetch").mockResolvedValue(
-				new Response("data: [DONE]\n\n", {
-					status: 200,
-					headers: { "content-type": "text/event-stream" },
-				}),
-			);
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response("data: [DONE]\n\n", {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			}),
+		);
 
-			const stream = streamOpenAIResponses(
-				model,
-				{
-					systemPrompt: "sys",
-					messages: [{ role: "user", content: "hi", timestamp: Date.now() }],
+		const stream = streamOpenAIResponses(
+			model,
+			{
+				systemPrompt: "sys",
+				messages: [{ role: "user", content: "hi", timestamp: Date.now() }],
+			},
+			{
+				apiKey: "test-key",
+				onPayload: (payload) => {
+					capturedPayload = payload;
 				},
-				{
-					apiKey: "test-key",
-					onPayload: (payload) => {
-						capturedPayload = payload;
-					},
+			},
+		);
+
+		for await (const event of stream) {
+			if (event.type === "done" || event.type === "error") break;
+		}
+
+		expect(capturedPayload).toMatchObject({
+			reasoning: { effort: "none" },
+		});
+	});
+
+	it.each([
+		"gpt-5",
+		"gpt-5-mini",
+		"gpt-5-nano",
+		"gpt-5-pro",
+		"gpt-5.2-pro",
+		"gpt-5.4-pro",
+		"gpt-5.5-pro",
+	] as const)("omits reasoning effort for OpenAI %s when off is unsupported", async (modelId) => {
+		const model = getModel("openai", modelId);
+		let capturedPayload: unknown;
+
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response("data: [DONE]\n\n", {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			}),
+		);
+
+		const stream = streamOpenAIResponses(
+			model,
+			{
+				systemPrompt: "sys",
+				messages: [{ role: "user", content: "hi", timestamp: Date.now() }],
+			},
+			{
+				apiKey: "test-key",
+				onPayload: (payload) => {
+					capturedPayload = payload;
 				},
-			);
+			},
+		);
 
-			for await (const event of stream) {
-				if (event.type === "done" || event.type === "error") break;
-			}
+		for await (const event of stream) {
+			if (event.type === "done" || event.type === "error") break;
+		}
 
-			expect(capturedPayload).toMatchObject({
-				reasoning: { effort: "none" },
-			});
-		},
-	);
-
-	it.each(["gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-pro", "gpt-5.2-pro", "gpt-5.4-pro", "gpt-5.5-pro"] as const)(
-		"omits reasoning effort for OpenAI %s when off is unsupported",
-		async (modelId) => {
-			const model = getModel("openai", modelId);
-			let capturedPayload: unknown;
-
-			vi.spyOn(globalThis, "fetch").mockResolvedValue(
-				new Response("data: [DONE]\n\n", {
-					status: 200,
-					headers: { "content-type": "text/event-stream" },
-				}),
-			);
-
-			const stream = streamOpenAIResponses(
-				model,
-				{
-					systemPrompt: "sys",
-					messages: [{ role: "user", content: "hi", timestamp: Date.now() }],
-				},
-				{
-					apiKey: "test-key",
-					onPayload: (payload) => {
-						capturedPayload = payload;
-					},
-				},
-			);
-
-			for await (const event of stream) {
-				if (event.type === "done" || event.type === "error") break;
-			}
-
-			expect(capturedPayload).not.toMatchObject({
-				reasoning: expect.anything(),
-			});
-		},
-	);
+		expect(capturedPayload).not.toMatchObject({
+			reasoning: expect.anything(),
+		});
+	});
 
 	it("sets cache-affinity headers for official OpenAI Responses requests with a sessionId", async () => {
 		const captured = await captureOpenAIResponseHeaders({ sessionId: "session-123" });
