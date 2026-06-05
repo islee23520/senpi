@@ -182,7 +182,11 @@ describe("Coding Agent Tools", () => {
 			expect(getTextOutput(result)).toContain("Read image file [image/png]");
 
 			const imageBlock = result.content.find(
-				(c): c is { type: "image"; mimeType: string; data: string } => c.type === "image",
+				(c: {
+					type?: string;
+					mimeType?: string;
+					data?: string;
+				}): c is { type: "image"; mimeType: string; data: string } => c.type === "image",
 			);
 			expect(imageBlock).toBeDefined();
 			expect(imageBlock?.mimeType).toBe("image/png");
@@ -514,6 +518,7 @@ describe("Coding Agent Tools", () => {
 		});
 
 		it("should pass shellPath through to shell resolution", async () => {
+			vi.restoreAllMocks();
 			const getShellConfigSpy = vi.spyOn(shellModule, "getShellConfig");
 			const bashWithCustomShell = createBashTool(testDir, {
 				shellPath: "/custom/bash",
@@ -572,8 +577,11 @@ describe("Coding Agent Tools", () => {
 			const updates: Array<{ content: Array<{ type: string; text?: string }>; details?: unknown }> = [];
 			const bash = createBashTool(testDir, { operations });
 
-			const result = await bash.execute("test-call-chatty-updates", { command: "chatty" }, undefined, (update) =>
-				updates.push(update),
+			const result = await bash.execute(
+				"test-call-chatty-updates",
+				{ command: "chatty" },
+				undefined,
+				(update: { content: Array<{ type: string; text?: string }>; details?: unknown }) => updates.push(update),
 			);
 
 			expect(updates.length).toBeLessThan(25);
