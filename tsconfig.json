@@ -73,6 +73,7 @@
 	],
 	"exclude": [
 		"packages/web-ui/**/*",
-		"**/dist/**"
+		"**/dist/**",
+		"packages/coding-agent/examples/extensions/gondolin/**"
 	]
 }

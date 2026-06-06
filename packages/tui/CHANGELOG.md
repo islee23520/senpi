@@ -22,6 +22,8 @@
 
 ### Fixed
 
+- Fixed overlay focus restoration so non-capturing overlays remain interactive after UI rerenders and explicit focus release ([#5235](https://github.com/earendil-works/pi/pull/5235) by [@nicobailon](https://github.com/nicobailon)).
+
 ### Removed
 
 ## [2026.6.3] - 2026-06-03

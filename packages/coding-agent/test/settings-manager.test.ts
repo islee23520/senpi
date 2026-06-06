@@ -247,6 +247,44 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("project trust", () => {
+		it("should skip project settings when project is not trusted", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "global" }));
+			writeFileSync(join(projectDir, CONFIG_DIR_NAME, "settings.json"), JSON.stringify({ theme: "project" }));
+
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: false });
+
+			expect(manager.isProjectTrusted()).toBe(false);
+			expect(manager.getTheme()).toBe("global");
+			expect(manager.getProjectSettings()).toEqual({});
+		});
+
+		it("should reload project settings after trust changes to true", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ theme: "global" }));
+			writeFileSync(join(projectDir, CONFIG_DIR_NAME, "settings.json"), JSON.stringify({ theme: "project" }));
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: false });
+
+			manager.setProjectTrusted(true);
+
+			expect(manager.isProjectTrusted()).toBe(true);
+			expect(manager.getTheme()).toBe("project");
+		});
+
+		it("should fail project settings writes when project is not trusted", async () => {
+			const projectSettingsPath = join(projectDir, CONFIG_DIR_NAME, "settings.json");
+			writeFileSync(projectSettingsPath, JSON.stringify({ packages: ["npm:existing"] }));
+			const manager = SettingsManager.create(projectDir, agentDir, { projectTrusted: false });
+
+			expect(() => manager.setProjectPackages(["npm:new"])).toThrow(
+				"Project is not trusted; refusing to write project settings",
+			);
+			await manager.flush();
+
+			expect(manager.getProjectSettings()).toEqual({});
+			expect(JSON.parse(readFileSync(projectSettingsPath, "utf-8"))).toEqual({ packages: ["npm:existing"] });
+		});
+	});
+
 	describe("project settings directory creation", () => {
 		it("should not create project config folder when only reading project settings", () => {
 			// Create agent dir with global settings, but NO project config folder

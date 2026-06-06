@@ -443,7 +443,7 @@ export interface OpenAICompletionsCompat {
 		| "ant-ling";
 	/** Whether the provider accepts explicit disabled-thinking markers when thinking is off. Default: true. */
 	supportsDisabledThinking?: boolean;
-	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
+	/** OpenRouter-compatible routing preferences sent as the `provider` request field. */
 	openRouterRouting?: OpenRouterRouting;
 	/** Vercel AI Gateway routing preferences. Only used when baseUrl points to Vercel AI Gateway. */
 	vercelGatewayRouting?: VercelGatewayRouting;

@@ -94,6 +94,7 @@ export class FooterComponent implements Component {
 		let totalCacheRead = 0;
 		let totalCacheWrite = 0;
 		let totalCost = 0;
+		let latestCacheHitRate: number | undefined;
 
 		for (const entry of this.session.sessionManager.getEntries()) {
 			if (entry.type === "message" && entry.message.role === "assistant") {
@@ -102,6 +103,11 @@ export class FooterComponent implements Component {
 				totalCacheRead += entry.message.usage.cacheRead;
 				totalCacheWrite += entry.message.usage.cacheWrite;
 				totalCost += entry.message.usage.cost.total;
+
+				const latestPromptTokens =
+					entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
+				latestCacheHitRate =
+					latestPromptTokens > 0 ? (entry.message.usage.cacheRead / latestPromptTokens) * 100 : undefined;
 			}
 		}
 
@@ -150,6 +156,11 @@ export class FooterComponent implements Component {
 		}
 		if (totalCacheRead || totalCacheWrite) {
 			const text = `cache ${formatTokens(totalCacheRead)}/${formatTokens(totalCacheWrite)}`;
+			coloredSegments.push(theme.fg("dim", text));
+			plainSegments.push(text);
+		}
+		if ((totalCacheRead > 0 || totalCacheWrite > 0) && latestCacheHitRate !== undefined) {
+			const text = `CH${latestCacheHitRate.toFixed(1)}%`;
 			coloredSegments.push(theme.fg("dim", text));
 			plainSegments.push(text);
 		}

@@ -659,7 +659,7 @@ function buildParams(
 	}
 
 	// OpenRouter provider routing preferences
-	if (model.baseUrl.includes("openrouter.ai") && model.compat?.openRouterRouting) {
+	if (model.compat?.openRouterRouting) {
 		params.provider = model.compat.openRouterRouting;
 	}
 

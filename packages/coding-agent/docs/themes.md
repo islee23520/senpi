@@ -20,7 +20,7 @@ Pi loads themes from:
 
 - Built-in: `dark`, `light`
 - Global: `~/.senpi/agent/themes/*.json`
-- Project: `.senpi/themes/*.json`
+- Project: `.senpi/themes/*.json` (only after the project is trusted)
 - Packages: `themes/` directories or `pi.themes` entries in `package.json`
 - Settings: `themes` array with files or directories
 - CLI: `--theme <path>` (repeatable)

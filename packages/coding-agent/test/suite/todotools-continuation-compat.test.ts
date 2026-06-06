@@ -374,39 +374,36 @@ describe("todotools continuation compatibility", () => {
 		expect(getInjectedContinuationMessages(harness)[1]).toContain("Alternate branch task");
 	});
 
-	it.each(SETTINGS_PRIORITY_CASES)("$name", async ({
-		globalSettings,
-		projectSettings,
-		cliFlag,
-		expectedEnabled,
-		name,
-	}) => {
-		useIsolatedAgentDir(globalSettings);
-		const { harness, runtime } = await createTodoHarness();
+	it.each(SETTINGS_PRIORITY_CASES)(
+		"$name",
+		async ({ globalSettings, projectSettings, cliFlag, expectedEnabled, name }) => {
+			useIsolatedAgentDir(globalSettings);
+			const { harness, runtime } = await createTodoHarness();
 
-		if (projectSettings) {
-			setProjectSettings(harness, projectSettings);
-		}
-		if (cliFlag !== undefined) {
-			runtime.flagValues.set("disable-todo-continuation", cliFlag);
-		}
+			if (projectSettings) {
+				setProjectSettings(harness, projectSettings);
+			}
+			if (cliFlag !== undefined) {
+				runtime.flagValues.set("disable-todo-continuation", cliFlag);
+			}
 
-		expect(
-			resolveContinuationConfig({
-				globalSettings,
-				projectSettings,
-				cliFlag,
-			}),
-		).toEqual({ enabled: expectedEnabled });
+			expect(
+				resolveContinuationConfig({
+					globalSettings,
+					projectSettings,
+					cliFlag,
+				}),
+			).toEqual({ enabled: expectedEnabled });
 
-		harness.setResponses(
-			expectedEnabled
-				? createContinuationThenCompleteResponses(PENDING_TODOS)
-				: createNoInjectionResponses(PENDING_TODOS),
-		);
-		await harness.session.prompt(name);
-		await waitForHarnessToSettle(harness);
+			harness.setResponses(
+				expectedEnabled
+					? createContinuationThenCompleteResponses(PENDING_TODOS)
+					: createNoInjectionResponses(PENDING_TODOS),
+			);
+			await harness.session.prompt(name);
+			await waitForHarnessToSettle(harness);
 
-		expect(getInjectedContinuationMessages(harness)).toHaveLength(expectedEnabled ? 1 : 0);
-	});
+			expect(getInjectedContinuationMessages(harness)).toHaveLength(expectedEnabled ? 1 : 0);
+		},
+	);
 });
