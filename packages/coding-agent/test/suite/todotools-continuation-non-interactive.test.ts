@@ -38,18 +38,18 @@ afterEach(() => {
 });
 
 describe("todotools continuation non-interactive mode", () => {
-	it.each(["print mode", "rpc mode"])(
-		"does not inject continuation when %s is simulated via ctx.hasUI === false",
-		async () => {
-			const harness = await createNonInteractiveHarness();
-			harness.setResponses(createIncompleteTodoResponses());
+	it.each([
+		"print mode",
+		"rpc mode",
+	])("does not inject continuation when %s is simulated via ctx.hasUI === false", async () => {
+		const harness = await createNonInteractiveHarness();
+		harness.setResponses(createIncompleteTodoResponses());
 
-			await harness.session.prompt("create incomplete todos and stop");
+		await harness.session.prompt("create incomplete todos and stop");
 
-			expect(harness.getInjectedUserMessages()).toEqual([]);
-			expect(harness.session.pendingMessageCount).toBe(0);
-			expect(getUserTexts(harness)).toEqual(["create incomplete todos and stop"]);
-			expect(getAssistantTexts(harness)).toContain("saved");
-		},
-	);
+		expect(harness.getInjectedUserMessages()).toEqual([]);
+		expect(harness.session.pendingMessageCount).toBe(0);
+		expect(getUserTexts(harness)).toEqual(["create incomplete todos and stop"]);
+		expect(getAssistantTexts(harness)).toContain("saved");
+	});
 });
