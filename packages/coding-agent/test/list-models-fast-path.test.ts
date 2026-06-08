@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.ts";
-import type { createAgentSessionFromServices as createAgentSessionFromServicesType } from "../src/core/agent-session-services.ts";
+import type {
+	CreateAgentSessionServicesOptions,
+	createAgentSessionFromServices as createAgentSessionFromServicesType,
+} from "../src/core/agent-session-services.ts";
 
 class ProcessExitError extends Error {
 	readonly code: string | number | null | undefined;
@@ -75,5 +78,47 @@ describe("--list-models fast path", () => {
 		await expect(main(["--list-models", "gpt-5.4"])).rejects.toMatchObject({ code: 0 });
 		expect(createAgentSessionFromServicesMock).not.toHaveBeenCalled();
 		expect(logSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain("gpt-5.4");
+	});
+
+	it("loads only model-listing resources for --list-models", async () => {
+		vi.resetModules();
+		let capturedOptions: CreateAgentSessionServicesOptions | undefined;
+		vi.doMock("../src/core/agent-session-services.ts", async (importOriginal) => {
+			const actual = await importOriginal<typeof import("../src/core/agent-session-services.ts")>();
+			return {
+				...actual,
+				createAgentSessionServices: async (options: CreateAgentSessionServicesOptions) => {
+					capturedOptions = options;
+					return actual.createAgentSessionServices(options);
+				},
+			};
+		});
+		const { main } = await import("../src/main.ts");
+
+		const tempDir = createTempDir();
+		const agentDir = join(tempDir, "agent");
+		const projectDir = join(tempDir, "project");
+		mkdirSync(agentDir, { recursive: true });
+		mkdirSync(projectDir, { recursive: true });
+		originalAgentDir = process.env[ENV_AGENT_DIR];
+		originalCwd = process.cwd();
+		originalExitCode = process.exitCode;
+		process.env[ENV_AGENT_DIR] = agentDir;
+		process.exitCode = undefined;
+		process.chdir(projectDir);
+
+		vi.spyOn(console, "log").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		vi.spyOn(process, "exit").mockImplementation((code?: string | number | null | undefined): never => {
+			throw new ProcessExitError(code);
+		});
+
+		await expect(main(["--list-models", "mock"])).rejects.toMatchObject({ code: 0 });
+		expect(capturedOptions?.resourceLoaderOptions).toMatchObject({
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+			noContextFiles: true,
+		});
 	});
 });

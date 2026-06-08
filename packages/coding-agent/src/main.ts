@@ -676,12 +676,13 @@ export async function main(args: string[], options?: MainOptions) {
 	const resolvedPromptTemplatePaths = resolveCliPaths(cwd, parsed.promptTemplates);
 	const resolvedThemePaths = resolveCliPaths(cwd, parsed.themes);
 	const authStorage = AuthStorage.create();
-	const createServicesForCwd = async (cwd: string) => {
+	const createServicesForCwd = async (cwd: string, resourceProfile: "runtime" | "list-models" = "runtime") => {
 		const projectTrusted =
 			cwd === sessionManager.getCwd()
 				? projectTrustedForSession
 				: (parsed.projectTrustOverride ?? (!hasProjectTrustInputs(cwd) || trustStore.get(cwd) === true));
 		const runtimeSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted });
+		const modelListingOnly = resourceProfile === "list-models";
 		return await createAgentSessionServices({
 			cwd,
 			agentDir,
@@ -694,17 +695,17 @@ export async function main(args: string[], options?: MainOptions) {
 				additionalPromptTemplatePaths: resolvedPromptTemplatePaths,
 				additionalThemePaths: resolvedThemePaths,
 				noExtensions: parsed.noExtensions,
-				noSkills: parsed.noSkills,
-				noPromptTemplates: parsed.noPromptTemplates,
-				noThemes: parsed.noThemes,
-				noContextFiles: parsed.noContextFiles,
+				noSkills: modelListingOnly ? true : parsed.noSkills,
+				noPromptTemplates: modelListingOnly ? true : parsed.noPromptTemplates,
+				noThemes: modelListingOnly ? true : parsed.noThemes,
+				noContextFiles: modelListingOnly ? true : parsed.noContextFiles,
 				extensionFactories: options?.extensionFactories,
 			},
 		});
 	};
 
 	if (parsed.listModels !== undefined) {
-		const services = await createServicesForCwd(sessionManager.getCwd());
+		const services = await createServicesForCwd(sessionManager.getCwd(), "list-models");
 		const { settingsManager, modelRegistry, resourceLoader } = services;
 		configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
 		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
