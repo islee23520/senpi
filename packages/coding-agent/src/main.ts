@@ -676,18 +676,13 @@ export async function main(args: string[], options?: MainOptions) {
 	const resolvedPromptTemplatePaths = resolveCliPaths(cwd, parsed.promptTemplates);
 	const resolvedThemePaths = resolveCliPaths(cwd, parsed.themes);
 	const authStorage = AuthStorage.create();
-	const createRuntime: CreateAgentSessionRuntimeFactory = async ({
-		cwd,
-		agentDir,
-		sessionManager,
-		sessionStartEvent,
-	}) => {
+	const createServicesForCwd = async (cwd: string) => {
 		const projectTrusted =
 			cwd === sessionManager.getCwd()
 				? projectTrustedForSession
 				: (parsed.projectTrustOverride ?? (!hasProjectTrustInputs(cwd) || trustStore.get(cwd) === true));
 		const runtimeSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted });
-		const services = await createAgentSessionServices({
+		return await createAgentSessionServices({
 			cwd,
 			agentDir,
 			authStorage,
@@ -706,6 +701,31 @@ export async function main(args: string[], options?: MainOptions) {
 				extensionFactories: options?.extensionFactories,
 			},
 		});
+	};
+
+	if (parsed.listModels !== undefined) {
+		const services = await createServicesForCwd(sessionManager.getCwd());
+		const { settingsManager, modelRegistry, resourceLoader } = services;
+		configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
+		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
+			...services.diagnostics,
+			...collectSettingsDiagnostics(settingsManager, "list-models"),
+			...resourceLoader.getExtensions().errors.map(({ path, error }) => ({
+				type: "error" as const,
+				message: `Failed to load extension "${path}": ${error}`,
+			})),
+		];
+		reportDiagnostics(diagnostics);
+		if (diagnostics.some((diagnostic) => diagnostic.type === "error")) {
+			process.exit(1);
+		}
+		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
+		await listModels(modelRegistry, searchPattern);
+		process.exit(0);
+	}
+
+	const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
+		const services = await createServicesForCwd(cwd);
 		const { settingsManager, modelRegistry, resourceLoader } = services;
 		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
 			...services.diagnostics,
@@ -779,7 +799,7 @@ export async function main(args: string[], options?: MainOptions) {
 	});
 	time("createAgentSessionRuntime");
 	const { services, session, modelFallbackMessage } = runtime;
-	const { settingsManager, modelRegistry, resourceLoader } = services;
+	const { settingsManager, resourceLoader } = services;
 	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
 
 	if (parsed.help) {
@@ -787,12 +807,6 @@ export async function main(args: string[], options?: MainOptions) {
 			.getExtensions()
 			.extensions.flatMap((extension) => Array.from(extension.flags.values()));
 		printHelp(extensionFlags);
-		process.exit(0);
-	}
-
-	if (parsed.listModels !== undefined) {
-		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
-		await listModels(modelRegistry, searchPattern);
 		process.exit(0);
 	}
 
