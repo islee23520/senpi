@@ -936,7 +936,7 @@ describe("agentLoop with AgentMessage", () => {
 		expect(events.filter((event) => event.type === "agent_end")).toHaveLength(1);
 	});
 
-	it("should force sequential execution when a tool has executionMode=sequential even with default parallel config", async () => {
+	it("should keep sequential tool calls mutually exclusive with default parallel config", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		let firstResolved = false;
 		let parallelObserved = false;
@@ -1007,7 +1007,6 @@ describe("agentLoop with AgentMessage", () => {
 			events.push(event);
 		}
 
-		// With sequential execution, second tool should NOT start before first finishes
 		expect(parallelObserved).toBe(false);
 
 		const toolResultIds = events.flatMap((event) => {
@@ -1019,13 +1018,21 @@ describe("agentLoop with AgentMessage", () => {
 		expect(toolResultIds).toEqual(["tool-1", "tool-2"]);
 	});
 
-	it("should force sequential execution when one of multiple tools has executionMode=sequential", async () => {
+	it("should run parallel tools together after an earlier sequential tool completes", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const executionOrder: string[] = [];
 		let releaseSlow: (() => void) | undefined;
+		let releaseFast: (() => void) | undefined;
 		const slowDone = new Promise<void>((resolve) => {
 			releaseSlow = resolve;
 		});
+		const fastDone = new Promise<void>((resolve) => {
+			releaseFast = resolve;
+		});
+		let slowFinished = false;
+		let fastStartedBeforeSlowFinished = false;
+		let activeFastTools = 0;
+		let parallelFastObserved = false;
 
 		const slowTool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "slow",
@@ -1038,6 +1045,7 @@ describe("agentLoop with AgentMessage", () => {
 				if (params.value === "a") {
 					await slowDone;
 				}
+				slowFinished = true;
 				return {
 					content: [{ type: "text", text: `slow: ${params.value}` }],
 					details: { value: params.value },
@@ -1052,7 +1060,18 @@ describe("agentLoop with AgentMessage", () => {
 			parameters: toolSchema,
 			// no executionMode = defaults to parallel
 			async execute(_toolCallId, params) {
+				if (!slowFinished) {
+					fastStartedBeforeSlowFinished = true;
+				}
+				activeFastTools++;
+				if (activeFastTools === 2) {
+					parallelFastObserved = true;
+				}
 				executionOrder.push(`fast:${params.value}`);
+				if (params.value === "b") {
+					await fastDone;
+				}
+				activeFastTools--;
 				return {
 					content: [{ type: "text", text: `fast: ${params.value}` }],
 					details: { value: params.value },
@@ -1082,11 +1101,13 @@ describe("agentLoop with AgentMessage", () => {
 						[
 							{ type: "toolCall", id: "tool-1", name: "slow", arguments: { value: "a" } },
 							{ type: "toolCall", id: "tool-2", name: "fast", arguments: { value: "b" } },
+							{ type: "toolCall", id: "tool-3", name: "fast", arguments: { value: "c" } },
 						],
 						"toolUse",
 					);
 					mockStream.push({ type: "done", reason: "toolUse", message });
 					setTimeout(() => releaseSlow?.(), 20);
+					setTimeout(() => releaseFast?.(), 40);
 				} else {
 					const message = createAssistantMessage([{ type: "text", text: "done" }]);
 					mockStream.push({ type: "done", reason: "stop", message });
@@ -1101,9 +1122,18 @@ describe("agentLoop with AgentMessage", () => {
 			events.push(event);
 		}
 
-		// Fast tool should NOT run before slow tool finishes
 		expect(executionOrder[0]).toBe("slow:a");
-		expect(executionOrder).toContain("fast:b");
+		expect(fastStartedBeforeSlowFinished).toBe(false);
+		expect(parallelFastObserved).toBe(true);
+		expect(executionOrder).toEqual(["slow:a", "fast:b", "fast:c"]);
+
+		const toolResultIds = events.flatMap((event) => {
+			if (event.type !== "message_end" || event.message.role !== "toolResult") {
+				return [];
+			}
+			return [event.message.toolCallId];
+		});
+		expect(toolResultIds).toEqual(["tool-1", "tool-2", "tool-3"]);
 	});
 
 	it("should allow parallel execution when all tools have executionMode=parallel", async () => {

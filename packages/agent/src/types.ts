@@ -29,7 +29,9 @@ export type StreamFn = (
  * Configuration for how tool calls from a single assistant message are executed.
  *
  * - "sequential": each tool call is prepared, executed, and finalized before the next one starts.
- * - "parallel": tool calls are prepared sequentially, then allowed tools execute concurrently.
+ * - "parallel": tool calls are prepared sequentially, then scheduled in concurrent waves.
+ *   Tools with `executionMode: "sequential"` run as exclusive barriers; parallel tools before
+ *   or after the barrier can still execute concurrently with each other.
  *   `tool_execution_end` is emitted in tool completion order after each tool is finalized,
  *   while tool-result message artifacts are emitted later in assistant source order.
  */
@@ -245,7 +247,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	/**
 	 * Tool execution mode.
 	 * - "sequential": execute tool calls one by one
-	 * - "parallel": preflight tool calls sequentially, then execute allowed tools concurrently;
+	 * - "parallel": preflight tool calls sequentially, then execute allowed tools in concurrent waves;
+	 *   per-tool `executionMode: "sequential"` calls act as exclusive barriers,
 	 *   emit `tool_execution_end` in tool completion order after each tool is finalized,
 	 *   then emit tool-result message artifacts later in assistant source order
 	 *
@@ -376,7 +379,7 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	) => Promise<AgentToolResult<TDetails>>;
 	/**
 	 * Per-tool execution mode override.
-	 * - "sequential": this tool must execute one at a time with other tool calls.
+	 * - "sequential": this tool acts as an exclusive barrier in parallel batches.
 	 * - "parallel": this tool can execute concurrently with other tool calls.
 	 *
 	 * If omitted, the default execution mode applies.
