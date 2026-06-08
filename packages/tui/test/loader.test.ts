@@ -58,6 +58,43 @@ describe("Loader", () => {
 		assert.match((loader.render(40)[1] ?? "").trim(), /^• Working:\d+$/);
 	});
 
+	it("keeps animating formatted indicators with a static indicator frame", async () => {
+		// Given
+		const terminal = new VirtualTerminal(40, 4);
+		const tui = new TUI(terminal);
+		const formattedIndicators: string[] = [];
+		const loader = new Loader(
+			tui,
+			(text) => text,
+			(text) => text,
+			"Working",
+			{
+				frames: ["•"],
+				intervalMs: 1_000,
+				indicatorFormatter: (frame, animationElapsedMs) => {
+					const formatted = `${frame}:${animationElapsedMs}`;
+					formattedIndicators.push(formatted);
+					return formatted;
+				},
+				messageIntervalMs: 5,
+			},
+		);
+
+		// When
+		await new Promise<void>((resolve) => {
+			setTimeout(resolve, 25);
+		});
+		loader.stop();
+
+		// Then
+		assert.ok(
+			formattedIndicators.length >= 2,
+			`expected repeated indicator frames, got ${formattedIndicators.length}`,
+		);
+		assert.notEqual(formattedIndicators[0], formattedIndicators[formattedIndicators.length - 1]);
+		assert.match((loader.render(40)[1] ?? "").trim(), /^•:\d+ Working$/);
+	});
+
 	it("formats messages when the indicator is hidden", () => {
 		// Given
 		const terminal = new VirtualTerminal(40, 4);

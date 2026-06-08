@@ -2,12 +2,15 @@ import type { TUI } from "../tui.ts";
 import { Text } from "./text.ts";
 
 export type LoaderMessageFormatter = (message: string, animationElapsedMs: number) => string;
+export type LoaderIndicatorFormatter = (frame: string, animationElapsedMs: number) => string;
 
 export interface LoaderIndicatorOptions {
 	/** Animation frames. Use an empty array to hide the indicator. */
 	frames?: string[];
 	/** Frame interval in milliseconds for animated indicators. */
 	intervalMs?: number;
+	/** Optional indicator formatter called on each message animation frame. */
+	indicatorFormatter?: LoaderIndicatorFormatter;
 	/** Optional message formatter called on each message animation frame. */
 	messageFormatter?: LoaderMessageFormatter;
 	/** Frame interval in milliseconds for message animation. Defaults to intervalMs. */
@@ -26,6 +29,7 @@ export class Loader extends Text {
 	private currentFrame = 0;
 	private indicatorIntervalId: NodeJS.Timeout | null = null;
 	private messageIntervalId: NodeJS.Timeout | null = null;
+	private indicatorFormatter: LoaderIndicatorFormatter | undefined = undefined;
 	private messageFormatter: LoaderMessageFormatter | undefined = undefined;
 	private messageIntervalMs = DEFAULT_INTERVAL_MS;
 	private messageAnimationStartedAt = 0;
@@ -82,6 +86,7 @@ export class Loader extends Text {
 		this.renderIndicatorVerbatim = indicator !== undefined;
 		this.frames = indicator?.frames !== undefined ? [...indicator.frames] : [...DEFAULT_FRAMES];
 		this.intervalMs = indicator?.intervalMs && indicator.intervalMs > 0 ? indicator.intervalMs : DEFAULT_INTERVAL_MS;
+		this.indicatorFormatter = indicator?.indicatorFormatter;
 		this.messageFormatter = indicator?.messageFormatter;
 		this.messageIntervalMs =
 			indicator?.messageIntervalMs && indicator.messageIntervalMs > 0
@@ -100,7 +105,7 @@ export class Loader extends Text {
 				this.updateDisplay();
 			}, this.intervalMs);
 		}
-		if (this.messageFormatter) {
+		if (this.indicatorFormatter || this.messageFormatter) {
 			this.messageAnimationStartedAt = Date.now();
 			this.messageIntervalId = setInterval(() => {
 				this.updateDisplay();
@@ -110,9 +115,13 @@ export class Loader extends Text {
 
 	private updateDisplay(): void {
 		const frame = this.frames[this.currentFrame] ?? "";
-		const renderedFrame = this.renderIndicatorVerbatim ? frame : this.spinnerColorFn(frame);
-		const indicator = frame.length > 0 ? `${renderedFrame} ` : "";
 		const animationElapsedMs = Math.max(0, Date.now() - this.messageAnimationStartedAt);
+		const renderedFrame = this.indicatorFormatter
+			? this.indicatorFormatter(frame, animationElapsedMs)
+			: this.renderIndicatorVerbatim
+				? frame
+				: this.spinnerColorFn(frame);
+		const indicator = frame.length > 0 ? `${renderedFrame} ` : "";
 		const renderedMessage = this.messageFormatter
 			? this.messageFormatter(this.message, animationElapsedMs)
 			: this.messageColorFn(this.message);
