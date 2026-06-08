@@ -374,8 +374,8 @@ describe("InteractiveMode.getWorkingIndicatorOptions", () => {
 
 	test("falls back to Codex's 600ms bullet blink outside truecolor", () => {
 		// Given
-		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
 		resetCapabilitiesCache();
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
 		initTheme("dark");
 		const fakeThis: any = {
 			workingIndicatorOptions: undefined,
