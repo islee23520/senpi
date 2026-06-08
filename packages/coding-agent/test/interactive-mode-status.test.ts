@@ -1,6 +1,12 @@
 import os, { homedir } from "node:os";
 import * as path from "node:path";
-import { type AutocompleteProvider, CombinedAutocompleteProvider, setKeybindings } from "@earendil-works/pi-tui";
+import {
+	type AutocompleteProvider,
+	CombinedAutocompleteProvider,
+	resetCapabilitiesCache,
+	setCapabilities,
+	setKeybindings,
+} from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { type Component, Container, type Focusable, TUI } from "../../tui/src/tui.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
@@ -330,11 +336,12 @@ describe("InteractiveMode.setupAutocompleteProvider", () => {
 
 describe("InteractiveMode.getWorkingIndicatorOptions", () => {
 	beforeAll(() => {
+		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
 		initTheme("dark");
 		setKeybindings(new KeybindingsManager());
 	});
 
-	test("uses a visible animated bullet indicator with animated working text", () => {
+	test("uses a Codex-style shimmering bullet indicator with animated working text in truecolor", () => {
 		// Given
 		const fakeThis: any = {
 			workingIndicatorOptions: undefined,
@@ -346,10 +353,14 @@ describe("InteractiveMode.getWorkingIndicatorOptions", () => {
 		const messageFormatter = options.messageFormatter;
 
 		// Then
-		expect(options.frames).toHaveLength(2);
+		expect(options.frames).toHaveLength(1);
 		expect(stripAnsi(options.frames[0])).toBe("•");
-		expect(stripAnsi(options.frames[1])).toBe("◦");
-		expect(options.messageIntervalMs).toBeGreaterThan(0);
+		expect(options.indicatorFormatter).toBeDefined();
+		expect(stripAnsi(options.indicatorFormatter?.("•", 0) ?? "")).toBe("•");
+		expect(stripAnsi(options.indicatorFormatter?.("•", 1_000) ?? "")).toBe("•");
+		expect(options.indicatorFormatter?.("•", 0)).not.toBe(options.indicatorFormatter?.("•", 1_000));
+		expect(options.intervalMs).toBe(600);
+		expect(options.messageIntervalMs).toBe(32);
 		expect(typeof messageFormatter).toBe("function");
 		expect(messageFormatter).toBeDefined();
 
@@ -359,6 +370,26 @@ describe("InteractiveMode.getWorkingIndicatorOptions", () => {
 		expect(stripAnsi(firstFrame)).toBe("Working (7s • esc to interrupt)");
 		expect(stripAnsi(nextFrame)).toBe("Working (7s • esc to interrupt)");
 		expect(firstFrame).not.toBe(nextFrame);
+	});
+
+	test("falls back to Codex's 600ms bullet blink outside truecolor", () => {
+		// Given
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		resetCapabilitiesCache();
+		initTheme("dark");
+		const fakeThis: any = {
+			workingIndicatorOptions: undefined,
+			getWorkingElapsedSeconds: () => 7,
+		};
+
+		// When
+		const options = (InteractiveMode as any).prototype.getWorkingIndicatorOptions.call(fakeThis);
+
+		// Then
+		expect(options.frames).toHaveLength(2);
+		expect(stripAnsi(options.frames[0])).toBe("•");
+		expect(stripAnsi(options.frames[1])).toBe("◦");
+		expect(options.intervalMs).toBe(600);
 	});
 });
 

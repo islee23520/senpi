@@ -1880,8 +1880,12 @@ export class InteractiveMode {
 	private getWorkingIndicatorOptions(): LoaderIndicatorOptions {
 		return (
 			this.workingIndicatorOptions ?? {
-				frames: [theme.fg("accent", "•"), theme.fg("muted", "◦")],
+				frames: theme.getColorMode() === "truecolor" ? ["•"] : [theme.fg("accent", "•"), theme.fg("muted", "◦")],
 				intervalMs: DEFAULT_WORKING_STATUS_REFRESH_INTERVAL_MS,
+				indicatorFormatter:
+					theme.getColorMode() === "truecolor"
+						? (frame, elapsedMs) => formatWorkingStatusShimmerText(frame, elapsedMs)
+						: undefined,
 				messageFormatter: (message, animationElapsedMs) =>
 					formatWorkingStatusMessageFrame(
 						message,
