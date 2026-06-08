@@ -117,4 +117,57 @@ describe("Loader", () => {
 		// Then
 		assert.equal(renderedLine?.trim(), "[Working]");
 	});
+
+	it("does not request renders when the displayed loader text is unchanged", () => {
+		// Given
+		const terminal = new VirtualTerminal(40, 4);
+		const tui = new TUI(terminal);
+		let renderRequests = 0;
+		tui.requestRender = () => {
+			renderRequests++;
+		};
+		const loader = new Loader(
+			tui,
+			(text) => text,
+			(text) => text,
+			"Working",
+			{ frames: ["•"] },
+		);
+		const initialRenderRequests = renderRequests;
+
+		// When
+		loader.setMessage("Working");
+		loader.stop();
+
+		// Then
+		assert.equal(renderRequests, initialRenderRequests);
+	});
+
+	it("unrefs loader animation timers", () => {
+		// Given
+		const terminal = new VirtualTerminal(40, 4);
+		const tui = new TUI(terminal);
+		const loader = new Loader(
+			tui,
+			(text) => text,
+			(text) => text,
+			"Working",
+			{
+				frames: ["1", "2"],
+				messageFormatter: (message) => message,
+				messageIntervalMs: 5,
+			},
+		);
+
+		// When
+		const indicatorInterval = Reflect.get(loader, "indicatorIntervalId");
+		const messageInterval = Reflect.get(loader, "messageIntervalId");
+		loader.stop();
+
+		// Then
+		assert.equal(typeof indicatorInterval?.hasRef, "function");
+		assert.equal(typeof messageInterval?.hasRef, "function");
+		assert.equal(indicatorInterval.hasRef(), false);
+		assert.equal(messageInterval.hasRef(), false);
+	});
 });

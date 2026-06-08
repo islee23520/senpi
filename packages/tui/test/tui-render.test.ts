@@ -227,6 +227,27 @@ function isXtermTerminal(value: unknown): value is XtermTerminalType {
 	return typeof value === "object" && value !== null && "buffer" in value;
 }
 
+describe("TUI lifecycle memory", () => {
+	it("releases rendered line cache after stop", async () => {
+		const terminal = new VirtualTerminal(40, 5);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		component.lines = ["first", "second"];
+		tui.addChild(component);
+
+		tui.start();
+		await terminal.waitForRender();
+		const previousLinesBeforeStop = Reflect.get(tui, "previousLines");
+		assert.ok(Array.isArray(previousLinesBeforeStop));
+		assert.ok(previousLinesBeforeStop.length > 0);
+
+		tui.stop();
+
+		const previousLinesAfterStop = Reflect.get(tui, "previousLines");
+		assert.deepEqual(previousLinesAfterStop, []);
+	});
+});
+
 describe("TUI Kitty image cleanup", () => {
 	it("deletes changed image ids before drawing moved placements", async () => {
 		const terminal = new LoggingVirtualTerminal(40, 10);

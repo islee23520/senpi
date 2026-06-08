@@ -656,6 +656,14 @@ export class TUI extends Container {
 
 		this.terminal.showCursor();
 		this.terminal.stop();
+		this.previousLines = [];
+		this.previousKittyImageIds.clear();
+		this.previousWidth = 0;
+		this.previousHeight = 0;
+		this.cursorRow = 0;
+		this.hardwareCursorRow = 0;
+		this.maxLinesRendered = 0;
+		this.previousViewportTop = 0;
 	}
 
 	requestRender(force = false): void {

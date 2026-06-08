@@ -38,6 +38,7 @@ export class Loader extends Text {
 	private spinnerColorFn: (str: string) => string;
 	private messageColorFn: (str: string) => string;
 	private message: string = "Loading...";
+	private lastDisplayedText: string | undefined = undefined;
 
 	constructor(
 		ui: TUI,
@@ -104,12 +105,14 @@ export class Loader extends Text {
 				this.currentFrame = (this.currentFrame + 1) % this.frames.length;
 				this.updateDisplay();
 			}, this.intervalMs);
+			this.indicatorIntervalId.unref?.();
 		}
 		if (this.indicatorFormatter || this.messageFormatter) {
 			this.messageAnimationStartedAt = Date.now();
 			this.messageIntervalId = setInterval(() => {
 				this.updateDisplay();
 			}, this.messageIntervalMs);
+			this.messageIntervalId.unref?.();
 		}
 	}
 
@@ -125,7 +128,12 @@ export class Loader extends Text {
 		const renderedMessage = this.messageFormatter
 			? this.messageFormatter(this.message, animationElapsedMs)
 			: this.messageColorFn(this.message);
-		this.setText(`${indicator}${renderedMessage}`);
+		const displayedText = `${indicator}${renderedMessage}`;
+		if (displayedText === this.lastDisplayedText) {
+			return;
+		}
+		this.lastDisplayedText = displayedText;
+		this.setText(displayedText);
 		if (this.ui) {
 			this.ui.requestRender();
 		}
