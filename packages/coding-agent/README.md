@@ -488,7 +488,7 @@ Senpi inherits upstream pi's extension-first design — the **core stays minimal
 Upstream pi-mono explicitly omits these features. Senpi ships them as builtins (see the root [README](../../README.md#what-this-fork-adds) for the full list):
 
 - **Permission popups** — full opencode-style permission flow via [`permission-system`](src/core/extensions/builtin/permission-system/AGENTS.md). Opt-in per tool/rule; non-interactive modes auto-deny unknown calls.
-- **Built-in to-dos** — `todowrite` / `todoread` tools with branch-aware persistence and a continuation loop. Required by senpi's dynamic prompt; remove the builtin id to opt out.
+- **Built-in to-dos** — `todowrite` / `todoread` tools with branch-aware persistence. Required by senpi's dynamic prompt; remove the builtin id to opt out.
 - **Dynamic system prompt** — intent gate + tool categorization + policy enforcement via [`dynamic-prompt/`](src/core/dynamic-prompt/AGENTS.md). Replaces upstream's static prompt.
 - **Per-model prompt presets** — `gpt-5.x`, `claude-opus-4-{5,6,7}`, `kimi-k2-6` via [`prompt-preset`](src/core/extensions/builtin/prompt-preset/AGENTS.md).
 - **GPT `apply_patch` tool** — Codex-style freeform grammar via [`gpt-apply-patch`](src/core/extensions/builtin/gpt-apply-patch/AGENTS.md), activated only for GPT models.

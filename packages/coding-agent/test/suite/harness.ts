@@ -1,9 +1,5 @@
 /**
  * Local test harness for the new coding-agent test suite.
- *
- * Usage: continuation integration tests can call
- * `harness.getInjectedUserMessages()` to inspect follow-up user messages that
- * contain the SENPI continuation directive without modifying production code.
  */
 
 import { existsSync, mkdirSync, rmSync } from "node:fs";
@@ -29,7 +25,6 @@ import {
 } from "../utilities.ts";
 
 type MessageTextPart = { type: "text"; text: string };
-const CONTINUATION_DIRECTIVE_HEADER = "[SYSTEM DIRECTIVE: SENPI - TODO CONTINUATION]";
 
 export function getMessageText(message: unknown): string {
 	if (!message || typeof message !== "object" || !("content" in message)) {
@@ -60,13 +55,6 @@ export function getAssistantTexts(harness: Harness): string[] {
 		.map((message) => getMessageText(message));
 }
 
-function getInjectedUserMessagesFromSession(session: AgentSession): string[] {
-	return session.messages
-		.filter((message) => message.role === "user")
-		.map((message) => getMessageText(message))
-		.filter((text) => text.includes(CONTINUATION_DIRECTIVE_HEADER));
-}
-
 export interface HarnessOptions {
 	models?: FauxModelDefinition[];
 	api?: string;
@@ -95,7 +83,6 @@ export interface Harness {
 	setResponses: (responses: FauxResponseStep[]) => void;
 	appendResponses: (responses: FauxResponseStep[]) => void;
 	getPendingResponseCount: () => number;
-	getInjectedUserMessages: () => string[];
 	events: AgentSessionEvent[];
 	eventsOfType<T extends AgentSessionEvent["type"]>(type: T): Extract<AgentSessionEvent, { type: T }>[];
 	tempDir: string;
@@ -217,7 +204,6 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		setResponses: fauxProvider.setResponses,
 		appendResponses: fauxProvider.appendResponses,
 		getPendingResponseCount: fauxProvider.getPendingResponseCount,
-		getInjectedUserMessages: () => getInjectedUserMessagesFromSession(session),
 		events,
 		eventsOfType<T extends AgentSessionEvent["type"]>(type: T) {
 			return events.filter((event): event is Extract<AgentSessionEvent, { type: T }> => event.type === type);

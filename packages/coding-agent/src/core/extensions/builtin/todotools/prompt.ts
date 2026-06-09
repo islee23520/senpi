@@ -103,7 +103,6 @@ Each todo MUST include:
 1. Mark \`in_progress\` BEFORE starting (only ONE at a time)
 2. Mark \`completed\` IMMEDIATELY after finishing (NEVER batch)
 3. If scope changes, UPDATE todos before proceeding
-4. If continuation fires, continue or clean up state - no refusal/deferral
 
 **OBSESSIVELY TRACK YOUR WORK USING TODO TOOLS.**
 </phase_5_execute>
@@ -124,7 +123,6 @@ Every task, regardless of perceived complexity, follows EXPLORE -> DEFINE -> PLA
 - **Vague todos** - "Add feature" tells nothing; be specific
 - **Batch-completing todos** - Defeats real-time tracking
 - **No in_progress marking** - No indication of current work
-- **Refusing continuation** - Continuation exists to resume or clean up
 
 **FAILURE TO FOLLOW THE WORKFLOW = INCOMPLETE WORK.**
 </anti_patterns>

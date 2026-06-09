@@ -1035,11 +1035,6 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 export default function(pi: ExtensionAPI) {
-  pi.registerFlag("disable-todo-continuation", {
-    type: "boolean",
-    default: true,
-    description: "External continuation override",
-  });
   pi.registerFlag("permission", {
     type: "boolean",
     default: true,
@@ -1055,7 +1050,6 @@ export default function(pi: ExtensionAPI) {
 			expect(extensionsResult.errors.some((error) => error.error.includes('Flag "--permission" conflicts'))).toBe(
 				false,
 			);
-			expect(extensionsResult.runtime.flagValues.get("disable-todo-continuation")).toBe(false);
 			expect(extensionsResult.runtime.flagValues.has("permission")).toBe(false);
 		});
 

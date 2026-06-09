@@ -6,7 +6,6 @@ import {
 	sendBuiltinCustomMessage,
 	sendBuiltinUserMessage,
 } from "../../src/core/extensions/builtin/system-messages.ts";
-import { SENPI_SYSTEM_PREFIX as TODO_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/todotools/system-messages.ts";
 
 function createMockPi() {
 	return {
@@ -21,7 +20,6 @@ function createMockPi() {
 describe("senpi conversation helpers", () => {
 	it("uses the senpi marker for injected system prefixes", () => {
 		expect(SENPI_SYSTEM_PREFIX).toBe("[system:senpi]");
-		expect(TODO_SYSTEM_PREFIX).toBe("[system:senpi]");
 	});
 
 	it("emits a unified injected event and prefixes builtin user messages", () => {

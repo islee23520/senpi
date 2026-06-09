@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
-import { installContinuation } from "./continuation/index.ts";
 import { TASK_MANAGEMENT_SECTION } from "./prompt.ts";
 import { getLatestTodosFromBranchEntries, getTodoWidgetLines, type TodoItem } from "./state.ts";
 import { registerTodoReadTool } from "./tools/todoread.ts";
@@ -26,8 +25,6 @@ export default function todotoolsExtension(pi: ExtensionAPI): void {
 		currentTodos = getLatestTodos(ctx);
 		syncWidget(ctx);
 	};
-
-	installContinuation(pi, { getCurrentTodos });
 
 	pi.on("session_start", async (_event, ctx) => {
 		syncFromSession(ctx);
