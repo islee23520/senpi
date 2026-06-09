@@ -18,6 +18,11 @@ name: Upstream Agent Merge
         required: false
         type: string
         default: ''
+      dry_run:
+        description: 'Run merge + QA but preview the release only (no tag/push/publish)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -138,7 +143,12 @@ jobs:
           PI_ALLOW_LOCKFILE_CHANGE: '1'
           npm_config_min_release_age: '0'
           SENPI_SKIP_PM_VERIFY: '1'
-        run: node scripts/release.mjs
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            node scripts/release.mjs --dry-run
+          else
+            node scripts/release.mjs
+          fi
 
       - name: Open conflict / failure issue
         if: steps.detect.outputs.proceed == 'true' && steps.agent.outputs.result != 'CLEAN' && steps.agent.outputs.result != ''
