@@ -1,4 +1,4 @@
-> pi can create prompt templates. Ask it to build one for your workflow.
+> senpi can create prompt templates. Ask it to build one for your workflow.
 
 # Prompt Templates
 
@@ -6,7 +6,7 @@ Prompt templates are Markdown snippets that expand into full prompts. Type `/nam
 
 ## Locations
 
-Pi loads prompt templates from:
+Senpi loads prompt templates from:
 
 - Global: `~/.senpi/agent/prompts/*.md`
 - Project: `.senpi/prompts/*.md` (only after the project is trusted)

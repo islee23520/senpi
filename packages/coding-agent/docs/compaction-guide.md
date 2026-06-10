@@ -1,10 +1,10 @@
 # Compaction Guide
 
-Pi's compaction system helps you work on complex tasks that would otherwise exceed the LLM's context window. This guide explains how compaction works from a user perspective and how to get the most out of it.
+Senpi's compaction system helps you work on complex tasks that would otherwise exceed the LLM's context window. This guide explains how compaction works from a user perspective and how to get the most out of it.
 
 ## What is Compaction?
 
-LLMs have finite context windows. When conversations grow too long, pi uses compaction to summarize older messages while preserving recent ones. Think of it like taking notes during a long meeting: you write down the key decisions and next steps so you can continue the conversation without remembering every word that was said.
+LLMs have finite context windows. When conversations grow too long, senpi uses compaction to summarize older messages while preserving recent ones. Think of it like taking notes during a long meeting: you write down the key decisions and next steps so you can continue the conversation without remembering every word that was said.
 
 Compaction happens automatically when needed, or you can trigger it manually with the `/compact` command.
 
@@ -12,7 +12,7 @@ Compaction happens automatically when needed, or you can trigger it manually wit
 
 ### Automatic Compaction
 
-When the conversation approaches the context limit, pi automatically compacts older messages. You'll see a `[compaction]` message in the TUI with a summary like "Compacted from 45000 tokens". The conversation continues seamlessly.
+When the conversation approaches the context limit, senpi automatically compacts older messages. You'll see a `[compaction]` message in the TUI with a summary like "Compacted from 45000 tokens". The conversation continues without interruption.
 
 ### Manual Compaction
 
@@ -98,11 +98,11 @@ path/to/changed.ts
 
 ## Branch Summarization
 
-When you use `/tree` to switch to a different branch, pi offers to summarize the work you're leaving behind. This injects context from the abandoned branch into your new position.
+When you use `/tree` to switch to a different branch, senpi offers to summarize the work you're leaving behind. This injects context from the abandoned branch into your new position.
 
 ### User Experience
 
-After selecting a target in `/tree`, pi asks: "Summarize branch?" You have three options:
+After selecting a target in `/tree`, senpi asks: "Summarize branch?" You have three options:
 
 1. **No summary** - Switch immediately
 2. **Summarize** - Generate a summary using the default prompt
@@ -112,7 +112,7 @@ The summary appears as a `branch_summary` entry in your new branch, providing co
 
 ### Skipping the Prompt
 
-If you frequently switch branches and don't want the prompt, set `branchSummary.skipPrompt: true` in your settings. Pi will switch branches without asking.
+If you frequently switch branches and don't want the prompt, set `branchSummary.skipPrompt: true` in your settings. Senpi will switch branches without asking.
 
 ## Settings & Tuning
 
@@ -162,7 +162,7 @@ Check if compaction happened recently (look for the `[compaction]` marker). Expa
 
 ### Long Sessions Are Fine
 
-Compaction lets sessions run indefinitely. Don't worry about starting fresh sessions just to manage context. Pi handles it automatically.
+Compaction lets sessions run indefinitely. Don't worry about starting fresh sessions just to manage context. Senpi handles it automatically.
 
 ### If Something Gets Forgotten
 
@@ -235,6 +235,6 @@ Yes. The full history is in your session file. Use `/tree` to navigate to any po
 
 - [`compaction.md`](compaction.md) - Technical internals and extension hooks
 - [`settings.md`](settings.md) - Complete settings reference
-- [`tree.md`](tree.md) - Session tree navigation
+- [`sessions.md`](sessions.md) - Session tree navigation
 - [`extensions.md`](extensions.md) - Extension API for custom compaction
-- [`session.md`](session.md) - Session file format
+- [`session-format.md`](session-format.md) - Session file format

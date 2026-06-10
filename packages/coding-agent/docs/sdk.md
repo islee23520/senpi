@@ -2,7 +2,7 @@
 
 # SDK
 
-The SDK provides programmatic access to pi's agent capabilities. Use it to embed senpi in other applications, build custom interfaces, or integrate with automated workflows.
+The SDK provides programmatic access to senpi's agent capabilities. Use it to embed senpi in other applications, build custom interfaces, or integrate with automated workflows.
 
 **Example use cases:**
 - Build a custom UI (web, desktop, mobile)
@@ -209,7 +209,7 @@ await session.prompt("What files are here?");
 
 // With images
 await session.prompt("What's in this image?", {
-  images: [{ type: "image", source: { type: "base64", mediaType: "image/png", data: "..." } }]
+  images: [{ type: "image", data: "base64-encoded-data", mimeType: "image/png" }]
 });
 
 // During streaming: must specify how to queue the message
@@ -473,7 +473,7 @@ Specify which built-in tools to enable:
 - `noTools: "builtin"` disables default built-ins while keeping extension and custom tools enabled
 - `excludeTools` disables specific built-in, extension, or custom tool names after any `tools` allowlist is applied
 
-The `edit` tool returns `details.diff` for Pi's TUI display and `details.patch` as a standard unified patch for SDK consumers.
+The `edit` tool returns `details.diff` for senpi's TUI display and `details.patch` as a standard unified patch for SDK consumers.
 
 ```typescript
 import { createAgentSession } from "@code-yeongyu/senpi";
@@ -600,6 +600,7 @@ eventBus.on("my-extension:status", (data) => console.log(data));
 ```typescript
 import {
   createAgentSession,
+  createSyntheticSourceInfo,
   DefaultResourceLoader,
   type Skill,
 } from "@code-yeongyu/senpi";
@@ -609,7 +610,8 @@ const customSkill: Skill = {
   description: "Custom instructions",
   filePath: "/path/to/SKILL.md",
   baseDir: "/path/to",
-  source: "custom",
+  sourceInfo: createSyntheticSourceInfo("/path/to/SKILL.md", { source: "sdk" }),
+  disableModelInvocation: false,
 };
 
 const loader = new DefaultResourceLoader({
@@ -650,6 +652,7 @@ const { session } = await createAgentSession({ resourceLoader: loader });
 ```typescript
 import {
   createAgentSession,
+  createSyntheticSourceInfo,
   DefaultResourceLoader,
   type PromptTemplate,
 } from "@code-yeongyu/senpi";
@@ -657,7 +660,8 @@ import {
 const customCommand: PromptTemplate = {
   name: "deploy",
   description: "Deploy the application",
-  source: "(custom)",
+  filePath: "/virtual/prompts/deploy.md",
+  sourceInfo: createSyntheticSourceInfo("/virtual/prompts/deploy.md", { source: "sdk" }),
   content: "# Deploy\n\n1. Build\n2. Test\n3. Deploy",
 };
 
@@ -714,7 +718,7 @@ const { session: opened } = await createAgentSession({
 
 // List sessions
 const currentProjectSessions = await SessionManager.list(process.cwd());
-const allSessions = await SessionManager.listAll(process.cwd());
+const allSessions = await SessionManager.listAll(); // All sessions across all projects
 
 // Session replacement API for /new, /resume, /fork, /clone, and import flows.
 const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
@@ -756,12 +760,12 @@ const sm = SessionManager.open("/path/to/session.jsonl");
 
 // Session listing
 const currentProjectSessions = await SessionManager.list(process.cwd());
-const allSessions = await SessionManager.listAll(process.cwd());
+const allSessions = await SessionManager.listAll(); // All sessions across all projects
 
 // Tree traversal
 const entries = sm.getEntries();        // All entries (excludes header)
 const tree = sm.getTree();              // Full tree structure
-const path = sm.getPath();              // Path from root to current leaf
+const branch = sm.getBranch();          // Entries from root to current leaf
 const leaf = sm.getLeafEntry();         // Current leaf entry
 const entry = sm.getEntry(id);          // Get entry by ID
 const children = sm.getChildren(id);    // Direct children of entry
@@ -1076,7 +1080,7 @@ See [RPC documentation](rpc.md) for the JSON protocol.
 For subprocess-based integration without building with the SDK, use the CLI directly:
 
 ```bash
-pi --mode rpc --no-session
+senpi --mode rpc --no-session
 ```
 
 See [RPC documentation](rpc.md) for the JSON protocol.

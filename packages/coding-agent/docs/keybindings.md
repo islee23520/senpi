@@ -2,11 +2,11 @@
 
 All keyboard shortcuts can be customized via `~/.senpi/agent/keybindings.json`. Each action can be bound to one or more keys.
 
-The config file uses the same namespaced keybinding ids that pi uses internally and that extension authors use in `keyHint()` and injected `keybindings` managers.
+The config file uses the same namespaced keybinding ids that senpi uses internally and that extension authors use in `keyHint()` and injected `keybindings` managers.
 
 Older configs using pre-namespaced ids such as `cursorUp` or `expandTools` are migrated automatically to the namespaced ids on startup.
 
-After editing `keybindings.json`, run `/reload` in pi to apply the changes without restarting the session.
+After editing `keybindings.json`, run `/reload` in senpi to apply the changes without restarting the session.
 
 ## Key Format
 
@@ -88,6 +88,8 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 | `app.suspend` | `ctrl+z` (none on Windows) | Suspend to background |
 | `app.editor.external` | `ctrl+g` | Open in external editor (`$VISUAL` or `$EDITOR`) |
 | `app.clipboard.pasteImage` | `ctrl+v` (`alt+v` on Windows) | Paste image from clipboard |
+| `app.history.search` | `ctrl+r` | Search prompt history across sessions |
+| `app.sessions.observe` | `ctrl+s` | Observe session transcripts |
 
 ### Sessions
 
@@ -145,6 +147,7 @@ Used inside the favorite models selector (opened via `/favorite-models`).
 | Keybinding id | Default | Description |
 |--------|---------|-------------|
 | `app.models.save` | `ctrl+s` | Save current favorite model selection to settings |
+| `app.models.toggleFavorite` | `ctrl+f` | Toggle favorite status of the selected model |
 | `app.models.enableAll` | `ctrl+a` | Favorite all models (or all matching the current search) |
 | `app.models.clearAll` | `ctrl+x` | Clear all models (or all matching the current search) |
 | `app.models.toggleProvider` | `ctrl+p` | Toggle favorite models for the current provider |
@@ -165,7 +168,7 @@ Create `~/.senpi/agent/keybindings.json`:
 
 Each action can have a single key or an array of keys. User config overrides defaults.
 
-On native Windows, `app.suspend` has no default binding because Windows terminals do not support Unix job control. If you bind it manually, pi shows a status message instead of suspending. In WSL, the normal Linux `ctrl+z`/`fg` behavior still applies.
+On native Windows, `app.suspend` has no default binding because Windows terminals do not support Unix job control. If you bind it manually, senpi shows a status message instead of suspending. In WSL, the normal Linux `ctrl+z`/`fg` behavior still applies.
 
 ### Emacs Example
 

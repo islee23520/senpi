@@ -152,7 +152,7 @@ You do **not** need to install these packages for normal senpi use; their functi
 | [`pi-openai-web-search`](https://github.com/code-yeongyu/pi-openai-web-search) | `openai-web-search` | OpenAI Responses native web search. |
 | [`pi-todotools`](https://github.com/code-yeongyu/pi-todotools) | `todowrite` | `todowrite` / `todoread`, todo sidebar state, workflow prompt guidance, and continuation follow-ups. |
 
-Other builtins such as `permission-system`, `prompt-preset`, `anthropic-bash`, `service-tier`, `tool-pair-guard`, and `compaction` are senpi-owned builtin extensions, not installable sibling packages.
+Other builtins such as `permission-system`, `prompt-preset`, `anthropic-bash`, `service-tier`, `tool-pair-guard`, `compaction`, `history-search`, `session-observer`, and `kimi-web-search` are senpi-owned builtin extensions, not installable sibling packages.
 
 ## Why "senpi"
 
@@ -192,6 +192,9 @@ In-tree, tightly coupled to senpi internals. Loaded in this exact registration o
 | 10 | [`bash-timeout`](packages/coding-agent/src/core/extensions/builtin/bash-timeout/) *(vendored)* | Injects default + max bash timeouts, appends policy to system prompt. Synced from [`code-yeongyu/pi-bash-timeout`](https://github.com/code-yeongyu/pi-bash-timeout). | — |
 | 11 | [`tool-pair-guard`](packages/coding-agent/src/core/extensions/builtin/tool-pair-guard/) | Sanitizes Anthropic request payloads by removing orphan `tool_result` blocks — compaction safety | — |
 | 12 | [`compaction`](packages/coding-agent/src/core/extensions/builtin/compaction/) | Speculative + emergency compaction policy: degradation monitor, circuit breaker, per-turn cap, todo bridging, checkpoint state, restoration tracker, tool-result truncation | [AGENTS.md](packages/coding-agent/src/core/extensions/builtin/compaction/AGENTS.md) · [changes.md](packages/coding-agent/src/core/extensions/builtin/compaction/changes.md) |
+| 13 | [`history-search`](packages/coding-agent/src/core/extensions/builtin/history-search/) | `/history` command — searches prompt history across sessions in an overlay | — |
+| 14 | [`session-observer`](packages/coding-agent/src/core/extensions/builtin/session-observer/) | `/sessions` command — peeks at previous session transcripts in a HUD overlay | — |
+| 15 | [`kimi-web-search`](packages/coding-agent/src/core/extensions/builtin/kimi-web-search/) | `SearchWeb` / `FetchURL` tools backed by the Kimi search/fetch API; toggled via `PI_KIMI_WEB_SEARCH` | — |
 
 > The builtin directories above are new vs upstream `pi-mono` — none exist in `badlogic/pi-mono`. Vendored versions are pinned in [`external-versions.json`](packages/coding-agent/src/core/extensions/builtin/external-versions.json) and synced from the sibling `pi-extensions` checkout with [`sync-builtin-extensions.mjs`](packages/coding-agent/scripts/sync-builtin-extensions.mjs).
 
@@ -278,9 +281,8 @@ I regularly publish my own `pi-mono` work sessions here:
 | **[@earendil-works/pi-ai](packages/ai)** | Unified multi-provider LLM API with text streaming, tool calling, OAuth helpers, and image generation |
 | **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
 | **[senpi](packages/coding-agent)** | Interactive coding agent CLI, rebranded as senpi |
-| **mom** | Slack bot runner for dispatching coding-agent work in a target workspace |
-| **pods** | CLI utilities for managing vLLM models on GPU pods over SSH |
 | **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
+| **[@earendil-works/pi-web-ui](packages/web-ui)** | Web UI components for AI chat interfaces (private, not published) |
 
 For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
 

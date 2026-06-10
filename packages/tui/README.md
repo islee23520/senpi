@@ -618,9 +618,8 @@ interface Terminal {
 }
 ```
 
-**Built-in implementations:**
+**Built-in implementation:**
 - `ProcessTerminal` - Uses `process.stdin/stdout`
-- `VirtualTerminal` - For testing (uses `@xterm/headless`)
 
 ## Utilities
 

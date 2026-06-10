@@ -9,14 +9,14 @@ src/
 ├── tui.ts                # TUI class. doRender() — the differential render core
 ├── terminal.ts           # Terminal abstraction (writes, capabilities, mouse, paste)
 ├── editor-component.ts   # Multi-line text editor primitive
-├── components/           # Built-in components (text, loader, scroll, panel, ...)
+├── components/           # Built-in components (text, loader, box, markdown, select-list, input, image, ...)
 ├── autocomplete.ts       # Generic autocomplete engine (used by editor)
 ├── fuzzy.ts              # Fuzzy match used by autocomplete
 ├── keybindings.ts / keys.ts  # Key parsing, binding registry
 ├── kill-ring.ts          # Emacs-style cut buffer
 ├── stdin-buffer.ts       # Decoupled stdin reader (handles bracketed paste)
 ├── undo-stack.ts         # Editor undo/redo
-├── terminal-image.ts     # Sixel / iTerm / Kitty image protocol adapters
+├── terminal-image.ts     # iTerm2 / Kitty image protocol adapters
 ├── utils.ts              # ANSI/widths/east-asian width
 ├── index.ts              # Public exports
 └── changes.md            # Fork-tracked: doRender() flicker-budget tightening
@@ -46,7 +46,7 @@ src/
 
 - Test runner is `node --test --import tsx`, NOT vitest. Tests are flat in `test/*.test.ts`.
 - Headless terminal under test uses `@xterm/headless` to read back what the TUI wrote.
-- `koffi` is an OPTIONAL dependency for Windows console hijacking — never make it required.
+- Windows console hijacking and macOS modifier detection use vendored native prebuilds (`native/win32/prebuilds/*.node` loaded in `src/terminal.ts`, `native/darwin/prebuilds/*.node` loaded in `src/native-modifiers.ts`), loaded lazily via `createRequire` — never add a required native dependency.
 
 ## ANTI-PATTERNS
 
@@ -57,5 +57,5 @@ src/
 
 ## NOTES
 
-- This package is consumed by `packages/coding-agent` (TUI mode) and `packages/web-ui` (only for type re-exports).
+- This package is consumed by `packages/coding-agent` (TUI mode).
 - Authored by Mario Zechner (upstream). Fork changes include `doRender()` differential paths and `Loader` message animation; see `src/changes.md`.

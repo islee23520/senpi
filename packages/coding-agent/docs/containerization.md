@@ -3,18 +3,18 @@
 Pi runs with all permissions by default, but in some cases, you will want to have more control over what directories Pi can write to and which accesses it has.
 
 There are two general options. You can either
-1. run the whole `pi` process inside an isolated environment, or
-2. run `pi` on the host and route tool execution into an isolated environment.
+1. run the whole `senpi` process inside an isolated environment, or
+2. run `senpi` on the host and route tool execution into an isolated environment.
 
 ## Choose a pattern
 
 | Pattern | What is isolated | Best for | Notes |
 | --- | --- | --- | --- |
-| OpenShell | Whole `pi` process in a policy-controlled sandbox | Local or remote managed sandbox | Requires an OpenShell gateway |
+| OpenShell | Whole `senpi` process in a policy-controlled sandbox | Local or remote managed sandbox | Requires an OpenShell gateway |
 | Gondolin extension | Built-in tools and `!` commands | Local micro-VM isolation while keeping auth on host | See [`examples/extensions/gondolin/`](../examples/extensions/gondolin/). |
-| Plain Docker | Whole `pi` process in a local container | Simple local isolation | Provider API keys enter the container. |
+| Plain Docker | Whole `senpi` process in a local container | Simple local isolation | Provider API keys enter the container. |
 
-Extensions run wherever the `pi` process runs. If you run host `pi` with a tool-routing extension, other custom extension tools still run on the host unless they also delegate their operations.
+Extensions run wherever the `senpi` process runs. If you run host `senpi` with a tool-routing extension, other custom extension tools still run on the host unless they also delegate their operations.
 
 ## OpenShell
 
@@ -29,21 +29,21 @@ openshell gateway add <gateway-url> --name <name>
 openshell gateway select <name>
 ```
 
-Launch `pi` inside an OpenShell sandbox:
+Launch `senpi` inside an OpenShell sandbox:
 
 ```bash
-openshell sandbox create --name pi-sandbox --from pi -- pi
+openshell sandbox create --name senpi-sandbox --from senpi -- senpi
 ```
 
-In this pattern, the whole `pi` process runs inside the sandbox.
+In this pattern, the whole `senpi` process runs inside the sandbox.
 Built-in tools, `!` commands, and extension tools execute inside the OpenShell boundary.
 
 If the gateway is remote, project files are not bind-mounted from the host, meaning writes in the sandbox are not reflected on your machine.
 Clone the repository inside the sandbox or use OpenShell file transfer commands:
 
 ```bash
-openshell sandbox upload pi-sandbox ./repo /workspace
-openshell sandbox download pi-sandbox /workspace/repo ./repo-out
+openshell sandbox upload senpi-sandbox ./repo /workspace
+openshell sandbox download senpi-sandbox /workspace/repo ./repo-out
 ```
 
 OpenShell providers can keep raw model API keys outside the sandbox.
@@ -53,13 +53,13 @@ Configure Pi to use the corresponding OpenAI-compatible or Anthropic-compatible 
 ## Gondolin
 
 [Gondolin](https://github.com/earendil-works/gondolin) is a local Linux micro-VM.
-Use the [example extension](../examples/extensions/gondolin) when you want `pi` on the host but all built-in tools routed into the VM.
+Use the [example extension](../examples/extensions/gondolin) when you want `senpi` on the host but all built-in tools routed into the VM.
 
 Setup:
 
 ```bash
-cp -R packages/coding-agent/examples/extensions/gondolin ~/.pi/agent/extensions/gondolin
-cd ~/.pi/agent/extensions/gondolin
+cp -R packages/coding-agent/examples/extensions/gondolin ~/.senpi/agent/extensions/gondolin
+cd ~/.senpi/agent/extensions/gondolin
 npm install --ignore-scripts
 ```
 
@@ -67,7 +67,7 @@ Run from the project you want mounted:
 
 ```bash
 cd /path/to/project
-pi -e ~/.pi/agent/extensions/gondolin
+senpi -e ~/.senpi/agent/extensions/gondolin
 ```
 
 The extension mounts the host cwd at `/workspace` in the VM and overrides `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls`.
@@ -78,9 +78,9 @@ Requirements: Node.js >= 23.6.0 for `@earendil-works/gondolin`, plus QEMU (requi
 
 ## Plain Docker
 
-Run the whole `pi` process in Docker when you want the simplest local container boundary.
+Run the whole `senpi` process in Docker when you want the simplest local container boundary.
 
-`Dockerfile.pi`:
+`Dockerfile.senpi`:
 
 ```dockerfile
 FROM node:24-bookworm-slim
@@ -88,24 +88,24 @@ FROM node:24-bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends bash ca-certificates git ripgrep \
   && rm -rf /var/lib/apt/lists/*
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+RUN npm install -g --ignore-scripts @code-yeongyu/senpi
 
 WORKDIR /workspace
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["senpi"]
 ```
 
 Build and run:
 
 ```bash
-docker build -t pi-sandbox -f Dockerfile.pi .
+docker build -t senpi-sandbox -f Dockerfile.senpi .
 
 docker run --rm -it \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
-  -v pi-agent-home:/root/.pi/agent \
-  pi-sandbox
+  -v senpi-agent-home:/root/.senpi/agent \
+  senpi-sandbox
 ```
 
 The `-v "$PWD:/workspace"` mounts your current directory into the container at /workspace such that reads and writes in `/workspace` inside Docker directly affect your host files, like in the Gondolin example.
 
-Use a named volume for `/root/.pi/agent` if you want container-local settings and sessions. Mounting your host `~/.pi/agent` exposes host auth and session files to the container.
+Use a named volume for `/root/.senpi/agent` if you want container-local settings and sessions. Mounting your host `~/.senpi/agent` exposes host auth and session files to the container.

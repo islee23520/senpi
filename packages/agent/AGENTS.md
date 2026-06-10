@@ -1,6 +1,6 @@
 # packages/agent
 
-`@earendil-works/pi-agent-core` — stateful agent loop with tool execution, message streaming, and a "harness" layer (compaction, session storage, env, skills) that the senpi CLI plugs into.
+`@earendil-works/pi-agent-core` — stateful agent loop with tool execution, message streaming, and a "harness" layer (compaction, session storage, env, skills) intended for the senpi CLI to migrate onto (planned, not started — see `docs/agent-harness.md` item 7). The CLI currently imports only `Agent` and types from this package and keeps its own copies of compaction/skills/session/prompt-template logic.
 
 ## STRUCTURE
 
@@ -11,9 +11,9 @@ src/
 ├── types.ts             # AgentMessage union, AgentEvent union, AgentState, ToolExecutionMode
 ├── proxy.ts             # Server proxy stream() — for hosting an Agent over the wire
 ├── index.ts             # Public exports
-├── changes.md           # Fork-tracked: parallel tool execution semantics
+├── changes.md           # Fork-change log: tool scheduling, abort handling, harness compat, UUIDv7
 └── harness/
-    ├── agent-harness.ts # AgentHarness — wires Agent into a coding-CLI shape
+    ├── agent-harness.ts # AgentHarness — drives runAgentLoop() directly with compaction/session/skills wiring
     ├── compaction/      # branch-summarization.ts, compaction.ts, utils.ts
     ├── env/             # nodejs.ts (process / fs / shell facades = ExecutionEnv impl)
     ├── messages.ts      # Harness-level message helpers

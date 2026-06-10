@@ -10,13 +10,13 @@ Install with npm:
 npm install -g @code-yeongyu/senpi
 ```
 
-To uninstall pi itself, use npm for curl and npm installs:
+To uninstall senpi itself, use the package manager that installed it:
 
 ```bash
-npm uninstall -g @earendil-works/pi-coding-agent
+npm uninstall -g @code-yeongyu/senpi
 ```
 
-For pnpm, Yarn, or Bun installs, use the matching global remove command: `pnpm remove -g @earendil-works/pi-coding-agent`, `yarn global remove @earendil-works/pi-coding-agent`, or `bun uninstall -g @earendil-works/pi-coding-agent`.
+For pnpm, Yarn, or Bun installs, use the matching global remove command: `pnpm remove -g @code-yeongyu/senpi`, `yarn global remove @code-yeongyu/senpi`, or `bun uninstall -g @code-yeongyu/senpi`.
 
 Then run it in a project directory:
 
@@ -34,7 +34,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Using Senpi](usage.md) - interactive mode, slash commands, context files, and CLI reference.
 - [Providers](providers.md) - subscription and API-key setup for built-in providers.
 - [Security](security.md) - project trust, sandbox boundaries, and vulnerability reporting.
-- [Containerization](containerization.md) - sandbox pi with OpenShell, Gondolin, or Docker.
+- [Containerization](containerization.md) - sandbox senpi with OpenShell, Gondolin, or Docker.
 - [Settings](settings.md) - global and project settings.
 - [Keybindings](keybindings.md) - default shortcuts and custom keybindings.
 - [Sessions](sessions.md) - session management, branching, and tree navigation.

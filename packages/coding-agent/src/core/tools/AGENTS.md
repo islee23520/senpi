@@ -11,7 +11,8 @@ tools/
 ├── read.ts                      # File read tool with image/binary handling
 ├── write.ts                     # File create/replace tool
 ├── edit.ts                      # In-place edit tool (uses `edit-diff.ts` for hunks)
-├── edit-diff.ts                 # Diff/hunk algorithms shared by edit + apply_patch flows
+├── edit-diff.ts                 # Fuzzy matching + diff helpers for the edit tool (fuzzyFindText, computeEditsDiff)
+├── diff-render.ts               # renderToolDiff() — diff rendering shared by edit, write, and gpt-apply-patch previews
 ├── grep.ts                      # Ripgrep-backed search tool
 ├── find.ts                      # Path search tool (gitignore-aware)
 ├── ls.ts                        # Directory listing
@@ -57,6 +58,6 @@ tools/
 
 ## NOTES
 
-- The `apply_patch` tool exists as a **builtin extension** under `extensions/builtin/gpt-apply-patch/`, NOT here. It uses `edit-diff.ts` for hunk math.
+- The `apply_patch` tool exists as a **builtin extension** under `extensions/builtin/gpt-apply-patch/`, NOT here. Its hunk math is self-contained (`patch-diff.ts` on the npm `diff` package); the piece it shares with core tools is `diff-render.ts`.
 - `read.ts` handles image bytes via `utils/photon.ts` (WASM resize) before returning to the LLM. PDF handling happens in extensions.
 - `find.ts` is gitignore-aware; the regression suite covers nested gitignore + glob behavior (`test/suite/regressions/3302-…`, `3303-…`).

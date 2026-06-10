@@ -8,7 +8,7 @@
  *   node scripts/release.mjs --dry-run     # preview every command and file write; modify nothing
  *   node scripts/release.mjs --help        # print usage
  *
- * Flow (matches AGENTS.md "VERSIONING & UPSTREAM SYNC"):
+ * Flow (matches AGENTS.md "Releasing"):
  *   1. Pre-flight: branch must be `main`; working tree must be clean (--dry-run warns
  *      and continues so the preview is usable during development).
  *   2. Resolve version: `--version` override or `computeNextVersion()` from calver.mjs.

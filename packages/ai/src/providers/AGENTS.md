@@ -16,14 +16,14 @@ providers/
 ├── google-vertex.ts            # Vertex AI variant
 ├── google-shared.ts            # Helpers shared by google.ts + google-vertex.ts
 ├── mistral.ts                  # Mistral
-├── cloudflare.ts               # Cloudflare Workers AI
+├── cloudflare.ts               # Cloudflare base-URL helpers (isCloudflareProvider/resolveCloudflareBaseUrl) — NOT a provider; used by openai-completions/openai-responses/anthropic
 ├── openai-completions.ts       # OpenAI Completions API + clones (Groq, Together, OpenRouter, Fireworks, …)
 ├── openai-responses.ts         # OpenAI Responses API
 ├── openai-responses-shared.ts  # Helpers shared between openai-responses.ts + openai-codex-responses.ts
 ├── openai-codex-responses.ts   # Codex (apply_patch / freeform tool grammar)
 ├── azure-openai-responses.ts   # Azure OpenAI Responses API variant
 ├── github-copilot-headers.ts   # Headers + auth for Copilot routing
-└── images/                     # Image-generation providers (Gemini Imagen, OpenAI Images, …)
+└── images/                     # Image-generation providers (currently OpenRouter only)
 ```
 
 ## ADD A PROVIDER (7-step canonical checklist)

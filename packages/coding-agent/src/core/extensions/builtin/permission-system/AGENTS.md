@@ -1,17 +1,17 @@
 # builtin/permission-system
 
-Builtin extension #2. Full port of opencode's permission flow. Loads rules from CLI (`--permission tool=action`), settings (`permissions.always_allow`, `permissions.deny`), and per-session approvals. Prompts the user for unknown tool calls, persists "always allow" decisions, blocks denied calls with a structured error, and supports parser-aware patterns (bash command prefixes, file path globs for read/write/edit/apply_patch). **JSONL storage shape is a contract — migration required to change it.**
+Builtin extension #1. Full port of opencode's permission flow. Loads rules from CLI (`--permission tool=action`), settings (`permission` key: tool → action, or tool → { pattern → action }), and per-session approvals. Prompts the user for unknown tool calls, persists "always allow" decisions, blocks denied calls with a structured error, and supports parser-aware patterns (bash command prefixes, file path globs for read/write/edit/apply_patch). **JSONL storage shape is a contract — migration required to change it.**
 
 ## FILES
 
 ```
 permission-system/
-├── index.ts            # Extension entry — wires beforeToolCall + UI prompt
+├── index.ts            # Extension entry — wires session_start / tool_call / session_shutdown + UI prompt
 ├── service.ts          # Permission service core (ask/reply/list)
 ├── evaluate.ts         # Rule evaluator with wildcard matching
 ├── wildcard.ts         # Wildcard matcher
 ├── types.ts            # Action ("ask"|"allow"|"deny"), Rule, Request, Reply
-├── settings.ts         # settings.json integration (always_allow, deny)
+├── settings.ts         # Loads `permission` from global/project settings.json + approved JSONL
 ├── cli.ts              # `--permission tool=action` flag parser
 ├── config.ts           # fromConfig / merge / disabled state transforms
 ├── storage.ts          # JSONL persistence (CONTRACT — don't change line shape)
@@ -37,13 +37,15 @@ permission-system/
 
 ## RULE EVALUATION (order)
 
-1. **CLI flags** (`--permission`) — highest precedence.
-2. **Project settings** (`.senpi/settings.json` `permissions.*`).
-3. **Global settings** (`~/.senpi/agent/settings.json`).
-4. **Session approvals** (in-memory + persisted to `~/.senpi/agent/permissions/<project>.jsonl`).
-5. **Default** — interactive → ask; non-interactive → block.
+`evaluate.ts` is **last-match-wins** over the concatenated ruleset; later sources override earlier ones:
 
-Pattern syntax: tool name + optional arg pattern, e.g. `bash:rm *`, `write:/etc/**`. Wildcards in `evaluate.ts`.
+1. **Global settings** (`~/.senpi/agent/settings.json` `permission`).
+2. **Project settings** (`.senpi/settings.json` `permission`).
+3. **CLI flags** (`--permission`).
+4. **Session approvals** — in-memory "always allow" rules; new ones are appended to `<projectDir>/.senpi/permissions-approved.jsonl` on session shutdown.
+5. **No match** — interactive → ask; non-interactive → block (`non-interactive.ts`).
+
+Pattern syntax: tool name + optional arg pattern, e.g. `bash:rm *`, `write:/etc/**`. Wildcard matching in `wildcard.ts`, rule lookup in `evaluate.ts`.
 
 ## CONVENTIONS
 

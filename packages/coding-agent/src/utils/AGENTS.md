@@ -1,31 +1,41 @@
 # packages/coding-agent/src/utils
 
-Cross-cutting utilities used by `core/`, `cli/`, `modes/`, and `extensions/`. No domain logic — only deterministic helpers. 20 files, all leaf-level.
+Cross-cutting utilities used by `core/`, `cli/`, `modes/`, and `extensions/`. No domain logic — only deterministic helpers. 29 source files, all leaf-level.
 
 ## FILES (grouped by concern)
 
 ```
 utils/
-├── git.ts                 # git CLI wrapper (status, diff, stash, commit, current branch)
-├── shell.ts               # Spawn + capture; safe arg quoting
-├── child-process.ts       # Lower-level spawn helpers used by shell.ts
-├── paths.ts               # Resolve repo root, home expansion, glob helpers
-├── fs-watch.ts            # File watcher (used by reload + extension HMR)
-├── mime.ts                # File extension → MIME type
-├── clipboard.ts           # Cross-platform clipboard read/write entry
-├── clipboard-image.ts     # Clipboard image decode
-├── clipboard-native.ts    # OS-specific clipboard backend
-├── image-resize.ts        # Photon WASM image resize wrapper
-├── image-convert.ts       # Image format conversion
-├── exif-orientation.ts    # EXIF rotation correction
-├── photon.ts              # @cf/photon WASM bootstrap
-├── frontmatter.ts         # YAML frontmatter parser (skills, prompt templates)
-├── sleep.ts               # Promise-returning timer with abort
-├── tools-manager.ts       # Probe + cache fd/rg presence for startup-tools
-├── changelog.ts           # Parse + render the senpi CHANGELOG.md
-├── version-check.ts       # Senpi latest-version fetch (queries senpi npm, NOT pi.dev)
-├── pi-user-agent.ts       # UA string for update checks; uses runtime app name
-└── changes.md             # Fork tracker (version-check + pi-user-agent rebrand)
+├── git.ts                       # git CLI wrapper (status, diff, stash, commit, current branch)
+├── shell.ts                     # Spawn + capture; safe arg quoting
+├── child-process.ts             # Lower-level spawn helpers used by shell.ts
+├── paths.ts                     # Resolve repo root, home expansion, glob helpers
+├── fs-watch.ts                  # File watcher (used by reload + extension HMR)
+├── open-browser.ts              # Open URL/file via platform handler; never goes through a shell
+├── mime.ts                      # File extension → MIME type
+├── clipboard.ts                 # Cross-platform clipboard read/write entry
+├── clipboard-image.ts           # Clipboard image decode
+├── clipboard-native.ts          # OS-specific clipboard backend
+├── image-resize.ts              # Resize entry — runs image-resize-core in a worker, in-process fallback
+├── image-resize-core.ts         # Photon resize implementation shared by main thread + worker
+├── image-resize-worker.ts       # worker_threads entry wrapping image-resize-core
+├── image-convert.ts             # Image format conversion
+├── exif-orientation.ts          # EXIF rotation correction
+├── photon.ts                    # @cf/photon WASM bootstrap
+├── ansi.ts                      # ANSI escape regex + stripAnsi (vendored from ansi-regex/strip-ansi)
+├── html.ts                      # HTML entity decoding
+├── json.ts                      # stripJsonComments — strip // comments + trailing commas
+├── syntax-highlight.ts          # highlight.js wrapper → themed terminal formatting
+├── highlight-js-lib-index.d.ts  # Type declarations for highlight.js/lib/index.js
+├── frontmatter.ts               # YAML frontmatter parser (skills, prompt templates)
+├── sleep.ts                     # Promise-returning timer with abort
+├── deprecation.ts               # One-shot deprecation warnings (deduped by message)
+├── tools-manager.ts             # Probe + cache fd/rg presence for startup-tools
+├── changelog.ts                 # Parse + render the senpi CHANGELOG.md
+├── version-check.ts             # Senpi latest-version fetch (queries senpi npm, NOT pi.dev)
+├── pi-user-agent.ts             # UA string for update checks; uses runtime app name
+├── windows-self-update.ts       # Quarantines locked native files so Windows self-update can replace them
+└── changes.md                   # Fork tracker (version-check + pi-user-agent rebrand)
 ```
 
 ## WHERE TO LOOK

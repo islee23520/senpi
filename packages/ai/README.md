@@ -1164,8 +1164,6 @@ Several providers require OAuth authentication instead of static API keys:
 - **OpenAI Codex** (ChatGPT Plus/Pro subscription, access to GPT-5.x Codex models)
 - **GitHub Copilot** (Copilot subscription)
 
-For paid Cloud Code Assist subscriptions, set `GOOGLE_CLOUD_PROJECT` or `GOOGLE_CLOUD_PROJECT_ID` to your project ID.
-
 ### Vertex AI
 
 Vertex AI models support either a Google Cloud API key or Application Default Credentials (ADC):
@@ -1228,8 +1226,8 @@ import {
   // Login functions (return credentials, do not store)
   loginAnthropic,
   loginOpenAICodex,
+  loginOpenAICodexDeviceCode,
   loginGitHubCopilot,
-  loginGeminiCli,
 
   // Token management
   refreshOAuthToken,   // (provider, credentials) => new credentials
@@ -1346,7 +1344,7 @@ Create or update test files to cover the new provider:
 - `abort.test.ts` - Request cancellation
 - `empty.test.ts` - Empty message handling
 - `context-overflow.test.ts` - Context limit errors
-- `image-limits.test.ts` - Image support (if applicable)
+- `images.test.ts` - Image support (if applicable)
 - `unicode-surrogate.test.ts` - Unicode handling
 - `tool-call-without-result.test.ts` - Orphaned tool calls
 - `image-tool-result.test.ts` - Images in tool results

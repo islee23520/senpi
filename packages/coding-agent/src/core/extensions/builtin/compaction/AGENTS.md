@@ -10,7 +10,9 @@ compaction/
 ├── state.ts                  # In-memory compaction state + persistence shape
 ├── policy.ts                 # Adaptive threshold + decision matrix
 ├── speculative.ts            # Parallel speculative compaction during next turn
-├── overflow-detection.ts     # Detects provider "prompt too long" errors → triggers blocking compaction
+├── context-reduction.ts      # Deterministic no-LLM reductions (collapse tool-result runs, shrink old answers, clear old tool results)
+├── openai-remote.ts          # OpenAI Responses remote-compaction route (`senpi.compaction.openai-remote.v1` schema)
+├── repair-tool-pairs.ts      # Replaces orphaned tool-call/result pairs left by pruning with placeholders
 ├── circuit-breaker.ts        # N consecutive failures → halt automatic compaction
 ├── per-turn-cap.ts           # Max compactions per turn rate-limiter
 ├── degradation-monitor.ts    # Detects post-compact assistant degradation (all-tool, no-text turns)
@@ -37,9 +39,10 @@ compaction/
 
 1. **Pre-turn**: `policy.ts` checks thresholds; if proactive, fire `speculative.ts` in parallel.
 2. **Mid-turn**: `tool-truncation.ts` shrinks oversized results before they land in context.
-3. **Provider call**: if `overflow-detection.ts` sees a "prompt too long" error → cancel turn, run blocking compaction, retry.
-4. **Post-turn**: `circuit-breaker.ts` + `per-turn-cap.ts` gate any further auto-compaction; `degradation-monitor.ts` watches for post-compact quality drop.
-5. **Compact event**: `checkpoint-state.ts` snapshots, `todo-bridge.ts` injects todos, `restoration-tracker.ts` queues re-injections for the first post-compact turn.
+3. **Context assembly** (`context` event): near the limit, `context-reduction.ts` applies deterministic no-LLM reductions; after any pruning, `repair-tool-pairs.ts` patches orphaned tool-call/result pairs.
+4. **Provider call**: on a provider context-overflow error, `core/agent-session.ts` detects it via `isContextOverflow` (`packages/ai/src/utils/overflow.ts`), cancels the turn, runs blocking compaction, and auto-retries once. On OpenAI Responses models, compaction routes through `openai-remote.ts` instead of local summarization.
+5. **Post-turn**: `circuit-breaker.ts` + `per-turn-cap.ts` gate any further auto-compaction; `degradation-monitor.ts` watches for post-compact quality drop.
+6. **Compact event**: `checkpoint-state.ts` snapshots, `todo-bridge.ts` injects todos, `restoration-tracker.ts` queues re-injections for the first post-compact turn.
 
 ## CONVENTIONS
 

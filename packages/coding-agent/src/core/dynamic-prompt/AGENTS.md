@@ -6,11 +6,11 @@ Fork-introduced system-prompt assembler. Replaces upstream's static `buildSystem
 
 ```
 dynamic-prompt/
-├── build.ts                # buildDynamicSystemPrompt() — assembler, public entry
+├── build.ts                # buildDynamicSystemPrompt() + BuildDynamicSystemPromptOptions — assembler, public entry
 ├── index.ts                # Public re-exports
-├── types.ts                # AvailableTool, BuildDynamicSystemPromptOptions
+├── types.ts                # AvailableTool
 ├── identity.ts             # buildIdentitySection() — senpi neutral identity
-├── intent-gate.ts          # buildIntentGateSection() — Phase 0 routing line
+├── intent-gate.ts          # buildIntentGate() — Phase 0 routing line
 ├── exploration.ts          # buildExplorationSection() — "read the code first" discipline
 ├── parallel-tools.ts       # buildParallelToolsSection() — fan-out grep/ls/read in parallel
 ├── verification.ts         # buildVerificationSection() — V1/V2/V3 verification tiers
@@ -18,7 +18,7 @@ dynamic-prompt/
 ├── tool-section.ts         # CATEGORY_ORDER + CATEGORY_LABELS for rendering
 ├── policies.ts             # Hard blocks + anti-patterns injected into every prompt
 ├── style.ts                # buildStyleSection() — output formatting + length norms
-└── changes.md              # Dense fork tracker (4 dated sections)
+└── changes.md              # Dense fork tracker (dated sections)
 ```
 
 ## WHERE TO LOOK
@@ -51,7 +51,7 @@ dynamic-prompt/
 - **Anti-leakage guard preserved**: the prompt forbids narrating "Step 0", "Thinking level", or XML tool-call examples in user-visible output. Keep this even if routing is verbalized.
 - **No coding-specific language in the default** (2026-04-11): identity is domain-agnostic. Coding-specific tuning belongs in a preset, not here.
 - **Section builders are pure functions** taking only the data they need from `BuildDynamicSystemPromptOptions` — easy to test in isolation and reuse from presets.
-- **Tool categories are fork-narrowed to 4** (chat/search/session/command). LSP and AST categories were removed (2026-04-11).
+- **Tool categories are fork-narrowed to 4** (search/session/command/other). LSP and AST categories were removed (2026-04-11).
 
 ## ANTI-PATTERNS
 
@@ -63,5 +63,5 @@ dynamic-prompt/
 ## NOTES
 
 - `buildDynamicSystemPrompt(options)` is the only public entry; presets pass `tuningSection` to layer on per-model guidance.
-- `changes.md` has 4 dated sections documenting the layered rewrite. Read it before touching `build.ts` or `intent-gate.ts`.
+- `changes.md` documents the layered rewrite in dated sections. Read it before touching `build.ts` or `intent-gate.ts`.
 - Tests live under `packages/coding-agent/test/dynamic-prompt/` and the preset suites under `test/suite/prompt-presets-*.test.ts`.

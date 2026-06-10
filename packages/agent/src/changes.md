@@ -127,8 +127,7 @@
 
 ### Files modified
 
-- `packages/agent/src/harness/session/repo/shared.ts`
-- `packages/agent/src/harness/session/storage/memory.ts`
+- `packages/agent/src/harness/session/uuid.ts` (current location; the generator originally landed in the since-restructured session repo/storage files)
 
 ### Why the extension system could not handle this
 
@@ -136,8 +135,8 @@
 
 ### Expected merge conflict zones on next upstream sync
 
-- `packages/agent/src/harness/session/repo/shared.ts` around session id creation.
-- `packages/agent/src/harness/session/storage/memory.ts` around default metadata initialization.
+- `packages/agent/src/harness/session/uuid.ts`
+- its importers `packages/agent/src/harness/session/{repo-utils,memory-storage,jsonl-storage}.ts` around session/entry id creation.
 
 ## 2026-05-11 - Harness ES2021 diagnostic compatibility
 

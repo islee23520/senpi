@@ -1,6 +1,6 @@
 # builtin/prompt-preset
 
-Builtin extension #5. On `before_agent_start` and `model_select`, picks a system prompt preset by **model family** (gpt-5.x, claude-opus-4-{5,6,7}, kimi-k2-6) and falls back to the senpi dynamic prompt when nothing matches. Renders the active preset name in the startup header. After 2026-04-30, presets are thin wrappers around `buildDynamicSystemPrompt()` carrying only model-specific tuning.
+Builtin extension #3. On `before_agent_start` and `model_select`, picks a system prompt preset by **model family** (gpt-5.x, claude-opus-4-{5,6,7}, kimi-k2-6) and falls back to the senpi dynamic prompt when nothing matches. Renders the active preset name in the startup header. After 2026-04-30, presets are thin wrappers around `buildDynamicSystemPrompt()` carrying only model-specific tuning.
 
 ## FILES
 
@@ -34,14 +34,14 @@ prompt-preset/
 ## PRESET SHAPE (post 2026-04-30)
 
 ```typescript
-export function buildGpt5_5Preset(options: BuildDynamicSystemPromptOptions): string {
-   return buildDynamicSystemPrompt({
-      ...options,
-      tuningSection: [
-         buildFileOperationsTuning(),
-         // model-specific addenda here
-      ].join("\n\n"),
-   });
+function buildGpt55Tuning(): string {
+   return `…model-specific addenda…
+
+${buildFileOperationsTuning()}`;
+}
+
+export function buildGpt55Prompt(options: BuildDynamicSystemPromptOptions): string {
+   return buildDynamicSystemPrompt({ ...options, tuningSection: buildGpt55Tuning() });
 }
 ```
 

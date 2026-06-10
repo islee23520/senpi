@@ -26,14 +26,14 @@ senpi install https://github.com/user/repo  # raw URLs work too
 senpi install /absolute/path/to/package
 senpi install ./relative/path/to/package
 
-pi remove npm:@foo/bar
-pi list                     # show installed packages from settings
-pi update                   # update pi, update packages, and reconcile pinned git refs
-pi update --extensions      # update packages and reconcile pinned git refs only
-pi update --self            # update pi only
-pi update --self --force    # reinstall pi even if current
-pi update npm:@foo/bar      # update one package
-pi update --extension npm:@foo/bar
+senpi remove npm:@foo/bar
+senpi list                     # show installed packages from settings
+senpi update                   # update senpi, update packages, and reconcile pinned git refs
+senpi update --extensions      # update packages and reconcile pinned git refs only
+senpi update --self            # update senpi only
+senpi update --self --force    # reinstall senpi even if current
+senpi update npm:@foo/bar      # update one package
+senpi update --extension npm:@foo/bar
 ```
 
 These commands manage senpi packages, not the senpi CLI installation. To uninstall senpi itself, see [Quickstart](quickstart.md#uninstall).
@@ -43,8 +43,8 @@ By default, `install` and `remove` write to global settings (`~/.senpi/agent/set
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 
 ```bash
-pi -e npm:@foo/bar
-pi -e git:github.com/user/repo
+senpi -e npm:@foo/bar
+senpi -e git:github.com/user/repo
 ```
 
 ## Package Sources
@@ -58,7 +58,7 @@ npm:@scope/pkg@1.2.3
 npm:pkg
 ```
 
-- Versioned specs are pinned and skipped by package updates (`pi update`, `pi update --extensions`).
+- Versioned specs are pinned and skipped by package updates (`senpi update`, `senpi update --extensions`).
 - Global installs use `npm install -g`.
 - Project installs go under `.senpi/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.

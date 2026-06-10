@@ -1,6 +1,6 @@
 # packages/coding-agent/src/core/extensions/builtin
 
-12 in-tree extensions. Each is the canonical answer to "can senpi do X without core changes?". Registration order matters.
+15 in-tree extensions. Each is the canonical answer to "can senpi do X without core changes?". Registration order matters.
 
 ## INVENTORY (registration order from `builtin/index.ts`)
 
@@ -18,6 +18,9 @@
 | 10 | `bash-timeout` | `bash-timeout/` | Bash tool timeout + handlers |
 | 11 | `tool-pair-guard` | `tool-pair-guard/` | Repairs orphaned tool_use/tool_result pairs (compaction safety) |
 | 12 | `compaction` | `compaction/` | Plugsuit-style speculative + emergency compaction with restoration |
+| 13 | `history-search` | `history-search/` | Cross-session transcript search overlay (indexes session files) |
+| 14 | `session-observer` | `session-observer/` | `/sessions` command — peek at previous session transcripts in a HUD |
+| 15 | `kimi-web-search` | `kimi-web-search/` | Kimi web search + fetch tools (gated by `PI_KIMI_WEB_SEARCH`) |
 
 Plus 4 **global default extensions** (resolved fast-path): `diff`, `files`, `prompt-url-widget`, `tps` (in `globalDefaultExtensionFactories`).
 
@@ -27,7 +30,7 @@ Plus 4 **global default extensions** (resolved fast-path): `diff`, `files`, `pro
 2. Add to `builtin/index.ts` import block + `builtinExtensions` array — pick registration order with intent.
 3. Add a regression test under `test/suite/<name>-extension.test.ts` using `test/suite/harness.ts`.
 4. If you modify upstream files (rare for new extensions), add a section to `<extension-dir>/changes.md`.
-5. Reach for `pi.context.*` getters; do NOT cross into `core/` directly.
+5. Reach for `ExtensionContext` getters (the `ctx` parameter of event handlers); do NOT cross into `core/` directly.
 
 ## CONVENTIONS
 
@@ -35,13 +38,13 @@ Plus 4 **global default extensions** (resolved fast-path): `diff`, `files`, `pro
 - **Single-file extensions** are kept flat (`diff.ts`, `files.ts`, `redraws.ts`, `service-tier.ts`, `tps.ts`, `prompt-url-widget.ts`).
 - **`prompt-preset/`** has per-model files (`gpt-5.5.ts`, `claude-opus-4-7.ts`, …) and a shared `file-operations.ts` tuning block. New model = new preset file + entry in `presets.ts`.
 - **`permission-system/` is a full port** of opencode's permission flow.
-- **`compaction/`** is policy-rich (`policy.ts`, `speculative.ts`, `restoration-tracker.ts`, `circuit-breaker.ts`, `degradation-monitor.ts`, `per-turn-cap.ts`, `tool-truncation.ts`, `checkpoint-state.ts`, `overflow-detection.ts`, `state.ts`, `todo-bridge.ts`). Touch only with policy tests in lock-step.
+- **`compaction/`** is policy-rich (`policy.ts`, `speculative.ts`, `restoration-tracker.ts`, `circuit-breaker.ts`, `degradation-monitor.ts`, `per-turn-cap.ts`, `tool-truncation.ts`, `checkpoint-state.ts`, `context-reduction.ts`, `openai-remote.ts`, `repair-tool-pairs.ts`, `state.ts`, `todo-bridge.ts`). Touch only with policy tests in lock-step.
 - **External versions**: `external-versions.json` pins versions of sibling `../pi-extensions` packages used as vendored builtins; refresh with `packages/coding-agent/scripts/sync-builtin-extensions.mjs`.
 
 ## ANTI-PATTERNS
 
 - Reordering `builtinExtensions` for cosmetic reasons — registration order is load-bearing for tools and permission hooks.
-- Calling `pi.context.actions.*` inside the factory body — context isn't bound yet. Do it inside an event handler.
+- Expecting context inside the factory body — `ExtensionContext` only arrives as the `ctx` parameter of event handlers. Do side effects inside `pi.on("session_start", …)`.
 - Importing from `core/` directly — extensions must use the public `pi.*` API.
 - Adding a new builtin without a regression test in `test/suite/<name>-extension.test.ts`.
 - Splitting an existing single-file extension into a folder "for symmetry" — only split when there's actual code to split.

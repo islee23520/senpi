@@ -30,6 +30,7 @@ import { getModel } from '@earendil-works/pi-ai';
 import {
   ChatPanel,
   AppStorage,
+  CustomProvidersStore,
   IndexedDBStorageBackend,
   ProviderKeysStore,
   SessionsStore,
@@ -44,6 +45,7 @@ import '@earendil-works/pi-web-ui/app.css';
 const settings = new SettingsStore();
 const providerKeys = new ProviderKeysStore();
 const sessions = new SessionsStore();
+const customProviders = new CustomProvidersStore();
 
 const backend = new IndexedDBStorageBackend({
   dbName: 'my-app',
@@ -53,14 +55,16 @@ const backend = new IndexedDBStorageBackend({
     providerKeys.getConfig(),
     sessions.getConfig(),
     SessionsStore.getMetadataConfig(),
+    customProviders.getConfig(),
   ],
 });
 
 settings.setBackend(backend);
 providerKeys.setBackend(backend);
 sessions.setBackend(backend);
+customProviders.setBackend(backend);
 
-const storage = new AppStorage(settings, providerKeys, sessions, undefined, backend);
+const storage = new AppStorage(settings, providerKeys, sessions, customProviders, backend);
 setAppStorage(storage);
 
 // Create agent
@@ -563,13 +567,15 @@ Import the pre-built CSS:
 import '@earendil-works/pi-web-ui/app.css';
 ```
 
-Or use Tailwind with custom config:
+Or build your own stylesheet with Tailwind v4:
 
 ```css
-@import '@mariozechner/mini-lit/themes/claude.css';
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "@mariozechner/mini-lit/styles/themes/claude.css";
+
+/* Tell Tailwind to scan mini-lit components */
+@source "../node_modules/@mariozechner/mini-lit/dist";
+
+@import "tailwindcss";
 ```
 
 ## Internationalization

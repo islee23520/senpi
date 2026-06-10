@@ -25,7 +25,7 @@ tool-call-middleware/
 
 | Task | File |
 |------|------|
-| Add a new text-tool protocol | `protocols/<name>.ts` + register in `index.ts` + add to `compat.toolCallFormat` enum |
+| Add a new text-tool protocol | `protocols/<name>.ts` + register in `index.ts` + extend the `ToolCallFormat` union/whitelist (see ADD A PROTOCOL step 4) |
 | Fix a parser bug | `protocols/<name>.ts` (parse step) |
 | Fix streaming partial-arg bug | `protocols/<name>.ts` (stream step) + `stream-wrapper.ts` |
 | System-prompt format for tools | `context-transformer.ts` (per-protocol prompt injector) |
@@ -36,7 +36,7 @@ tool-call-middleware/
 1. Implement `Protocol` interface in `protocols/<name>.ts` (parse, format, stream).
 2. Add system-prompt rendering for tools to `context-transformer.ts`.
 3. Export from `index.ts` and register in the protocol registry.
-4. Add `toolCallFormat: "<name>"` to the `compat` enum in `packages/ai/src/types.ts`.
+4. Add `"<name>"` to the `ToolCallFormat` union in `types.ts` (this dir), the literal whitelist in `getToolCallFormat()` in `index.ts`, and the `toolCallFormat` TypeBox union in `packages/coding-agent/src/core/model-registry.ts` (validates `~/.senpi/agent/models.json`).
 5. Add manual test command to `TESTING.md` and an automated test under `packages/ai/test/tool-call-middleware/<name>*.test.ts`.
 
 ## CONVENTIONS

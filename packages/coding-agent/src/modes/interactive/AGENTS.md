@@ -1,6 +1,6 @@
 # packages/coding-agent/src/modes/interactive
 
-The TUI mode. `interactive-mode.ts` is the orchestrator; `components/` holds the 35 in-tree TUI widgets. Most fork-modified UI changes live here.
+The TUI mode. `interactive-mode.ts` is the orchestrator; `components/` holds the 37 in-tree TUI modules. Most fork-modified UI changes live here.
 
 ## STRUCTURE
 
@@ -8,9 +8,11 @@ The TUI mode. `interactive-mode.ts` is the orchestrator; `components/` holds the
 interactive/
 ├── interactive-mode.ts          # InteractiveMode class — startup, key dispatch, status, command bar
 ├── startup-tools.ts             # fd/rg presence probe (non-blocking startup; fork-introduced)
+├── working-status.ts            # Working row text frames (shimmer animation, active-tool label)
+├── session-info-format.ts       # formatSessionInfo() — session name/cost/token stats text
 ├── theme/                       # JSON theme files (copied to dist/theme/ on build)
 ├── assets/                      # PNG splash/branding (copied to dist/assets/ on build)
-├── components/                  # 35 components — see below
+├── components/                  # 37 modules — see below
 └── changes.md                   # Fork-tracked: non-blocking tool discovery, favorite-model cycling, builtin display paths, disabled startup update checks
 ```
 
@@ -34,8 +36,10 @@ components/
 ├── keybinding-hints.ts                 # Inline cheat-sheet
 ├── login-dialog.ts / oauth-selector.ts # Auth flows
 ├── model-selector.ts                   # Ctrl+P / `/model`
+├── model-favorites.ts                  # Favorite-model id helpers (toggle/filter) used by the model selectors
 ├── favorite-models-selector.ts         # `/favorite-models` (fork-introduced)
 ├── thinking-selector.ts                # Thinking level toggle
+├── trust-selector.ts                   # Project trust prompt (trust level + auto-updates options)
 ├── extension-selector.ts / extension-editor.ts / extension-input.ts  # `/extensions` UI
 ├── settings-selector.ts                # `/settings`
 ├── theme-selector.ts                   # `/theme`

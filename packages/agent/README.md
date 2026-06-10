@@ -106,7 +106,7 @@ Tool execution mode is configurable:
 
 In parallel mode, tool completion events follow tool completion order, but persisted toolResult messages still follow assistant source order.
 
-The mode can be set globally via `toolExecution` in the agent config, or per-tool via `executionMode` on `AgentTool`. If any tool call in a batch targets a tool with `executionMode: "sequential"`, the entire batch executes sequentially regardless of the global setting.
+The mode can be set globally via `toolExecution` in the agent config, or per-tool via `executionMode` on `AgentTool`. In parallel mode, a tool call targeting a tool with `executionMode: "sequential"` runs as an exclusive barrier: it waits for all previously scheduled calls in the batch to finish, and later calls wait for it to complete. Parallel tools before or after the barrier still execute concurrently with each other.
 
 The `beforeToolCall` hook runs after `tool_execution_start` and validated argument parsing. It can block execution. The `afterToolCall` hook runs after tool execution finishes and before `tool_execution_end` and final tool result message events are emitted.
 
@@ -164,7 +164,7 @@ const agent = new Agent({
   initialState: {
     systemPrompt: string,
     model: Model<any>,
-    thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh",
+    thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max", // "max" is Anthropic-only adaptive thinking effort
     tools: AgentTool<any>[],
     messages: AgentMessage[],
   },
@@ -391,7 +391,8 @@ const readFileTool: AgentTool = {
     path: Type.String({ description: "File path" }),
   }),
   // Override execution mode for this tool (optional).
-  // "sequential" forces the entire batch to run one at a time.
+  // "sequential" makes this tool an exclusive barrier in parallel batches:
+  // it runs alone, but parallel tools before or after it still run concurrently.
   // "parallel" allows concurrent execution with other tool calls.
   // If omitted, the global toolExecution config applies.
   executionMode: "sequential",
