@@ -12,6 +12,8 @@
 
 ### Removed
 
+- Removed vestigial exports `calculateImageRows` and `isPunctuationChar`, and the unused `vitest.config.ts` (tests run via `node --test`).
+
 ## [2026.6.10] - 2026-06-10
 
 ### Breaking Changes

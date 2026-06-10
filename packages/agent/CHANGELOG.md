@@ -12,6 +12,8 @@
 
 ### Removed
 
+- Removed the unused `getOrUndefined` harness helper.
+
 ## [2026.6.10] - 2026-06-10
 
 ### Breaking Changes

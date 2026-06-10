@@ -12,6 +12,8 @@
 
 ### Removed
 
+- Removed dead exports left by earlier provider removals: `mapStopReasonString`, `getOverflowPatterns`, `getApiProviders`, and `GOOGLE_GEMINI_CLI_RESERVED_BODY_KEYS`.
+
 ## [2026.6.10] - 2026-06-10
 
 ### Breaking Changes

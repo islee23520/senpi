@@ -6,7 +6,12 @@
 
 ### Fixed
 
+- `apply_patch` now activates based on the model's API (`openai-responses`, `azure-openai-responses`, `openai-codex-responses`) instead of a provider allowlist, so OpenAI-compatible custom providers serving `gpt-*` models get the freeform patch tool, and Chat Completions models (which reject freeform tools) never do.
+- The `compaction.restorationEnabled` setting is now honored at runtime; previously the restoration tracker read a hardcoded default and could not be disabled.
+
 ### Removed
+
+- Removed dead internal modules and exports: `system-messages.ts`, compaction `overflow-detection.ts`, the `PI_EXPERIMENTAL` flag, unused tool factory functions (`createTool`, `createToolDefinition`, `createCodingToolDefinitions`, `createReadOnlyToolDefinitions`, `createAllTools`), `computeEditDiff`, `resolveHeaders`, `isLightTheme`, `RpcCommandType`, and the unwired compaction cooldown helpers.
 
 ## [2026.6.10] - 2026-06-10
 

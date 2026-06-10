@@ -12,6 +12,8 @@
 
 ### Removed
 
+- Removed the dead `test-sessions.ts` fixture module, the unregistered `CalculateRenderer`/`GetCurrentTimeRenderer` tool renderers, the unused auth-token utilities, and the unused `@earendil-works/pi-tui` dependency.
+
 ## [2026.6.10] - 2026-06-10
 
 ### Breaking Changes
