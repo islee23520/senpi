@@ -64,7 +64,6 @@
 		"@parcel/watcher",
 		"canvas",
 		"esbuild",
-		"koffi",
 		"protobufjs"
 	],
 	"pnpm": {
@@ -72,7 +71,6 @@
 			"@parcel/watcher",
 			"canvas",
 			"esbuild",
-			"koffi",
 			"protobufjs"
 		]
 	}
