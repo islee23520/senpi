@@ -286,7 +286,10 @@ describe("SettingsManager", () => {
 
 		it("should read default project trust from global settings only", () => {
 			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProjectTrust: "always" }));
-			writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ defaultProjectTrust: "never" }));
+			writeFileSync(
+				join(projectDir, CONFIG_DIR_NAME, "settings.json"),
+				JSON.stringify({ defaultProjectTrust: "never" }),
+			);
 
 			const manager = SettingsManager.create(projectDir, agentDir);
 

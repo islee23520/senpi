@@ -183,9 +183,12 @@ describe("package commands", () => {
 	});
 
 	it("uses default project trust for list", async () => {
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
+		mkdirSync(join(projectDir, CONFIG_DIR_NAME), { recursive: true });
 		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProjectTrust: "always" }));
-		writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ packages: ["npm:@project/pkg"] }));
+		writeFileSync(
+			join(projectDir, CONFIG_DIR_NAME, "settings.json"),
+			JSON.stringify({ packages: ["npm:@project/pkg"] }),
+		);
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 		try {
@@ -202,8 +205,11 @@ describe("package commands", () => {
 	});
 
 	it("uses project_trust extensions for package commands", async () => {
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
-		writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ packages: ["npm:@project/pkg"] }));
+		mkdirSync(join(projectDir, CONFIG_DIR_NAME), { recursive: true });
+		writeFileSync(
+			join(projectDir, CONFIG_DIR_NAME, "settings.json"),
+			JSON.stringify({ packages: ["npm:@project/pkg"] }),
+		);
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 		try {
@@ -228,9 +234,12 @@ describe("package commands", () => {
 	});
 
 	it("lets trust.json override default project trust", async () => {
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
+		mkdirSync(join(projectDir, CONFIG_DIR_NAME), { recursive: true });
 		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProjectTrust: "always" }));
-		writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ packages: ["npm:@project/pkg"] }));
+		writeFileSync(
+			join(projectDir, CONFIG_DIR_NAME, "settings.json"),
+			JSON.stringify({ packages: ["npm:@project/pkg"] }),
+		);
 		new ProjectTrustStore(agentDir).set(projectDir, false);
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
