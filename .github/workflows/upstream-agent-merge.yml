@@ -38,9 +38,6 @@ jobs:
     timeout-minutes: 90
     env:
       UPSTREAM_URL: https://github.com/badlogic/pi-mono.git
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MODEL_INPUT: ${{ github.event.inputs.model }}
       DEFAULT_MODEL: claude-opus-4-8
@@ -110,6 +107,9 @@ jobs:
         if: steps.detect.outputs.proceed == 'true'
         env:
           UPSTREAM_TAG: ${{ steps.detect.outputs.tag }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           if [ -z "${ANTHROPIC_API_KEY}" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]; then
             echo "::error::Neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. Add one as a repository secret."

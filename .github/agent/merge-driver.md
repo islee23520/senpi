@@ -63,18 +63,11 @@ the command. Commit the changelog updates (`docs(changelog): audit upstream <sho
 
 ### 5. Hands-on QA
 
-Verify the merged tree actually works — do not trust the merge blindly:
+Verify the merged tree actually builds and runs — do not trust the merge blindly:
 
 ```bash
 npm run build
-npm run check
-npm test
 ```
-
-If any gate fails, attempt a focused fix (the fix must stay faithful to both fork and
-upstream intent — never delete functionality to silence a type error). Re-run until green. If
-you cannot get a green tree, write `.github/agent/last-merge-report.md`, print
-`MERGE_RESULT: QA_FAILED`, and exit without leaving a broken tree staged for release.
 
 Then smoke-test the CLI from the built workspace:
 
@@ -85,6 +78,17 @@ node packages/coding-agent/dist/cli/index.js --help
 
 (Use the actual built entrypoint if the path differs — locate it under
 `packages/coding-agent/dist`.)
+
+Do NOT run `npm test` or the full `npm run check` here: provider API keys are present in this
+step's environment, which would activate live end-to-end tests against real model endpoints.
+The workflow runs the authoritative `build` + `check` + `test` gate in a credential-free step
+right after you finish, so those live tests skip there. Your job is to confirm the merge
+compiles and the CLI starts.
+
+If the build or smoke test fails, attempt a focused fix (the fix must stay faithful to both
+fork and upstream intent — never delete functionality to silence a type error). Re-run until
+green. If you cannot get a building tree, write `.github/agent/last-merge-report.md`, print
+`MERGE_RESULT: QA_FAILED`, and exit without leaving a broken tree staged for release.
 
 ### 6. Finish
 
