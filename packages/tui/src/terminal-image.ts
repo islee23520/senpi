@@ -347,7 +347,7 @@ export function getGifDimensions(base64Data: string): ImageDimensions | null {
 			return null;
 		}
 
-		const sig = buffer.slice(0, 6).toString("ascii");
+		const sig = buffer.subarray(0, 6).toString("ascii");
 		if (sig !== "GIF87a" && sig !== "GIF89a") {
 			return null;
 		}
@@ -369,13 +369,13 @@ export function getWebpDimensions(base64Data: string): ImageDimensions | null {
 			return null;
 		}
 
-		const riff = buffer.slice(0, 4).toString("ascii");
-		const webp = buffer.slice(8, 12).toString("ascii");
+		const riff = buffer.subarray(0, 4).toString("ascii");
+		const webp = buffer.subarray(8, 12).toString("ascii");
 		if (riff !== "RIFF" || webp !== "WEBP") {
 			return null;
 		}
 
-		const chunk = buffer.slice(12, 16).toString("ascii");
+		const chunk = buffer.subarray(12, 16).toString("ascii");
 		if (chunk === "VP8 ") {
 			if (buffer.length < 30) return null;
 			const width = buffer.readUInt16LE(26) & 0x3fff;
