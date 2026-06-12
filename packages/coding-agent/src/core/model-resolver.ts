@@ -350,9 +350,10 @@ export interface ResolveCliModelResult {
 export function resolveCliModel(options: {
 	cliProvider?: string;
 	cliModel?: string;
+	cliThinking?: string;
 	modelRegistry: ModelRegistry;
 }): ResolveCliModelResult {
-	const { cliProvider, cliModel, modelRegistry } = options;
+	const { cliProvider, cliModel, cliThinking, modelRegistry } = options;
 
 	if (!cliModel) {
 		return { model: undefined, warning: undefined, error: undefined };
@@ -457,14 +458,30 @@ export function resolveCliModel(options: {
 	}
 
 	if (provider) {
-		const fallbackModel = buildFallbackModel(provider, pattern, availableModels);
+		// Parse thinking level suffix from the pattern before building the fallback model,
+		// but only when --thinking is not explicitly provided.
+		// e.g. "zai-org/GLM-5.1-FP8:high" → modelId="zai-org/GLM-5.1-FP8", fallbackThinking="high"
+		let fallbackPattern = pattern;
+		let fallbackThinking: ThinkingLevel | undefined;
+		if (!cliThinking) {
+			const lastColon = pattern.lastIndexOf(":");
+			if (lastColon !== -1) {
+				const suffix = pattern.substring(lastColon + 1);
+				if (isValidThinkingLevel(suffix)) {
+					fallbackPattern = pattern.substring(0, lastColon);
+					fallbackThinking = suffix;
+				}
+			}
+		}
+
+		const fallbackModel = buildFallbackModel(provider, fallbackPattern, availableModels);
 		if (fallbackModel) {
 			const fallbackWarning = warning
-				? `${warning} Model "${pattern}" not found for provider "${provider}". Using custom model id.`
-				: `Model "${pattern}" not found for provider "${provider}". Using custom model id.`;
+				? `${warning} Model "${fallbackPattern}" not found for provider "${provider}". Using custom model id.`
+				: `Model "${fallbackPattern}" not found for provider "${provider}". Using custom model id.`;
 			return {
 				model: fallbackModel,
-				thinkingLevel: undefined,
+				thinkingLevel: fallbackThinking,
 				serviceTier,
 				warning: fallbackWarning,
 				error: undefined,

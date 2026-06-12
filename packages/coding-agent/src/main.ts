@@ -14,7 +14,7 @@ import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
 import { createProjectTrustContext } from "./cli/project-trust.ts";
 import { selectSession } from "./cli/session-picker.ts";
-import { showStartupSelector } from "./cli/startup-ui.ts";
+import { shouldRunFirstTimeSetup, showFirstTimeSetup, showStartupSelector } from "./cli/startup-ui.ts";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
@@ -365,6 +365,7 @@ function buildSessionOptions(
 		const resolved = resolveCliModel({
 			cliProvider: parsed.provider,
 			cliModel: parsed.model,
+			cliThinking: parsed.thinking,
 			modelRegistry,
 		});
 		if (resolved.warning) {
@@ -564,6 +565,13 @@ export async function main(args: string[], options?: MainOptions) {
 		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
 		await listModels(services.modelRegistry, searchPattern);
 		process.exit(0);
+	}
+
+	// Experimental first-time setup: theme choice and analytics opt-in.
+	// Runs before any runtime services are created so the chosen settings apply everywhere.
+	if (appMode === "interactive" && !parsed.help && parsed.listModels === undefined && shouldRunFirstTimeSetup()) {
+		await showFirstTimeSetup(startupSettingsManager);
+		time("firstTimeSetup");
 	}
 
 	// Decide the final runtime cwd before creating cwd-bound runtime services.
