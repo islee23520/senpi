@@ -16,7 +16,7 @@
  *      trailing newline). `npm version` is intentionally NOT used; the `-N` suffix on
  *      same-day re-releases looks like a prerelease tag to npm.
  *   4. Run `scripts/sync-versions.js` to propagate the new version to source
- *      inter-package deps.
+ *      inter-package deps, then refresh `package-lock.json`.
  *   5. Regenerate AI model artifacts and `packages/coding-agent/npm-shrinkwrap.json`.
  *   6. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
  *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
@@ -229,6 +229,15 @@ function runShrinkwrap(dryRun) {
 	runCommand("node", ["scripts/generate-coding-agent-shrinkwrap.mjs"]);
 }
 
+function runPackageLockRefresh(dryRun) {
+	if (dryRun) {
+		dryRunLog("npm install --package-lock-only --ignore-scripts");
+		return;
+	}
+	log("npm install --package-lock-only --ignore-scripts");
+	runCommand("npm", ["install", "--package-lock-only", "--ignore-scripts"]);
+}
+
 function runCheck(dryRun) {
 	if (dryRun) {
 		dryRunLog("npm run check");
@@ -257,6 +266,7 @@ function main() {
 
 	applyWorkspaceVersions(version, args.dryRun, log, dryRunLog);
 	runSyncVersions(args.dryRun, runCommand, log, dryRunLog);
+	runPackageLockRefresh(args.dryRun);
 	runGenerateModels(args.dryRun);
 	runGenerateImageModels(args.dryRun);
 	runShrinkwrap(args.dryRun);
