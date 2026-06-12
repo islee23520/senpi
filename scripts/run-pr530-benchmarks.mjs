@@ -9,6 +9,7 @@ const BENCHES = {
 	"tui-editor": "packages/tui/bench/editor-layout.ts",
 	"tui-markdown": "packages/tui/bench/markdown-render.ts",
 	"coding-agent-render-transcript": "packages/coding-agent/bench/render-transcript.ts",
+	"coding-agent-bash-output": "packages/coding-agent/bench/bash-output.ts",
 };
 
 function parseArgs(argv) {
