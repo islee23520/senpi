@@ -470,6 +470,7 @@ export interface ToolRenderContext<TState = any, TArgs = any> {
 	showImages: boolean;
 	/** Whether the current result is an error. */
 	isError: boolean;
+	spinnerFrame?: number;
 }
 
 /**

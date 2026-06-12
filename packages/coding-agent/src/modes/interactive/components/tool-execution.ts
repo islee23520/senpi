@@ -19,6 +19,7 @@ type ToolExecutionResult = Omit<AgentToolResult<unknown>, "details"> & {
 
 const FALLBACK_STRING_MAX_LENGTH = 160;
 const FALLBACK_JSON_MAX_LENGTH = 2000;
+const PENDING_RENDER_FRAME_INTERVAL_MS = 80;
 
 function sanitizeFallbackString(value: string, maxLength = FALLBACK_STRING_MAX_LENGTH): string {
 	const sanitized = stripAnsi(value)
@@ -63,6 +64,8 @@ export class ToolExecutionComponent extends Container {
 	private cwd: string;
 	private executionStarted = false;
 	private argsComplete = false;
+	private spinnerFrame?: number;
+	private spinnerInterval?: NodeJS.Timeout;
 	private result?: ToolExecutionResult;
 	private convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
 	private hideComponent = false;
@@ -102,6 +105,7 @@ export class ToolExecutionComponent extends Container {
 			this.addChild(this.contentText);
 		}
 
+		this.updateSpinnerAnimation();
 		this.updateDisplay();
 	}
 
@@ -156,6 +160,7 @@ export class ToolExecutionComponent extends Container {
 			expanded: this.expanded,
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
+			spinnerFrame: this.spinnerFrame,
 		};
 	}
 
@@ -173,17 +178,20 @@ export class ToolExecutionComponent extends Container {
 
 	updateArgs(args: any): void {
 		this.args = args;
+		this.updateSpinnerAnimation();
 		this.updateDisplay();
 	}
 
 	markExecutionStarted(): void {
 		this.executionStarted = true;
+		this.updateSpinnerAnimation();
 		this.updateDisplay();
 		this.ui.requestRender();
 	}
 
 	setArgsComplete(): void {
 		this.argsComplete = true;
+		this.updateSpinnerAnimation();
 		this.updateDisplay();
 		this.ui.requestRender();
 	}
@@ -191,8 +199,16 @@ export class ToolExecutionComponent extends Container {
 	updateResult(result: ToolExecutionResult, isPartial = false): void {
 		this.result = result;
 		this.isPartial = isPartial;
+		if (!isPartial) {
+			this.argsComplete = true;
+		}
+		this.updateSpinnerAnimation();
 		this.updateDisplay();
 		this.maybeConvertImagesForKitty();
+	}
+
+	stopAnimation(): void {
+		this.stopSpinnerAnimation();
 	}
 
 	private maybeConvertImagesForKitty(): void {
@@ -434,9 +450,45 @@ export class ToolExecutionComponent extends Container {
 			isPartial: this.isPartial,
 			result: this.result,
 			showImages: this.showImages,
+			spinnerFrame: this.spinnerFrame,
 			toolCallId: this.toolCallId,
 			toolName: this.toolName,
 		});
+	}
+
+	private updateSpinnerAnimation(): void {
+		const isStreamingArgs =
+			!this.argsComplete &&
+			(this.toolName === "edit" || this.toolName === "write" || this.toolName === "apply_patch");
+		const isPartialTask = this.isPartial && this.toolName === "task" && this.result !== undefined;
+		if (isStreamingArgs || isPartialTask) {
+			this.startSpinnerAnimation();
+			return;
+		}
+		this.stopSpinnerAnimation();
+	}
+
+	private startSpinnerAnimation(): void {
+		if (this.spinnerInterval) {
+			return;
+		}
+		this.spinnerInterval = setInterval(() => {
+			this.spinnerFrame = ((this.spinnerFrame ?? -1) + 1) % 10;
+			this.invalidateRenderCache();
+			this.updateDisplay();
+			this.ui.requestRender();
+		}, PENDING_RENDER_FRAME_INTERVAL_MS);
+		this.spinnerInterval.unref?.();
+	}
+
+	private stopSpinnerAnimation(): void {
+		if (!this.spinnerInterval) {
+			return;
+		}
+		clearInterval(this.spinnerInterval);
+		this.spinnerInterval = undefined;
+		this.spinnerFrame = undefined;
+		this.invalidateRenderCache();
 	}
 
 	private invalidateRenderCache(): void {
