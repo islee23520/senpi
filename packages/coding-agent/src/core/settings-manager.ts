@@ -1,4 +1,5 @@
 import type { Transport } from "@earendil-works/pi-ai";
+import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
@@ -108,6 +109,8 @@ export interface Settings {
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
 	enableInstallTelemetry?: boolean; // default: true - anonymous version/update ping after changelog-detected updates
+	enableAnalytics?: boolean; // default: false - opt-in analytics data sharing
+	trackingId?: string; // analytics tracking identifier, generated when analytics is enabled
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
 	enabledBuiltinExtensions?: string[]; // Optional allowlist of builtin extension ids to load (default: all)
 	disabledBuiltinExtensions?: string[]; // Builtin extension ids to skip loading
@@ -947,6 +950,25 @@ export class SettingsManager {
 	setEnableInstallTelemetry(enabled: boolean): void {
 		this.globalSettings.enableInstallTelemetry = enabled;
 		this.markModified("enableInstallTelemetry");
+		this.save();
+	}
+
+	getEnableAnalytics(): boolean {
+		return this.settings.enableAnalytics ?? false;
+	}
+
+	getTrackingId(): string | undefined {
+		return this.settings.trackingId;
+	}
+
+	/** Set the analytics opt-in preference; generates a tracking identifier on first opt-in */
+	setEnableAnalytics(enabled: boolean): void {
+		this.globalSettings.enableAnalytics = enabled;
+		this.markModified("enableAnalytics");
+		if (enabled && !this.globalSettings.trackingId) {
+			this.globalSettings.trackingId = randomUUID();
+			this.markModified("trackingId");
+		}
 		this.save();
 	}
 
