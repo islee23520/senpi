@@ -6,6 +6,10 @@
 
 - Added JSONL parse and RPC event emission benchmark harnesses.
 
+### Changed
+
+- Models registry Anthropic compatibility config now accepts `supportsToolChoice` and `supportsForcedToolChoice` flags.
+
 ### Fixed
 
 ### Removed
