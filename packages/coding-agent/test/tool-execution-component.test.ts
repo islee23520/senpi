@@ -31,6 +31,12 @@ function createFakeTui(): TUI {
 	} as TUI;
 }
 
+function createFakeTuiWithRenderSpy(requestRender: () => void): TUI {
+	return {
+		requestRender,
+	} as TUI;
+}
+
 const markerTheme = {
 	fg: (name: string, text: string) => `<fg:${name}>${text}</fg:${name}>`,
 	bg: (name: string, text: string) => `<bg:${name}>${text}</bg:${name}>`,
@@ -104,6 +110,46 @@ describe("ToolExecutionComponent parity", () => {
 		);
 
 		expect(component.render(120)).toEqual([]);
+	});
+
+	test("advances pending render frames for self-rendered write calls while args stream", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const toolDefinition: ToolDefinition = {
+				...createBaseToolDefinition("write"),
+				renderShell: "self",
+				renderCall: (_args, _theme, context) => {
+					const frame = Reflect.get(context, "spinnerFrame");
+					return new Text(`waiting frame:${String(frame ?? "none")}`, 0, 0);
+				},
+			};
+
+			const component = new ToolExecutionComponent(
+				"write",
+				"tool-pending-write-frame",
+				{ path: "notes.txt", content: "partial" },
+				{},
+				toolDefinition,
+				createFakeTuiWithRenderSpy(requestRender),
+				process.cwd(),
+			);
+
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("waiting frame:none");
+
+			vi.advanceTimersByTime(90);
+
+			expect(requestRender).toHaveBeenCalled();
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("waiting frame:0");
+
+			component.setArgsComplete();
+			requestRender.mockClear();
+			vi.advanceTimersByTime(90);
+
+			expect(requestRender).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	test("uses built-in rendering for built-in overrides without custom renderers", () => {
