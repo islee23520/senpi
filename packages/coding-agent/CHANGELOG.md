@@ -10,6 +10,7 @@
 ### Fixed
 
 - Improved large bash output retention by using a head-indexed rolling buffer and a compact tail window for streaming output snapshots.
+- Restored pending tool-call wait rendering during thinking updates and stopped stale pending animations after the interactive display clears.
 
 ### Removed
 
