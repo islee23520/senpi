@@ -107,6 +107,10 @@ PRs that bloat the core or skip `changes.md` will be asked to convert to an exte
 - Match the style of the surrounding file. The codebase is largely consistent — Biome plus the existing patterns are the source of truth.
 - Use the path aliases defined in root `tsconfig.json` (`@earendil-works/pi-*`, `@code-yeongyu/senpi*`).
 
+### Why are weekend issues lower priority?
+
+We triage the tracker during working hours. That means more issues can accumulate over the weekend. Anything submitted Friday through Sunday may be missed or given lower priority in the Monday review queue. If a problem is urgent, ask on Discord and include the short version, a repro, and the relevant logs.
+
 ## Trademark and Brand References
 
 Use third-party marks only to identify integrations, compatibility, providers, and required setup. Do not make senpi look endorsed by another project or vendor.

@@ -20,7 +20,6 @@ describe("ModelRegistry", () => {
 		mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = join(tempDir, "models.json");
 		authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		clearDeprecationWarningsForTests();
 	});
 
 	afterEach(() => {
@@ -1019,26 +1018,55 @@ describe("ModelRegistry", () => {
 			expect(registry.getProviderDisplayName("oauth-provider")).toBe("OAuth Provider");
 		});
 
-		test("registerProvider warns and temporarily treats uppercase apiKey as an env reference", async () => {
-			const originalEnv = process.env.CUSTOM_NAME;
-			process.env.CUSTOM_NAME = "legacy-env-key";
+		test("registerProvider treats uppercase apiKey and headers as literals", async () => {
+			const envKeys = ["CUSTOM_NAME", "BEARER", "MODEL_TOKEN"];
+			const savedEnv: Record<string, string | undefined> = {};
+			for (const key of envKeys) {
+				savedEnv[key] = process.env[key];
+				process.env[key] = `env-${key}`;
+			}
 			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
 			try {
 				const registry = ModelRegistry.create(authStorage, modelsJsonPath);
 
-				registry.registerProvider("legacy-provider", {
+				registry.registerProvider("literal-provider", {
 					...providerConfig("https://provider.test/v1", [{ id: "demo-model" }], "openai-completions"),
 					apiKey: "CUSTOM_NAME",
+					headers: { Authorization: "BEARER" },
+					models: [
+						{
+							id: "demo-model",
+							name: "demo-model",
+							reasoning: false,
+							input: ["text"],
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							contextWindow: 100000,
+							maxTokens: 8000,
+							headers: { "x-model-token": "MODEL_TOKEN" },
+						},
+					],
 				});
 
-				expect(await registry.getApiKeyForProvider("legacy-provider")).toBe("legacy-env-key");
-				expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Pass "$CUSTOM_NAME" instead'));
+				expect(await registry.getApiKeyForProvider("literal-provider")).toBe("CUSTOM_NAME");
+				const model = registry.find("literal-provider", "demo-model");
+				expect(model).toBeDefined();
+				expect(await registry.getApiKeyAndHeaders(model!)).toMatchObject({
+					ok: true,
+					apiKey: "CUSTOM_NAME",
+					headers: {
+						Authorization: "BEARER",
+						"x-model-token": "MODEL_TOKEN",
+					},
+				});
+				expect(warnSpy).not.toHaveBeenCalled();
 			} finally {
-				if (originalEnv === undefined) {
-					delete process.env.CUSTOM_NAME;
-				} else {
-					process.env.CUSTOM_NAME = originalEnv;
+				for (const key of envKeys) {
+					if (savedEnv[key] === undefined) {
+						delete process.env[key];
+					} else {
+						process.env[key] = savedEnv[key];
+					}
 				}
 			}
 		});

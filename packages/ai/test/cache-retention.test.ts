@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { MODELS } from "../src/models.generated.ts";
 import { getModel } from "../src/models.ts";
 import { streamAnthropic } from "../src/providers/anthropic.ts";
 import { streamOpenAICompletions } from "../src/providers/openai-completions.ts";
@@ -8,6 +9,25 @@ import type { Context, Model } from "../src/types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
+}
+
+class PayloadCaptured extends Error {
+	constructor() {
+		super("payload captured");
+		this.name = "PayloadCaptured";
+	}
+}
+
+function stopAfterPayload<TPayload>(capture: (payload: TPayload) => void): (payload: unknown) => never {
+	return (payload: unknown): never => {
+		capture(payload as TPayload);
+		throw new PayloadCaptured();
+	};
+}
+
+interface OpenAICompletionsCachePayload {
+	prompt_cache_key?: string;
+	prompt_cache_retention?: string;
 }
 
 describe("Cache Retention (PI_CACHE_RETENTION)", () => {
@@ -545,6 +565,40 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 				prompt_cache_key: "model-completions-session",
 				prompt_cache_retention: "24h",
 			});
+		});
+
+		it.each([
+			MODELS.opencode["deepseek-v4-flash"],
+			MODELS.opencode["deepseek-v4-pro"],
+			MODELS.opencode["kimi-k2.5"],
+			MODELS.opencode["kimi-k2.6"],
+			MODELS.opencode["minimax-m2.7"],
+			MODELS["opencode-go"]["kimi-k2.6"],
+		] as const)("should omit long cache retention for $provider/$id", async (metadata) => {
+			const model = metadata as Model<"openai-completions">;
+			let capturedPayload: OpenAICompletionsCachePayload | undefined;
+
+			try {
+				const s = streamOpenAICompletions(model, context, {
+					apiKey: "fake-key",
+					cacheRetention: "long",
+					sessionId: "session-opencode-long-cache-unsupported",
+					onPayload: stopAfterPayload<OpenAICompletionsCachePayload>((payload) => {
+						capturedPayload = payload;
+					}),
+				});
+
+				for await (const event of s) {
+					if (event.type === "error") break;
+				}
+			} catch {
+				// Expected to fail
+			}
+
+			expect(model.compat?.supportsLongCacheRetention).toBe(false);
+			expect(capturedPayload).toBeDefined();
+			expect(capturedPayload?.prompt_cache_key).toBeUndefined();
+			expect(capturedPayload?.prompt_cache_retention).toBeUndefined();
 		});
 	});
 });

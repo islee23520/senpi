@@ -6,6 +6,8 @@
 
 ### Added
 
+- Added terminal background color query support for OSC 11 replies.
+
 ### Changed
 
 ### Fixed

@@ -161,7 +161,7 @@ The `apiKey` and `headers` fields support command execution, environment interpo
   "apiKey": "$$literal-dollar-prefix"
   "apiKey": "$!literal-bang-prefix"
   ```
-- **Literal value:** Used directly
+- **Literal value:** Used directly. Plain uppercase strings such as `MY_API_KEY` are literals; use `$MY_API_KEY` for environment variables.
   ```json
   "apiKey": "sk-..."
   ```

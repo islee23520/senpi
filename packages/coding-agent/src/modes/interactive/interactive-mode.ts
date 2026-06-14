@@ -134,6 +134,7 @@ import { UserMessageSelectorComponent } from "./components/user-message-selector
 import { formatSessionInfo } from "./session-info-format.ts";
 import { resolveStartupToolPaths } from "./startup-tools.ts";
 import {
+	detectTerminalBackgroundTheme,
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
 	getEditorTheme,
@@ -516,6 +517,25 @@ export class InteractiveMode {
 		initTheme(this.settingsManager.getTheme(), true);
 	}
 
+	private async detectThemeIfUnset(): Promise<void> {
+		if (this.settingsManager.getTheme()) {
+			return;
+		}
+
+		const detection = await detectTerminalBackgroundTheme({ ui: this.ui, timeoutMs: 100 });
+		const result = setTheme(detection.theme, true);
+		if (!result.success) {
+			return;
+		}
+
+		if (detection.confidence === "high") {
+			this.settingsManager.setTheme(detection.theme);
+			await this.settingsManager.flush();
+		}
+		this.updateEditorBorderColor();
+		this.ui.requestRender();
+	}
+
 	private getAutocompleteSourceTag(sourceInfo?: SourceInfo): string | undefined {
 		if (!sourceInfo) {
 			return undefined;
@@ -716,8 +736,27 @@ export class InteractiveMode {
 			console.log(theme.fg("dim", `Model scope: ${modelList}${cycleHint}`));
 		}
 
-		// Add header container as first child
+		// Add header container as first child. Populate it after detectThemeIfUnset.
 		this.ui.addChild(this.headerContainer);
+
+		this.ui.addChild(this.chatContainer);
+		this.ui.addChild(this.pendingMessagesContainer);
+		this.ui.addChild(this.statusContainer);
+		this.renderWidgets(); // Initialize with default spacer
+		this.ui.addChild(this.widgetContainerAbove);
+		this.ui.addChild(this.editorContainer);
+		this.ui.addChild(this.widgetContainerBelow);
+		this.ui.addChild(this.footer);
+		this.ui.setFocus(this.editor);
+
+		this.setupKeyHandlers();
+		this.setupEditorSubmitHandler();
+
+		// Start the UI before initializing extensions so session_start handlers can use interactive dialogs
+		this.ui.start();
+		this.isInitialized = true;
+
+		await this.detectThemeIfUnset();
 
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
