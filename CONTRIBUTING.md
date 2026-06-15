@@ -2,6 +2,14 @@
 
 senpi is an opinionated fork of [badlogic/pi-mono](https://github.com/badlogic/pi-mono). This guide covers the fork-specific contribution rules. For the upstream contribution culture, see pi-mono's [CONTRIBUTING.md](https://github.com/badlogic/pi-mono/blob/main/CONTRIBUTING.md).
 
+## Philosophy
+
+First things first: **pi's core is minimal**.
+
+If your feature does not belong in the core, it should be an extension. PRs that bloat the core will likely be rejected.
+
+Pi's core exists to be minimal and to be extensible so that it can be influenced and manipulated by extensions.  Even hook points for extensions however should be well considered and discussed to avoid adding unmaintainable bloat and complex interactions.
+
 ## The One Rule
 
 **You must understand your code.** If you cannot explain what your changes do and how they interact with the rest of the system, your PR will be closed.
@@ -85,6 +93,7 @@ This still applies. The release script will surface `[Unreleased]` entries; main
 If you open an issue:
 
 - Keep it concise. If it does not fit on one screen, it is too long.
+- Write in your own voice. If you use an LLM to draft text, follow up with a clearly AI-labeled comment.
 - State the bug or request clearly.
 - Explain why it matters.
 - Include a repro (minimal reproduction or exact command + observed vs expected).
