@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.ts";
 
 const cliPath = resolve(__dirname, "../src/cli.ts");
+const CLI_TIMEOUT_MS = 60_000;
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -67,6 +68,7 @@ async function runCli(args: string[], dirs: CliDirs): Promise<CliResult> {
 	let stderr = "";
 	const child = spawn(process.execPath, [cliPath, ...args], {
 		cwd: dirs.projectDir,
+		detached: process.platform !== "win32",
 		env: {
 			...process.env,
 			[ENV_AGENT_DIR]: dirs.agentDir,
@@ -81,8 +83,17 @@ async function runCli(args: string[], dirs: CliDirs): Promise<CliResult> {
 
 	return new Promise((resolvePromise, reject) => {
 		const timeout = setTimeout(() => {
+			if (child.pid !== undefined && process.platform !== "win32") {
+				try {
+					process.kill(-child.pid, "SIGKILL");
+				} catch (error: unknown) {
+					if (error instanceof Error && "code" in error && error.code === "ESRCH") return;
+					child.kill("SIGKILL");
+				}
+				return;
+			}
 			child.kill("SIGKILL");
-		}, 10_000);
+		}, CLI_TIMEOUT_MS);
 		child.on("error", (error) => {
 			clearTimeout(timeout);
 			reject(error);

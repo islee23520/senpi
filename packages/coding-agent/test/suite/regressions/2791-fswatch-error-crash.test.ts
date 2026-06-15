@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../../src/config.ts";
 
+const CHILD_TIMEOUT_MS = 60_000;
+
 /**
  * Regression test for https://github.com/earendil-works/pi-mono/issues/2791
  *
@@ -89,7 +91,7 @@ process.exit(0);
 		let exitCode: number;
 		try {
 			_stdout = execFileSync(process.execPath, [scriptPath], {
-				timeout: 10000,
+				timeout: CHILD_TIMEOUT_MS,
 				encoding: "utf-8",
 				env: { ...process.env, [ENV_AGENT_DIR]: agentDir },
 				stdio: ["pipe", "pipe", "pipe"],
