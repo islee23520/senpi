@@ -32,6 +32,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { parseJsonWithRepair, parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { isForcedToolChoiceUnsupportedError, omitToolChoiceParam } from "../utils/tool-choice-fallback.ts";
 
 import { resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
@@ -304,6 +305,10 @@ function stringRecord(value: unknown): Record<string, string> | undefined {
 	}
 
 	return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function isForcedAnthropicToolChoice(toolChoice: MessageCreateParamsStreaming["tool_choice"] | undefined): boolean {
+	return isRecord(toolChoice) && (toolChoice.type === "any" || toolChoice.type === "tool");
 }
 
 function extractPayloadRequestMetadata(params: MessageCreateParamsStreaming): {
@@ -772,7 +777,17 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 				maxRetries: options?.maxRetries ?? 0,
 				...(payloadRequestMetadata.headers ? { headers: payloadRequestMetadata.headers } : {}),
 			};
-			const response = await client.messages.create({ ...params, stream: true }, requestOptions).asResponse();
+			let response: Response;
+			try {
+				response = await client.messages.create({ ...params, stream: true }, requestOptions).asResponse();
+			} catch (error) {
+				if (isForcedToolChoiceUnsupportedError(error, isForcedAnthropicToolChoice(params.tool_choice))) {
+					params = omitToolChoiceParam(params);
+					response = await client.messages.create({ ...params, stream: true }, requestOptions).asResponse();
+				} else {
+					throw error;
+				}
+			}
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			stream.push({ type: "start", partial: output });
 

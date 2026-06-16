@@ -34,6 +34,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
+import { isForcedToolChoiceUnsupportedError, omitToolChoiceParam } from "../utils/tool-choice-fallback.ts";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
@@ -109,6 +110,12 @@ function getOpenRouterRawMetadata(error: unknown): string | undefined {
 	if (!isRecord(error) || !isRecord(error.error) || !isRecord(error.error.metadata)) return undefined;
 	const rawMetadata = error.error.metadata.raw;
 	return typeof rawMetadata === "string" ? rawMetadata : undefined;
+}
+
+function isForcedOpenAICompletionsToolChoice(
+	toolChoice: OpenAICompletionsRequestParams["tool_choice"] | undefined,
+): boolean {
+	return toolChoice !== undefined && toolChoice !== "auto" && toolChoice !== "none";
 }
 
 export interface OpenAICompletionsOptions extends StreamOptions {
@@ -198,7 +205,20 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 				body: OpenAICompletionsRequestParams,
 				requestConfig: typeof requestOptions,
 			) => { withResponse(): Promise<{ data: AsyncIterable<ChatCompletionChunk>; response: Response }> };
-			const { data: openaiStream, response } = await createChatCompletion(params, requestOptions).withResponse();
+			const createStream = (body: OpenAICompletionsRequestParams) =>
+				createChatCompletion(body, requestOptions).withResponse();
+			let completionResponse: Awaited<ReturnType<typeof createStream>>;
+			try {
+				completionResponse = await createStream(params);
+			} catch (error) {
+				if (isForcedToolChoiceUnsupportedError(error, isForcedOpenAICompletionsToolChoice(params.tool_choice))) {
+					params = omitToolChoiceParam(params);
+					completionResponse = await createStream(params);
+				} else {
+					throw error;
+				}
+			}
+			const { data: openaiStream, response } = completionResponse;
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			stream.push({ type: "start", partial: output });
 

@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed Anthropic and OpenAI-compatible streaming requests to retry forced `tool_choice` 400 capability errors once without forcing a tool while preserving tools.
+
 ### Removed
 
 ## [2026.6.15] - 2026-06-15

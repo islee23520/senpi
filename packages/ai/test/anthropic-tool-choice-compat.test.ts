@@ -8,8 +8,16 @@ interface AnthropicToolChoicePayload {
 	tool_choice?: unknown;
 }
 
-const mockState = vi.hoisted(() => ({
-	createParams: undefined as AnthropicToolChoicePayload | undefined,
+interface AnthropicMockState {
+	createParams: AnthropicToolChoicePayload | undefined;
+	createCalls: AnthropicToolChoicePayload[];
+	createErrors: Error[];
+}
+
+const mockState = vi.hoisted<AnthropicMockState>(() => ({
+	createParams: undefined,
+	createCalls: [],
+	createErrors: [],
 }));
 
 vi.mock("@anthropic-ai/sdk", () => {
@@ -40,8 +48,15 @@ vi.mock("@anthropic-ai/sdk", () => {
 		messages = {
 			create: (params: AnthropicToolChoicePayload) => {
 				mockState.createParams = params;
+				mockState.createCalls.push(params);
+				const createError = mockState.createErrors.shift();
 				return {
-					asResponse: async () => createSseResponse(),
+					asResponse: async () => {
+						if (createError) {
+							throw createError;
+						}
+						return createSseResponse();
+					},
 				};
 			},
 		};
@@ -71,6 +86,15 @@ function withPayloadCapture(model: Model<"anthropic-messages">): Model<"anthropi
 	return { ...model, baseUrl: "http://127.0.0.1:9" };
 }
 
+class HttpStatusError extends Error {
+	readonly status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.status = status;
+	}
+}
+
 async function capturePayload(
 	model: Model<"anthropic-messages">,
 	toolChoice: "auto" | "any" | "none" | { type: "tool"; name: string },
@@ -92,6 +116,8 @@ async function capturePayload(
 describe("Anthropic tool_choice compatibility", () => {
 	beforeEach(() => {
 		mockState.createParams = undefined;
+		mockState.createCalls.length = 0;
+		mockState.createErrors.length = 0;
 	});
 
 	it("omits forced any tool_choice for Claude Fable while preserving tools", async () => {
@@ -126,6 +152,22 @@ describe("Anthropic tool_choice compatibility", () => {
 
 		expect(payload.tools).toHaveLength(1);
 		expect(payload.tool_choice).toEqual({ type: "tool", name: "get_weather" });
+	});
+
+	it("retries forced named tool_choice 400 once without tool_choice", async () => {
+		mockState.createErrors.push(
+			new HttpStatusError(400, "tool_choice forces tool use is not compatible with this model"),
+		);
+
+		const response = await streamAnthropic(withPayloadCapture(getModel("anthropic", "claude-sonnet-4-6")), context, {
+			apiKey: "fake-key",
+			toolChoice: { type: "tool", name: "get_weather" },
+		}).result();
+
+		expect(response.stopReason).toBe("stop");
+		expect(mockState.createCalls).toHaveLength(2);
+		expect(mockState.createCalls[0]?.tool_choice).toEqual({ type: "tool", name: "get_weather" });
+		expect(mockState.createCalls[1]?.tool_choice).toBeUndefined();
 	});
 
 	it("omits forced tool_choice when compat.supportsForcedToolChoice is false regardless of model id", async () => {

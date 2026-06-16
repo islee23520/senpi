@@ -5,20 +5,29 @@ import { convertMessages } from "../src/providers/openai-completions.ts";
 import { stream, streamSimple } from "../src/stream.ts";
 import type { AssistantMessage, Model, Tool, ToolResultMessage } from "../src/types.ts";
 
-const mockState = vi.hoisted(() => ({
-	lastParams: undefined as unknown,
-	chunks: undefined as
-		| Array<null | {
-				id?: string;
-				choices?: Array<{ delta: Record<string, unknown>; finish_reason: string | null; usage?: unknown }>;
-				usage?: {
-					prompt_tokens: number;
-					completion_tokens: number;
-					prompt_tokens_details: { cached_tokens: number; cache_write_tokens?: number };
-					completion_tokens_details: { reasoning_tokens: number };
-				};
-		  }>
-		| undefined,
+type MockChunk = null | {
+	id?: string;
+	choices?: Array<{ delta: Record<string, unknown>; finish_reason: string | null; usage?: unknown }>;
+	usage?: {
+		prompt_tokens: number;
+		completion_tokens: number;
+		prompt_tokens_details: { cached_tokens: number; cache_write_tokens?: number };
+		completion_tokens_details: { reasoning_tokens: number };
+	};
+};
+
+interface OpenAIMockState {
+	lastParams: unknown | undefined;
+	calls: unknown[];
+	createErrors: Error[];
+	chunks: MockChunk[] | undefined;
+}
+
+const mockState = vi.hoisted<OpenAIMockState>(() => ({
+	lastParams: undefined,
+	calls: [],
+	createErrors: [],
+	chunks: undefined,
 }));
 
 vi.mock("openai", () => {
@@ -27,6 +36,8 @@ vi.mock("openai", () => {
 			completions: {
 				create: (params: unknown) => {
 					mockState.lastParams = params;
+					mockState.calls.push(params);
+					const createError = mockState.createErrors.shift();
 					const stream = {
 						async *[Symbol.asyncIterator]() {
 							const chunks = mockState.chunks ?? [
@@ -51,10 +62,15 @@ vi.mock("openai", () => {
 							response: { status: number; headers: Headers };
 						}>;
 					};
-					promise.withResponse = async () => ({
-						data: stream,
-						response: { status: 200, headers: new Headers() },
-					});
+					promise.withResponse = async () => {
+						if (createError) {
+							throw createError;
+						}
+						return {
+							data: stream,
+							response: { status: 200, headers: new Headers() },
+						};
+					};
 					return promise;
 				},
 			},
@@ -64,9 +80,32 @@ vi.mock("openai", () => {
 	return { default: FakeOpenAI };
 });
 
+class HttpStatusError extends Error {
+	readonly status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.status = status;
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function recordAt(values: readonly unknown[], index: number): Record<string, unknown> {
+	const value = values[index];
+	if (!isRecord(value)) {
+		throw new Error(`Expected mock call ${index} to be a record`);
+	}
+	return value;
+}
+
 describe("openai-completions tool_choice", () => {
 	beforeEach(() => {
 		mockState.lastParams = undefined;
+		mockState.calls.length = 0;
+		mockState.createErrors.length = 0;
 		mockState.chunks = undefined;
 	});
 
@@ -109,6 +148,47 @@ describe("openai-completions tool_choice", () => {
 		expect(params.tool_choice).toBe("required");
 		expect(Array.isArray(params.tools)).toBe(true);
 		expect(params.tools?.length ?? 0).toBeGreaterThan(0);
+	});
+
+	it("retries forced toolChoice 400 once without tool_choice", async () => {
+		mockState.createErrors.push(new HttpStatusError(400, "tool_choice is not supported by this model"));
+
+		const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini")!;
+		const model = { ...baseModel, api: "openai-completions" } as const;
+		const tools: Tool[] = [
+			{
+				name: "ping",
+				description: "Ping tool",
+				parameters: Type.Object({
+					ok: Type.Boolean(),
+				}),
+			},
+		];
+
+		const response = await stream(
+			model,
+			{
+				messages: [
+					{
+						role: "user",
+						content: "Call ping with ok=true",
+						timestamp: Date.now(),
+					},
+				],
+				tools,
+			},
+			{
+				apiKey: "test",
+				toolChoice: "required",
+			},
+		).result();
+
+		const firstParams = recordAt(mockState.calls, 0);
+		const secondParams = recordAt(mockState.calls, 1);
+		expect(response.stopReason).toBe("stop");
+		expect(mockState.calls).toHaveLength(2);
+		expect(firstParams.tool_choice).toBe("required");
+		expect(secondParams.tool_choice).toBeUndefined();
 	});
 
 	it("omits strict when compat disables strict mode", async () => {
