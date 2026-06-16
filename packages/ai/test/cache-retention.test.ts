@@ -30,6 +30,10 @@ interface OpenAICompletionsCachePayload {
 	prompt_cache_retention?: string;
 }
 
+interface AnthropicCachePayload {
+	system?: Array<{ cache_control?: { type: string; ttl?: string } }>;
+}
+
 describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 	const originalEnv = process.env.PI_CACHE_RETENTION;
 
@@ -52,7 +56,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 	describe("Anthropic Provider", () => {
 		it.skipIf(!process.env.ANTHROPIC_API_KEY)(
-			"should use default cache TTL (no ttl field) when PI_CACHE_RETENTION is not set",
+			"should use default 1h cache TTL when PI_CACHE_RETENTION is not set",
 			async () => {
 				const model = getModel("anthropic", "claude-haiku-4-5");
 				let capturedPayload: any = null;
@@ -69,9 +73,8 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 				}
 
 				expect(capturedPayload).not.toBeNull();
-				// System prompt should have cache_control without ttl
 				expect(capturedPayload.system).toBeDefined();
-				expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral" });
+				expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
 			},
 		);
 
@@ -97,7 +100,54 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
 		});
 
-		it("should add ttl for non-api.anthropic.com baseUrl by default", async () => {
+		it("defaults to 1h cache TTL on the canonical Anthropic API when cacheRetention is omitted", async () => {
+			const baseModel = getModel("anthropic", "claude-haiku-4-5");
+			let capturedPayload: AnthropicCachePayload | undefined;
+
+			try {
+				const s = streamAnthropic(baseModel, context, {
+					apiKey: "fake-key",
+					onPayload: stopAfterPayload<AnthropicCachePayload>((payload) => {
+						capturedPayload = payload;
+					}),
+				});
+
+				for await (const event of s) {
+					if (event.type === "error") break;
+				}
+			} catch (error) {
+				if (!(error instanceof PayloadCaptured)) throw error;
+			}
+
+			expect(capturedPayload).toBeDefined();
+			expect(capturedPayload?.system?.[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+		});
+
+		it("uses short cache retention when PI_CACHE_RETENTION explicitly opts out", async () => {
+			process.env.PI_CACHE_RETENTION = "short";
+			const baseModel = getModel("anthropic", "claude-haiku-4-5");
+			let capturedPayload: AnthropicCachePayload | undefined;
+
+			try {
+				const s = streamAnthropic(baseModel, context, {
+					apiKey: "fake-key",
+					onPayload: stopAfterPayload<AnthropicCachePayload>((payload) => {
+						capturedPayload = payload;
+					}),
+				});
+
+				for await (const event of s) {
+					if (event.type === "error") break;
+				}
+			} catch (error) {
+				if (!(error instanceof PayloadCaptured)) throw error;
+			}
+
+			expect(capturedPayload).toBeDefined();
+			expect(capturedPayload?.system?.[0]?.cache_control).toEqual({ type: "ephemeral" });
+		});
+
+		it("should omit ttl for non-api.anthropic.com baseUrl by default", async () => {
 			process.env.PI_CACHE_RETENTION = "long";
 
 			// Create a model with a different baseUrl (simulating a proxy)
@@ -134,7 +184,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			}
 
 			expect(capturedPayload).not.toBeNull();
-			expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+			expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral" });
 		});
 
 		it("should omit ttl when supportsLongCacheRetention is false", async () => {
@@ -219,7 +269,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			const lastMessage = capturedPayload.messages[capturedPayload.messages.length - 1];
 			expect(Array.isArray(lastMessage.content)).toBe(true);
 			const lastBlock = lastMessage.content[lastMessage.content.length - 1];
-			expect(lastBlock.cache_control).toEqual({ type: "ephemeral" });
+			expect(lastBlock.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
 		});
 
 		it("should set 1h cache TTL when cacheRetention is long", async () => {

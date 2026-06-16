@@ -41,27 +41,43 @@ import { transformMessages } from "./transform-messages.ts";
 
 /**
  * Resolve cache retention preference.
- * Defaults to "short" and uses PI_CACHE_RETENTION for backward compatibility.
+ * Defaults to the provided fallback and uses PI_CACHE_RETENTION for backward compatibility.
  */
-function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention {
+function resolveCacheRetention(cacheRetention?: CacheRetention, fallback: CacheRetention = "short"): CacheRetention {
 	if (cacheRetention) {
 		return cacheRetention;
 	}
 	if (typeof process !== "undefined" && process.env.PI_CACHE_RETENTION === "long") {
 		return "long";
 	}
-	return "short";
+	if (typeof process !== "undefined" && process.env.PI_CACHE_RETENTION !== undefined) {
+		return "short";
+	}
+	return fallback;
+}
+
+function isAnthropicApiBaseUrl(baseUrl: string): boolean {
+	try {
+		return new URL(baseUrl).hostname === "api.anthropic.com";
+	} catch {
+		return false;
+	}
 }
 
 function getCacheControl(
 	model: Model<"anthropic-messages">,
 	cacheRetention?: CacheRetention,
 ): { retention: CacheRetention; cacheControl?: CacheControlEphemeral } {
-	const retention = resolveCacheRetention(cacheRetention);
+	const retention = resolveCacheRetention(cacheRetention, "long");
 	if (retention === "none") {
 		return { retention };
 	}
-	const ttl = retention === "long" && getAnthropicCompat(model).supportsLongCacheRetention ? "1h" : undefined;
+	const ttl =
+		retention === "long" &&
+		isAnthropicApiBaseUrl(model.baseUrl) &&
+		getAnthropicCompat(model).supportsLongCacheRetention
+			? "1h"
+			: undefined;
 	return {
 		retention,
 		cacheControl: { type: "ephemeral", ...(ttl && { ttl }) },
@@ -747,7 +763,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					});
 				}
 
-				const cacheRetention = options?.cacheRetention ?? model.cacheRetention ?? resolveCacheRetention();
+				const cacheRetention =
+					options?.cacheRetention ?? model.cacheRetention ?? resolveCacheRetention(undefined, "long");
 				const cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId;
 
 				const created = createClient(

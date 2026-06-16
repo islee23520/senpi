@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed Anthropic prompt caching to default to 1-hour cache retention on the canonical Anthropic API while keeping proxy/gateway requests on the standard ephemeral cache marker unless explicitly supported.
+
 ### Removed
 
 ## [2026.6.16] - 2026-06-16
