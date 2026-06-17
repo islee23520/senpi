@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Fixed Codex Responses streaming to allow opaque custom backend tokens and recover stale cached websocket continuations.
 - Fixed OpenAI Responses streaming to tolerate null message content from OpenAI-compatible servers before tool calls.
 - Fixed OpenCode DeepSeek V4 and Z.AI GLM thinking parameter compatibility inherited from upstream.
 - Fixed Google and `google-vertex` Gemini model metadata inherited from upstream.

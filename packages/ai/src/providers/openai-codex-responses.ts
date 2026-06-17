@@ -66,6 +66,7 @@ const DEFAULT_SSE_HEADER_TIMEOUT_MS = 20_000;
 const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS = 15_000;
 const CODEX_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 const WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE = 1009;
+const CODEX_PREVIOUS_RESPONSE_STALE_CODES = new Set(["previous_response_not_found", "codex_previous_response_stale"]);
 
 const CODEX_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
 	"completed",
@@ -595,14 +596,46 @@ function isCodexNonTransportError(error: unknown): boolean {
 	return error instanceof CodexApiError || error instanceof CodexProtocolError;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function getString(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
+
+function getCodexEventError(event: Record<string, unknown>): Record<string, unknown> | null {
+	const response = asRecord(event.response);
+	return asRecord(event.error) ?? (response ? asRecord(response.error) : null);
+}
+
+function getCodexEventErrorCode(event: Record<string, unknown>): string {
+	const error = getCodexEventError(event);
+	return getString(error?.code) ?? getString(error?.type) ?? getString(event.code) ?? "";
+}
+
+function getCodexEventErrorMessage(event: Record<string, unknown>): string {
+	const response = asRecord(event.response);
+	const error = getCodexEventError(event);
+	return getString(error?.message) ?? getString(event.message) ?? getString(response?.message) ?? "";
+}
+
+function isCodexPreviousResponseStale(error: unknown): boolean {
+	return (
+		error instanceof CodexApiError &&
+		typeof error.code === "string" &&
+		CODEX_PREVIOUS_RESPONSE_STALE_CODES.has(error.code)
+	);
+}
+
 async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): AsyncGenerator<ResponseStreamEvent> {
 	for await (const event of events) {
 		const type = typeof event.type === "string" ? event.type : undefined;
 		if (!type) continue;
 
 		if (type === "error") {
-			const code = (event as { code?: string }).code || "";
-			const message = (event as { message?: string }).message || "";
+			const code = getCodexEventErrorCode(event);
+			const message = getCodexEventErrorMessage(event);
 			throw new CodexApiError(`Codex error: ${message || code || JSON.stringify(event)}`, {
 				code: code || undefined,
 				payload: event,
@@ -610,9 +643,8 @@ async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): 
 		}
 
 		if (type === "response.failed") {
-			const response = (event as { response?: { error?: { code?: string; message?: string } } }).response;
-			const code = response?.error?.code;
-			const message = response?.error?.message;
+			const code = getCodexEventErrorCode(event);
+			const message = getCodexEventErrorMessage(event);
 			throw new CodexApiError(message || "Codex response failed", { code, payload: event });
 		}
 
@@ -1319,6 +1351,30 @@ function buildCachedWebSocketRequestBody(entry: CachedWebSocketConnection, body:
 	};
 }
 
+function recordWebSocketRequestStats(
+	stats: OpenAICodexWebSocketDebugStats | undefined,
+	requestBody: RequestBody,
+	reused: boolean,
+	useCachedContext: boolean,
+): void {
+	if (!stats) return;
+	stats.requests++;
+	if (reused) stats.connectionsReused++;
+	else stats.connectionsCreated++;
+	if (useCachedContext) stats.cachedContextRequests++;
+	if (requestBody.store === true) stats.storeTrueRequests++;
+	stats.lastInputItems = requestBody.input?.length ?? 0;
+	if (requestBody.previous_response_id) {
+		stats.deltaRequests++;
+		stats.lastDeltaInputItems = requestBody.input?.length ?? 0;
+		stats.lastPreviousResponseId = requestBody.previous_response_id;
+	} else {
+		stats.fullContextRequests++;
+		stats.lastDeltaInputItems = undefined;
+		stats.lastPreviousResponseId = undefined;
+	}
+}
+
 async function* startWebSocketOutputOnFirstEvent(
 	events: AsyncIterable<ResponseStreamEvent>,
 	output: AssistantMessage,
@@ -1361,43 +1417,47 @@ async function processWebSocketStream(
 	// ChatGPT Codex Responses rejects `store: true` ("Store must be set to false").
 	// WebSocket continuation still works via connection-scoped previous_response_id state.
 	const fullBody = body;
-	const requestBody = useCachedContext && entry ? buildCachedWebSocketRequestBody(entry, fullBody) : fullBody;
+	let requestBody = useCachedContext && entry ? buildCachedWebSocketRequestBody(entry, fullBody) : fullBody;
 	const stats = options?.sessionId ? getOrCreateWebSocketDebugStats(options.sessionId) : undefined;
-	if (stats) {
-		stats.requests++;
-		if (reused) stats.connectionsReused++;
-		else stats.connectionsCreated++;
-		if (useCachedContext) stats.cachedContextRequests++;
-		if (requestBody.store === true) stats.storeTrueRequests++;
-		stats.lastInputItems = requestBody.input?.length ?? 0;
-		if (requestBody.previous_response_id) {
-			stats.deltaRequests++;
-			stats.lastDeltaInputItems = requestBody.input?.length ?? 0;
-			stats.lastPreviousResponseId = requestBody.previous_response_id;
-		} else {
-			stats.fullContextRequests++;
-			stats.lastDeltaInputItems = undefined;
-			stats.lastPreviousResponseId = undefined;
-		}
-	}
+	let recoveredStalePreviousResponse = false;
 	try {
-		socket.send(JSON.stringify({ type: "response.create", ...requestBody }));
-		await processResponsesStream(
-			startWebSocketOutputOnFirstEvent(
-				mapCodexEvents(parseWebSocket(socket, options?.signal, idleTimeoutMs)),
-				output,
-				stream,
-				onStart,
-			),
-			output,
-			stream,
-			model,
-			{
-				serviceTier: options?.serviceTier,
-				resolveServiceTier: resolveCodexServiceTier,
-				applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
-			},
-		);
+		while (true) {
+			recordWebSocketRequestStats(stats, requestBody, reused && !recoveredStalePreviousResponse, useCachedContext);
+			try {
+				socket.send(JSON.stringify({ type: "response.create", ...requestBody }));
+				await processResponsesStream(
+					startWebSocketOutputOnFirstEvent(
+						mapCodexEvents(parseWebSocket(socket, options?.signal, idleTimeoutMs)),
+						output,
+						stream,
+						onStart,
+					),
+					output,
+					stream,
+					model,
+					{
+						serviceTier: options?.serviceTier,
+						resolveServiceTier: resolveCodexServiceTier,
+						applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
+					},
+				);
+				break;
+			} catch (error) {
+				if (
+					!recoveredStalePreviousResponse &&
+					entry &&
+					requestBody.previous_response_id &&
+					isCodexPreviousResponseStale(error) &&
+					!options?.signal?.aborted
+				) {
+					entry.continuation = undefined;
+					requestBody = fullBody;
+					recoveredStalePreviousResponse = true;
+					continue;
+				}
+				throw error;
+			}
+		}
 		if (options?.signal?.aborted) {
 			keepConnection = false;
 		} else if (useCachedContext && entry && output.responseId) {
@@ -1456,16 +1516,15 @@ async function parseErrorResponse(response: Response): Promise<{ message: string
 // Auth & Headers
 // ============================================================================
 
-function extractAccountId(token: string): string {
+function extractAccountId(token: string): string | undefined {
 	try {
 		const parts = token.split(".");
-		if (parts.length !== 3) throw new Error("Invalid token");
+		if (parts.length !== 3) return undefined;
 		const payload = JSON.parse(atob(parts[1]));
 		const accountId = payload?.[JWT_CLAIM_PATH]?.chatgpt_account_id;
-		if (!accountId) throw new Error("No account ID in token");
-		return accountId;
+		return typeof accountId === "string" && accountId.length > 0 ? accountId : undefined;
 	} catch {
-		throw new Error("Failed to extract accountId from token");
+		return undefined;
 	}
 }
 
@@ -1479,7 +1538,7 @@ function createCodexRequestId(): string {
 function buildBaseCodexHeaders(
 	initHeaders: Record<string, string> | undefined,
 	additionalHeaders: Record<string, string> | undefined,
-	accountId: string,
+	accountId: string | undefined,
 	token: string,
 ): Headers {
 	const headers = new Headers(initHeaders);
@@ -1487,7 +1546,11 @@ function buildBaseCodexHeaders(
 		headers.set(key, value);
 	}
 	headers.set("Authorization", `Bearer ${token}`);
-	headers.set("chatgpt-account-id", accountId);
+	if (accountId) {
+		headers.set("chatgpt-account-id", accountId);
+	} else {
+		headers.delete("chatgpt-account-id");
+	}
 	headers.set("originator", "senpi");
 	const userAgent = _os ? `senpi (${_os.platform()} ${_os.release()}; ${_os.arch()})` : "senpi (browser)";
 	headers.set("User-Agent", userAgent);
@@ -1497,7 +1560,7 @@ function buildBaseCodexHeaders(
 function buildSSEHeaders(
 	initHeaders: Record<string, string> | undefined,
 	additionalHeaders: Record<string, string> | undefined,
-	accountId: string,
+	accountId: string | undefined,
 	token: string,
 	sessionId?: string,
 ): Headers {
@@ -1517,7 +1580,7 @@ function buildSSEHeaders(
 function buildWebSocketHeaders(
 	initHeaders: Record<string, string> | undefined,
 	additionalHeaders: Record<string, string> | undefined,
-	accountId: string,
+	accountId: string | undefined,
 	token: string,
 	requestId: string,
 ): Headers {

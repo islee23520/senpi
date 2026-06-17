@@ -191,6 +191,57 @@ describe("openai-codex streaming", () => {
 		expect(sawDone).toBe(true);
 	});
 
+	it("passes opaque apiKey tokens through to custom Codex-compatible backends", async () => {
+		const token = "sk-custom-proxy-test";
+		const encoder = new TextEncoder();
+		const sse = buildSSEPayload({ status: "completed" });
+		let capturedUrl: string | undefined;
+		let capturedHeaders: Headers | undefined;
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (input: string | URL, init?: RequestInit) => {
+				capturedUrl = typeof input === "string" ? input : input.toString();
+				capturedHeaders = init?.headers instanceof Headers ? init.headers : new Headers(init?.headers);
+				return new Response(
+					new ReadableStream<Uint8Array>({
+						start(controller) {
+							controller.enqueue(encoder.encode(sse));
+							controller.close();
+						},
+					}),
+					{ status: 200, headers: { "content-type": "text/event-stream" } },
+				);
+			}),
+		);
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.1-codex",
+			name: "GPT-5.1 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "http://127.0.0.1:2455/backend-api/codex",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400000,
+			maxTokens: 128000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+
+		const result = await streamOpenAICodexResponses(model, context, { apiKey: token, transport: "sse" }).result();
+
+		expect(result.stopReason).toBe("stop");
+		expect(result.errorMessage).toBeUndefined();
+		expect(capturedUrl).toBe("http://127.0.0.1:2455/backend-api/codex/responses");
+		expect(capturedHeaders?.get("Authorization")).toBe(`Bearer ${token}`);
+		expect(capturedHeaders?.has("chatgpt-account-id")).toBe(false);
+		expect(capturedHeaders?.get("OpenAI-Beta")).toBe("responses=experimental");
+	});
+
 	it("completes after response.completed even when the SSE body stays open", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
 		process.env.PI_CODING_AGENT_DIR = tempDir;
@@ -1524,6 +1575,174 @@ describe("openai-codex streaming", () => {
 			lastDeltaInputItems: 1,
 			lastPreviousResponseId: "resp_1",
 		});
+	});
+
+	it("retries websocket continuations when Codex reports a stale previous response anchor", async () => {
+		const token = mockToken();
+		const sentBodies: unknown[] = [];
+
+		class MockWebSocket {
+			static OPEN = 1;
+			readyState = MockWebSocket.OPEN;
+			private listeners = new Map<string, Set<(event: unknown) => void>>();
+
+			constructor(_url: string, _protocols?: string | string[] | { headers?: Record<string, string> }) {
+				queueMicrotask(() => this.dispatch("open", {}));
+			}
+
+			addEventListener(type: string, listener: (event: unknown) => void): void {
+				let listeners = this.listeners.get(type);
+				if (!listeners) {
+					listeners = new Set();
+					this.listeners.set(type, listeners);
+				}
+				listeners.add(listener);
+			}
+
+			removeEventListener(type: string, listener: (event: unknown) => void): void {
+				this.listeners.get(type)?.delete(listener);
+			}
+
+			send(data: string): void {
+				const body = JSON.parse(data) as Record<string, unknown>;
+				sentBodies.push(body);
+				const requestIndex = sentBodies.length;
+
+				if (requestIndex === 1) {
+					this.emitResponse("resp_1", "msg_1", "First answer");
+					return;
+				}
+
+				if (requestIndex === 2) {
+					expect(body.previous_response_id).toBe("resp_1");
+					queueMicrotask(() => {
+						this.dispatch("message", {
+							data: JSON.stringify({
+								type: "response.failed",
+								response: {
+									id: "resp_masked_failure",
+									status: "failed",
+									error: {
+										type: "server_error",
+										code: "codex_previous_response_stale",
+										message: "Upstream previous response anchor expired; retry without previous_response_id.",
+									},
+								},
+							}),
+						});
+					});
+					return;
+				}
+
+				if (requestIndex === 3) {
+					expect(body.previous_response_id).toBeUndefined();
+					this.emitResponse("resp_3", "msg_3", "Second answer");
+					return;
+				}
+
+				throw new Error(`Unexpected websocket request index: ${requestIndex}`);
+			}
+
+			close(): void {
+				this.readyState = 3;
+			}
+
+			private emitResponse(responseId: string, messageId: string, text: string): void {
+				const events = [
+					{ type: "response.created", response: { id: responseId } },
+					{
+						type: "response.output_item.added",
+						item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+					},
+					{ type: "response.content_part.added", part: { type: "output_text", text: "" } },
+					{ type: "response.output_text.delta", delta: text },
+					{
+						type: "response.output_item.done",
+						item: {
+							type: "message",
+							id: messageId,
+							role: "assistant",
+							status: "completed",
+							content: [{ type: "output_text", text }],
+						},
+					},
+					{
+						type: "response.completed",
+						response: {
+							id: responseId,
+							status: "completed",
+							usage: {
+								input_tokens: 5,
+								output_tokens: 3,
+								total_tokens: 8,
+								input_tokens_details: { cached_tokens: 0 },
+							},
+						},
+					},
+				];
+				queueMicrotask(() => {
+					for (const event of events) {
+						this.dispatch("message", { data: JSON.stringify(event) });
+					}
+				});
+			}
+
+			private dispatch(type: string, event: unknown): void {
+				for (const listener of this.listeners.get(type) ?? []) {
+					listener(event);
+				}
+			}
+		}
+
+		vi.stubGlobal("WebSocket", MockWebSocket);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new Error("SSE fallback should not be called");
+			}),
+		);
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.1-codex",
+			name: "GPT-5.1 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400000,
+			maxTokens: 128000,
+		};
+		const firstContext: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "First question", timestamp: 1 }],
+		};
+
+		const first = await streamOpenAICodexResponses(model, firstContext, {
+			apiKey: token,
+			sessionId: "session-stale-previous-response",
+			transport: "websocket-cached",
+		}).result();
+		const secondContext: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [...firstContext.messages, first, { role: "user", content: "Second question", timestamp: 2 }],
+		};
+
+		const second = await streamOpenAICodexResponses(model, secondContext, {
+			apiKey: token,
+			sessionId: "session-stale-previous-response",
+			transport: "websocket-cached",
+		}).result();
+
+		expect(second.stopReason).toBe("stop");
+		expect(second.content.find((content) => content.type === "text")?.text).toBe("Second answer");
+		expect(sentBodies).toHaveLength(3);
+		const retryBody = sentBodies[2] as { input?: unknown[]; previous_response_id?: string };
+		expect(retryBody.previous_response_id).toBeUndefined();
+		expect(JSON.stringify(retryBody.input)).toContain("First question");
+		expect(JSON.stringify(retryBody.input)).toContain("Second question");
+		expect(global.fetch).not.toHaveBeenCalled();
 	});
 
 	it.each([
