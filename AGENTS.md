@@ -37,6 +37,35 @@
 - For ad-hoc scripts, write the script to a temporary file (for example under `/tmp`) using `write`, run that file, edit it if needed, and remove it when it is no longer needed. Do not embed multi-line scripts directly in `bash` commands.
 - Don't commit speculatively. Commit when the user asks, or when their task delegation continues a plan whose terminal step is commit/push (e.g. "마저진행해줘", "finish this", "계속해줘"). Treat such delegation as the ask — don't stall mid-plan to demand a literal "commit" keyword.
 
+## QA is mandatory — run the `senpi-qa` skill
+
+- After changing `packages/{ai,agent,coding-agent,tui}`, run the `senpi-qa` skill (`.agents/skills/senpi-qa/`). A green `npm run check` and `npm test` are NOT QA — they prove unit contracts, not that the user-facing surface works.
+- Pick the channel by change scope (each script ships `--self-test`):
+  - Agent loop / tools / sessions / provider resolution / RPC → `scripts/rpc-drive.mjs`, plus `scripts/mock-loop.mjs` for a deterministic, zero-token full turn.
+  - Interactive TUI / keybindings / rendering → `scripts/tui-smoke.mjs` (node-pty on Windows, tmux on POSIX).
+  - Any end-to-end agent turn without spending tokens → `scripts/mock-loop.mjs`.
+  - CLI flags / `--help` / `--print` / model listing → `scripts/cli-smoke.mjs`.
+- Every channel runs the CLI from source in an isolated sandbox and asserts the real `~/.senpi/agent/auth.json` is unchanged. QA needs no real key (the mock loop uses a local fake model).
+- Capture evidence to `local-ignore/qa-evidence/<YYYYMMDD>-<slug>/` (gitignored). NO EVIDENCE == NO QA. `SKILL.md` has the router, scripts index, and references. This is the routine path; the "Testing pi Interactive Mode with tmux" recipe below remains the underlying tmux mechanism.
+
+## Dev environment (all harnesses)
+
+- One idempotent setup for every harness (Claude Code, Codex, opencode, Cursor, VS Code Dev Containers, GitHub Codespaces): `node scripts/devenv-setup.mjs` (or `scripts/devenv-setup.sh` / `scripts/devenv-setup.ps1`). It installs deps, seeds `.env.local` from a provider key, and wires `.claude/skills -> ../.agents/skills`.
+- Skill source of truth is `.agents/skills/`; harnesses are pointed at it via `.claude/skills` (local symlink), `opencode.json`, `.cursor/settings.json`, `.codex/setup.sh`, and `.devcontainer/devcontainer.json`. Credential injection per harness: `.agents/skills/senpi-qa/references/credential-injection.md`.
+
+### Infra-sync obligation
+
+Dev-environment infra is shared by every harness. Make the left-column change and its right-column updates in the SAME change, or other contributors' environments break:
+
+| Change | Also update |
+|---|---|
+| Add/change an npm dep | `scripts/devenv-setup.mjs`, `.devcontainer/devcontainer.json`, `CONTRIBUTING.md` prerequisites |
+| Change the Node version | `.devcontainer/devcontainer.json` image, package `engines`, `scripts/devenv-setup.mjs` check |
+| Add a provider / env var | `packages/ai/src/env-api-keys.ts` (source of truth), `.agents/skills/senpi-qa/references/env-vars.md`, `.devcontainer/devcontainer.json` `secrets` |
+| Add/change a QA channel or script | `.agents/skills/senpi-qa/SKILL.md` router + scripts index |
+| Change a build command | `scripts/devenv-setup.mjs`, `.codex/setup.sh` / `.codex/cleanup.sh` |
+| Change a forwarded port | `.devcontainer/devcontainer.json` `forwardPorts` |
+
 ## Contribution Triage
 
 - Issues and PRs stay open for maintainer review.
