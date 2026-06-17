@@ -68,14 +68,14 @@ The release script (`scripts/release.mjs`) imports `scripts/calver.mjs` to compu
 
 ### Upstream sync
 
-You do NOT manually merge upstream. `.github/workflows/upstream-agent-merge.yml` polls `badlogic/pi-mono` and, when a new upstream release lands, runs Claude Code headless inside the runner to merge it.
+You do NOT manually merge upstream. `.github/workflows/upstream-agent-merge.yml` polls `badlogic/pi-mono` hourly and, when a new upstream release lands, runs Codex headless inside the runner to merge it on an automation branch.
 
-The agent uses the committed `merge-upstream` skill and `/cl` changelog-audit command (under `.github/agent/`) plus the fork conflict-resolution rules in `.github/agent/merge-driver.md`. On a clean, building, changelog-audited merge it lets the release run (`scripts/release.mjs` tags `vX.Y.Z` and pushes; `build-binaries.yml` publishes from the tag).
+The agent uses the committed `merge-upstream` skill and `/cl` changelog-audit command (under `.github/agent/`) plus the fork conflict-resolution rules in `.github/agent/merge-driver.md`. On a clean, building, changelog-audited merge, the workflow opens a PR, waits for checks and QA evidence, merges it with a merge commit, runs a fresh `/cl` audit on `main`, and then lets the release run only when package changelog entries make it release-worthy (`scripts/release.mjs` tags `vX.Y.Z` and pushes; `build-binaries.yml` publishes from the tag).
 
-- **Clean merge** → merged into `main`, changelog audited, QA gates pass, a new release is cut automatically.
+- **Clean merge** → PR branch is merged into `main` with a merge commit, changelog audited, QA gates pass, and a new release is cut automatically when release-worthy.
 - **Conflicts / QA failure** → the agent aborts, writes `.github/agent/last-merge-report.md`, and the workflow opens an issue labeled `sync-conflict`. Resolve manually following the per-file rules in `.github/agent/merge-driver.md`; the `changes.md` files in fork-modified subdirectories tell you what the fork preserves and why.
 
-Requires the `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) repository secret.
+Requires `UPSTREAM_AUTOMATION_TOKEN`, `CODEX_CONFIG_TOML_B64`, and either `CODEX_AUTH_JSON_B64` or `QUOTIO_API_KEY`. Optional QA/config secrets include `CODEX_QUOTIO_CONFIG_TOML_B64`, `CODEX_CCAPI_CONFIG_TOML_B64`, `SENPI_AUTH_JSON_B64`, `SENPI_MODELS_JSON_B64`, and `SENPI_SETTINGS_JSON_B64`. See `.github/agent/README.md`.
 
 To trigger manually:
 ```bash
