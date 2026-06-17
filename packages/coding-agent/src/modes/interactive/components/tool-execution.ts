@@ -320,7 +320,7 @@ export class ToolExecutionComponent extends Container {
 			if (renderContainer instanceof Box) {
 				renderContainer.setBgFn(bgFn);
 			}
-			renderContainer.clear();
+			renderContainer.detachAll();
 
 			const callRenderer = this.getCallRenderer();
 			if (!callRenderer) {

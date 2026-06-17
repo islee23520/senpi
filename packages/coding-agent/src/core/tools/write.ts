@@ -276,7 +276,7 @@ export function createWriteToolDefinition(
 			const output = formatWriteResult({ ...result, isError: context.isError }, theme);
 			if (!output) {
 				const component = (context.lastComponent as Container | undefined) ?? new Container();
-				component.clear();
+				component.detachAll();
 				return component;
 			}
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);

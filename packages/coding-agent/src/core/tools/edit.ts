@@ -250,7 +250,7 @@ function buildEditCallComponent(
 	cwd: string,
 ): EditCallRenderComponent {
 	component.setBgFn(getEditHeaderBg(component.preview, component.settledError, theme));
-	component.clear();
+	component.detachAll();
 	component.addChild(new Text(formatEditCall(args, theme, cwd), 0, 0));
 
 	if (!component.preview) {
@@ -426,7 +426,7 @@ export function createEditToolDefinition(
 
 			const output = formatEditResult(context.args, callComponent?.preview, typedResult, theme, context.isError);
 			const component = (context.lastComponent as Container | undefined) ?? new Container();
-			component.clear();
+			component.detachAll();
 			if (!output) {
 				return component;
 			}

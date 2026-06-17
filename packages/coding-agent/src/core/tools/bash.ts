@@ -222,7 +222,7 @@ function rebuildBashResultRenderComponent(
 	endedAt: number | undefined,
 ): void {
 	const state = component.state;
-	component.clear();
+	component.detachAll();
 
 	let output = getTextOutput(result, showImages).trim();
 	const truncation = result.details?.truncation;

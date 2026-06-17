@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Fixed reusable tool renderer components to survive repeated TUI refreshes after long-session cleanup changes.
+
 ### Changed
 
 ### Removed
