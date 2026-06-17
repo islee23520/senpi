@@ -37,16 +37,32 @@
 - For ad-hoc scripts, write the script to a temporary file (for example under `/tmp`) using `write`, run that file, edit it if needed, and remove it when it is no longer needed. Do not embed multi-line scripts directly in `bash` commands.
 - Don't commit speculatively. Commit when the user asks, or when their task delegation continues a plan whose terminal step is commit/push (e.g. "마저진행해줘", "finish this", "계속해줘"). Treat such delegation as the ask — don't stall mid-plan to demand a literal "commit" keyword.
 
-## QA is mandatory — run the `senpi-qa` skill
+## QA is mandatory — ALWAYS, every time you touch `packages/{ai,agent,coding-agent,tui}`
 
-- After changing `packages/{ai,agent,coding-agent,tui}`, run the `senpi-qa` skill (`.agents/skills/senpi-qa/`). A green `npm run check` and `npm test` are NOT QA — they prove unit contracts, not that the user-facing surface works.
-- Pick the channel by change scope (each script ships `--self-test`):
-  - Agent loop / tools / sessions / provider resolution / RPC → `scripts/rpc-drive.mjs`, plus `scripts/mock-loop.mjs` for a deterministic, zero-token full turn.
-  - Interactive TUI / keybindings / rendering → `scripts/tui-smoke.mjs` (node-pty on Windows, tmux on POSIX).
-  - Any end-to-end agent turn without spending tokens → `scripts/mock-loop.mjs`.
-  - CLI flags / `--help` / `--print` / model listing → `scripts/cli-smoke.mjs`.
-- Every channel runs the CLI from source in an isolated sandbox and asserts the real `~/.senpi/agent/auth.json` is unchanged. QA needs no real key (the mock loop uses a local fake model).
-- Capture evidence to `local-ignore/qa-evidence/<YYYYMMDD>-<slug>/` (gitignored). NO EVIDENCE == NO QA. `SKILL.md` has the router, scripts index, and references. This is the routine path; the "Testing pi Interactive Mode with tmux" recipe below remains the underlying tmux mechanism.
+> **If your change reaches the agent runtime, tools, sessions, providers, the TUI, or any user-facing surface, you MUST QA it. ALWAYS. EVERY TIME. NO EXCEPTIONS. There is no "too small to skip" and no "it obviously works".**
+
+**A green `npm run check` is NOT QA. `npm test` green is NOT QA.** They prove unit contracts, not that the feature works. You MUST drive the real CLI and then **write the evidence to disk.** If there is no evidence file, the QA did not happen.
+
+Run the `senpi-qa` skill (`.agents/skills/senpi-qa/`) and pick the channel by change scope (each script ships `--self-test`):
+- Agent loop / tools / sessions / provider resolution / RPC → `scripts/rpc-drive.mjs`, plus `scripts/mock-loop.mjs` for a deterministic, zero-token full turn (covers baseUrl override for openai + anthropic).
+- Interactive TUI / keybindings / rendering → `scripts/tui-smoke.mjs` (node-pty on Windows, tmux on POSIX).
+- Any end-to-end agent turn without spending tokens → `scripts/mock-loop.mjs`.
+- CLI flags / `--help` / `--print` / model listing → `scripts/cli-smoke.mjs`.
+
+Every channel runs the CLI from source in an isolated sandbox and asserts the real `~/.senpi/agent/auth.json` is unchanged (QA needs no real key — the mock loop uses a local fake model). Capture artifacts to `local-ignore/qa-evidence/<YYYYMMDD>-<slug>/` (gitignored): the exact commands with their output, the proof every intended change landed on the real harness, and the isolation receipt. `SKILL.md` has the router and scripts index; the "Testing pi Interactive Mode with tmux" recipe below is the underlying tmux mechanism.
+
+**NO EVIDENCE == NO QA == NO COMMIT == NO PUSH. Always. Every time. No exceptions.**
+
+## Default workflow — work through a PR, with evidence, every time
+
+Unless the user explicitly says otherwise (or it is an urgent must-fix-now hotfix), deliver every change as a pull request — never hand-commit normal work straight to `main`:
+
+1. **Branch.** Cut a feature branch (or a git worktree) off `main`. Do not develop on `main`.
+2. **Implement + QA with evidence.** Run the scoped `senpi-qa` channel(s) for what you touched and write the artifacts to `local-ignore/qa-evidence/<YYYYMMDD>-<slug>/`. That evidence is the gate, and it is what the PR must carry.
+3. **Open an English PR** with `gh pr create`. The body states what changed, why there is no regression, and quotes/links the QA evidence (commands + observed real-harness behavior). A PR without QA evidence is not ready to merge.
+4. **Verify.** Wait for CI/checks, fix every finding, then re-run the scoped QA and refresh the evidence.
+5. **Merge with a merge commit, ALWAYS.** Land it via `gh pr merge <number> --merge --delete-branch`, then push `main`. NEVER squash-merge or rebase-merge, even if a tool or GitHub default suggests it.
+6. **Conflicts → the `smart-rebase` skill**, then re-run the scoped QA. Never force-push shared history.
 
 ## Dev environment (all harnesses)
 
@@ -133,9 +149,9 @@ When closing issues via commit:
 
 ## PR Workflow
 
-- Analyze PRs without pulling locally first
-- If the user approves: create a feature branch, pull PR, rebase on main, apply adjustments, commit, merge into main, push, close PR, and leave a comment in the user's tone
-- You never open PRs yourself. We work in feature branches until everything is according to the user's requirements, then merge into main, and push.
+- Your OWN changes always ship via a PR — see "Default workflow — work through a PR" above (branch → QA with evidence → `gh pr create` → merge commit). Do not hand-commit normal work straight to `main`.
+- Reviewing an incoming contributor PR: analyze it without pulling locally first.
+- If the user approves an incoming PR: create a feature branch, pull the PR, rebase on main, apply adjustments, commit, land it with a merge commit (`gh pr merge --merge`), push, close the PR, and leave a comment in the user's tone.
 
 ## Testing pi Interactive Mode with tmux
 
