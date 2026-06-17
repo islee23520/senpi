@@ -1,0 +1,40 @@
+{
+	"name": "senpi-dev",
+	"image": "mcr.microsoft.com/devcontainers/javascript-node:24-bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {}
+	},
+	"onCreateCommand": "bash -lc 'sudo apt-get update -y && sudo apt-get install -y tmux ripgrep jq || true'",
+	"postCreateCommand": "node scripts/devenv-setup.mjs",
+	"forwardPorts": [5173],
+	"portsAttributes": {
+		"5173": { "label": "web-ui dev server", "onAutoForward": "notify" }
+	},
+	"remoteEnv": {
+		"NODE_ENV": "development",
+		"PI_TELEMETRY": "0"
+	},
+	"secrets": {
+		"ANTHROPIC_API_KEY": {
+			"description": "Anthropic Claude API key. Seeds .env.local and powers real agent turns. Mock-loop QA needs no key (it uses a local fake model)."
+		},
+		"OPENAI_API_KEY": {
+			"description": "(Optional) OpenAI API key."
+		},
+		"OPENROUTER_API_KEY": {
+			"description": "(Optional) OpenRouter API key."
+		},
+		"GEMINI_API_KEY": {
+			"description": "(Optional) Google Gemini API key (senpi's default provider is google)."
+		}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": ["biomejs.biome"],
+			"settings": {
+				"editor.defaultFormatter": "biomejs.biome",
+				"editor.formatOnSave": true
+			}
+		}
+	}
+}
