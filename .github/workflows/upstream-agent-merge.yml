@@ -52,6 +52,7 @@ jobs:
       DEFAULT_MODEL: gpt-5.5
       DEFAULT_CODEX_PROFILE: quotio
       EVIDENCE_DIR: local-ignore/qa-evidence/upstream-agent
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -300,20 +301,20 @@ jobs:
             echo "- \`senpi-qa\` common, mock-loop, CLI smoke, and tmux TUI smoke when available"
           } > "$BODY_FILE"
 
-          EXISTING="$(gh pr list --base main --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          EXISTING="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [ -n "$EXISTING" ]; then
             PR_NUMBER="$EXISTING"
-            gh pr edit "$PR_NUMBER" --title "sync: upstream ${UPSTREAM_TAG}" --body-file "$BODY_FILE"
+            gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --title "sync: upstream ${UPSTREAM_TAG}" --body-file "$BODY_FILE"
           else
-            PR_URL="$(gh pr create --base main --head "$BRANCH" --title "sync: upstream ${UPSTREAM_TAG}" --body-file "$BODY_FILE")"
+            PR_URL="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "sync: upstream ${UPSTREAM_TAG}" --body-file "$BODY_FILE")"
             PR_NUMBER="${PR_URL##*/}"
           fi
           echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "url=$(gh pr view "$PR_NUMBER" --json url --jq .url)" >> "$GITHUB_OUTPUT"
+          echo "url=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json url --jq .url)" >> "$GITHUB_OUTPUT"
 
-          gh pr checks "$PR_NUMBER" --watch --fail-fast --interval 30
-          HEAD_SHA="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
-          gh pr merge "$PR_NUMBER" --merge --delete-branch --match-head-commit "$HEAD_SHA"
+          gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --watch --fail-fast --interval 30
+          HEAD_SHA="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --merge --delete-branch --match-head-commit "$HEAD_SHA"
 
       - name: Fresh /cl release audit
         id: release_audit
@@ -404,11 +405,13 @@ jobs:
             echo
             echo "Resolve manually, then re-run \`Upstream Agent Merge\` with \`force=true\` if needed."
           } > "$BODY_FILE"
-          gh label create sync-conflict --color D73A4A --description "Automated upstream sync needs maintainer attention" || true
+          gh label create sync-conflict --repo "$GITHUB_REPOSITORY" --color D73A4A --description "Automated upstream sync needs maintainer attention" || true
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "upstream release audit needs attention: ${TAG}" \
             --label "sync-conflict" \
             --body-file "$BODY_FILE" || gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "upstream release audit needs attention: ${TAG}" \
             --body-file "$BODY_FILE"
           exit 1
@@ -430,11 +433,13 @@ jobs:
             echo
             echo "Resolve manually, then re-run \`Upstream Agent Merge\` with \`force=true\`."
           } > "$BODY_FILE"
-          gh label create sync-conflict --color D73A4A --description "Automated upstream sync needs maintainer attention" || true
+          gh label create sync-conflict --repo "$GITHUB_REPOSITORY" --color D73A4A --description "Automated upstream sync needs maintainer attention" || true
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "upstream merge needs attention: ${TAG} (${RESULT})" \
             --label "sync-conflict" \
             --body-file "$BODY_FILE" || gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "upstream merge needs attention: ${TAG} (${RESULT})" \
             --body-file "$BODY_FILE"
           exit 1
