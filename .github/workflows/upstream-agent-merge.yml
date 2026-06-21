@@ -264,6 +264,8 @@ jobs:
           test ! -s "$EVIDENCE_DIR/git-status-before-qa.txt"
           npm run build 2>&1 | tee "$EVIDENCE_DIR/npm-build.txt"
           npm run check 2>&1 | tee "$EVIDENCE_DIR/npm-check.txt"
+          git status --porcelain | tee "$EVIDENCE_DIR/git-status-after-check.txt"
+          test ! -s "$EVIDENCE_DIR/git-status-after-check.txt"
           npm test 2>&1 | tee "$EVIDENCE_DIR/npm-test.txt"
           node .agents/skills/senpi-qa/scripts/lib/common.mjs --self-check 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-common.txt"
           node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test --evidence upstream-agent-mock-loop 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-mock-loop.txt"

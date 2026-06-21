@@ -66,10 +66,13 @@ to the affected packages' `CHANGELOG.md` files. Commit changelog updates as
 
 ### 5. Hands-on QA
 
-Verify the merged tree actually builds and runs:
+Verify the merged tree with the same credential-free gates the workflow treats as
+authoritative. Run each command from the repository root:
 
 ```bash
 npm run build
+npm run check
+npm test
 ```
 
 Then smoke-test the CLI from the built workspace:
@@ -82,8 +85,10 @@ node packages/coding-agent/dist/cli/index.js --help
 Use the actual built entrypoint if the path differs; locate it under
 `packages/coding-agent/dist`.
 
-Do not run `npm test` or the full `npm run check` here. The workflow runs the authoritative
-credential-free `build`, `check`, `test`, and senpi-qa evidence gates after you stop.
+If `npm run check` reports warnings, treat the tree as not PR-ready. Fix the warnings, rerun
+`npm run check`, and commit the focused fix before continuing. Because `npm run check` may
+write formatter fixes, run `git status --porcelain` after it and commit any intentional
+source changes it produced. Do not leave check-written files unstaged or uncommitted.
 
 If the build or smoke test fails, attempt a focused fix that preserves both fork and upstream
 intent. Re-run until green. If you cannot get a building tree, write
@@ -91,8 +96,20 @@ intent. Re-run until green. If you cannot get a building tree, write
 leaving a broken tree staged for release.
 
 When runtime packages changed (`packages/ai`, `packages/agent`, `packages/coding-agent`, or
-`packages/tui`), also run the matching `.agents/skills/senpi-qa/` channel and capture
-evidence under `local-ignore/qa-evidence/`.
+`packages/tui`), run the matching `.agents/skills/senpi-qa/` channel and capture evidence
+under `local-ignore/qa-evidence/`. At minimum, run the same self-tests as the workflow:
+
+```bash
+node .agents/skills/senpi-qa/scripts/lib/common.mjs --self-check
+node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test --evidence upstream-agent-mock-loop
+node .agents/skills/senpi-qa/scripts/cli-smoke.mjs --self-test
+```
+
+If `tmux` is available, also run:
+
+```bash
+node .agents/skills/senpi-qa/scripts/tui-smoke.mjs --self-test --driver tmux --evidence upstream-agent-tui
+```
 
 ### 6. Finish
 
