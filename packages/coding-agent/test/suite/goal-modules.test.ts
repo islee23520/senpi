@@ -29,7 +29,7 @@ function makeGoal(overrides: Partial<Goal> = {}): Goal {
 	};
 }
 
-function assistantMessageWithStopReason(stopReason: "aborted" | "error"): AgentMessage {
+function assistantMessageWithStopReason(stopReason: "aborted" | "error" | "stop" | "toolUse"): AgentMessage {
 	return {
 		role: "assistant",
 		content: [{ type: "text", text: "" }],
@@ -45,7 +45,23 @@ function assistantMessageWithStopReason(stopReason: "aborted" | "error"): AgentM
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 		},
 		stopReason,
-		errorMessage: stopReason === "aborted" ? "Operation aborted" : "429 usage limit reached",
+		errorMessage:
+			stopReason === "aborted"
+				? "Operation aborted"
+				: stopReason === "error"
+					? "429 usage limit reached"
+					: undefined,
+		timestamp: Date.now(),
+	};
+}
+
+function abortedToolResultMessage(): AgentMessage {
+	return {
+		role: "toolResult",
+		toolCallId: "call-1",
+		toolName: "wait",
+		content: [{ type: "text", text: "Operation aborted" }],
+		isError: true,
 		timestamp: Date.now(),
 	};
 }
@@ -72,12 +88,13 @@ describe("goal continuation gating", () => {
 	});
 
 	it("queues after agent end for active goals with no pending messages", () => {
-		const cleanMessages: AgentMessage[] = [];
+		const cleanMessages = [assistantMessageWithStopReason("stop")];
 		expect(shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "active" }), false, cleanMessages)).toBe(true);
 		expect(shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "active" }), true, cleanMessages)).toBe(false);
 		expect(shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "complete" }), false, cleanMessages)).toBe(
 			false,
 		);
+		expect(shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "active" }), false, [])).toBe(false);
 		expect(
 			shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "active" }), false, [
 				assistantMessageWithStopReason("aborted"),
@@ -86,6 +103,12 @@ describe("goal continuation gating", () => {
 		expect(
 			shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "active" }), false, [
 				assistantMessageWithStopReason("error"),
+			]),
+		).toBe(false);
+		expect(
+			shouldQueueGoalContinuationAfterAgentEnd(makeGoal({ status: "active" }), false, [
+				assistantMessageWithStopReason("toolUse"),
+				abortedToolResultMessage(),
 			]),
 		).toBe(false);
 	});

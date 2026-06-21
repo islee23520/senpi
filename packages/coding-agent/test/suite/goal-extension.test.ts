@@ -140,7 +140,12 @@ describe("goal extension contract (budget-free)", () => {
 		await tools.get("create_goal")?.execute("c1", { objective: "Keep going" }, undefined, undefined, ctx);
 
 		await runHandlers(handlers, "agent_start", { type: "agent_start" }, ctx);
-		await runHandlers(handlers, "agent_end", { type: "agent_end", messages: [] }, ctx);
+		await runHandlers(
+			handlers,
+			"agent_end",
+			{ type: "agent_end", messages: [assistantMessageWithStopReason("stop")] },
+			ctx,
+		);
 
 		expect(sent).toHaveLength(1);
 		expect(sent[0]?.message.customType).toBe("goal-continuation");
@@ -198,7 +203,7 @@ async function runHandlers(
 	}
 }
 
-function assistantMessageWithStopReason(stopReason: "aborted" | "error"): AgentMessage {
+function assistantMessageWithStopReason(stopReason: "aborted" | "error" | "stop"): AgentMessage {
 	return {
 		role: "assistant",
 		content: [{ type: "text", text: "" }],
@@ -214,7 +219,12 @@ function assistantMessageWithStopReason(stopReason: "aborted" | "error"): AgentM
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 		},
 		stopReason,
-		errorMessage: stopReason === "aborted" ? "Operation aborted" : "429 usage limit reached",
+		errorMessage:
+			stopReason === "aborted"
+				? "Operation aborted"
+				: stopReason === "error"
+					? "429 usage limit reached"
+					: undefined,
 		timestamp: Date.now(),
 	};
 }
