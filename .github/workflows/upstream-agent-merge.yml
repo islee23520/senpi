@@ -246,9 +246,7 @@ jobs:
           RESULT="$(grep -E '^MERGE_RESULT:' /tmp/codex-agent.log /tmp/codex-last-message.md 2>/dev/null | tail -1 | awk '{print $2}')"
           if [ -z "$RESULT" ] && [ "$CODEX_STATUS" -ne 0 ]; then RESULT="AGENT_FAILED"; fi
           if [ -f .github/agent/last-merge-report.md ]; then
-            mkdir -p "$EVIDENCE_DIR"
-            cp .github/agent/last-merge-report.md "$EVIDENCE_DIR/last-merge-report.md"
-            rm .github/agent/last-merge-report.md
+            node scripts/archive-upstream-agent-report.mjs
           fi
           echo "result=${RESULT:-AGENT_FAILED}" >> "$GITHUB_OUTPUT"
           echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
