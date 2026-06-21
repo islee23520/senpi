@@ -3048,6 +3048,8 @@ export class AgentSession {
 		}
 
 		const delayMs = providerDelayMs ?? settings.baseDelayMs * 2 ** (this._retryAttempt - 1);
+		// Prepare before auto_retry_start so an immediate Esc can cancel the retry sleep.
+		this._retryAbortController = new AbortController();
 
 		this._emit({
 			type: "auto_retry_start",
@@ -3065,7 +3067,6 @@ export class AgentSession {
 		}
 
 		// Wait with exponential backoff (abortable)
-		this._retryAbortController = new AbortController();
 		try {
 			await sleep(delayMs, this._retryAbortController.signal);
 		} catch {
