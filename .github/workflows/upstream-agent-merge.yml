@@ -255,8 +255,6 @@ jobs:
 
       - name: Verify branch and capture QA evidence
         if: steps.detect.outputs.proceed == 'true' && steps.agent.outputs.result == 'CLEAN_PR_READY'
-        env:
-          PI_OFFLINE: '1'
         run: |
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
@@ -267,11 +265,11 @@ jobs:
           git status --porcelain | tee "$EVIDENCE_DIR/git-status-after-check.txt"
           test ! -s "$EVIDENCE_DIR/git-status-after-check.txt"
           npm test 2>&1 | tee "$EVIDENCE_DIR/npm-test.txt"
-          node .agents/skills/senpi-qa/scripts/lib/common.mjs --self-check 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-common.txt"
-          node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test --evidence upstream-agent-mock-loop 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-mock-loop.txt"
-          node .agents/skills/senpi-qa/scripts/cli-smoke.mjs --self-test 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-cli-smoke.txt"
+          PI_OFFLINE=1 node .agents/skills/senpi-qa/scripts/lib/common.mjs --self-check 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-common.txt"
+          PI_OFFLINE=1 node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test --evidence upstream-agent-mock-loop 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-mock-loop.txt"
+          PI_OFFLINE=1 node .agents/skills/senpi-qa/scripts/cli-smoke.mjs --self-test 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-cli-smoke.txt"
           if command -v tmux >/dev/null 2>&1; then
-            node .agents/skills/senpi-qa/scripts/tui-smoke.mjs --self-test --driver tmux --evidence upstream-agent-tui 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-tui.txt"
+            PI_OFFLINE=1 node .agents/skills/senpi-qa/scripts/tui-smoke.mjs --self-test --driver tmux --evidence upstream-agent-tui 2>&1 | tee "$EVIDENCE_DIR/senpi-qa-tui.txt"
           fi
 
       - name: Open and merge upstream PR
