@@ -6,7 +6,7 @@ Generated: 2026-06-22T12:35:29Z
 
 - Result: clean PR-ready branch
 - Current branch: `automation/upstream-v0.79.10-27951391177`
-- Current head: `ae77f4edc`
+- QA source head before report-only commits: `ae77f4edc`
 - Upstream release tag: `v0.79.10`
 - Merged upstream main: `3b5613469470d2369784a0b49394c74b9c5355dd`
 - Merge commit: `ba9f2cb78 Merge upstream/main into automation/upstream-v0.79.10`
@@ -35,7 +35,7 @@ Generated: 2026-06-22T12:35:29Z
 - `packages/coding-agent/src/core/agent-session.ts`: kept the fork shared compaction execution path and added upstream `reason` / `willRetry` event typing.
 - Package metadata/docs: preserved fork-specific names and configuration while accepting upstream removal of temporary selective base entrypoints where applicable.
 
-## Commits Added After Merge
+## Functional Commits Added After Merge
 
 - `3c3b81bf5 docs(changelog): audit upstream 3b56134`
 - `579811266 fix(coding-agent): resolve upstream compaction event typing`
