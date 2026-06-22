@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Fixed Xiaomi and Xiaomi Token Plan model compatibility so thinking-mode conversations preserve DeepSeek-style reasoning replay requirements.
+- Fixed Amazon Bedrock Claude Opus 4.7 profile metadata to use the current inference profile IDs.
 - Fixed OpenCode Go GLM-5.2 metadata to expose `xhigh` reasoning and send `reasoning_effort: "max"` ([#5967](https://github.com/earendil-works/pi/issues/5967)).
 
 ### Removed
