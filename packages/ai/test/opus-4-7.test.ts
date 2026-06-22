@@ -55,9 +55,9 @@ describe("Claude Opus 4.7 model catalog", () => {
 	});
 
 	it("exposes Bedrock cross-region Opus 4.7 profiles (us, eu, global)", () => {
-		const us = getModel("amazon-bedrock", "us.anthropic.claude-opus-4-7-v1");
-		const eu = getModel("amazon-bedrock", "eu.anthropic.claude-opus-4-7-v1");
-		const global = getModel("amazon-bedrock", "global.anthropic.claude-opus-4-7-v1");
+		const us = getModel("amazon-bedrock", "us.anthropic.claude-opus-4-7");
+		const eu = getModel("amazon-bedrock", "eu.anthropic.claude-opus-4-7");
+		const global = getModel("amazon-bedrock", "global.anthropic.claude-opus-4-7");
 		expect(us).toBeDefined();
 		expect(eu).toBeDefined();
 		expect(global).toBeDefined();

@@ -2147,6 +2147,7 @@ export class AgentSession {
 				accepted: true,
 				compactionEntry: savedEntry,
 				fromExtension,
+				willRetry: request.willRetry,
 			});
 
 			this._emit({

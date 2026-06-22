@@ -1604,10 +1604,10 @@ async function generateModels() {
 
 	// Add missing Bedrock Opus 4.7 cross-region profiles
 	const bedrockOpus47Profiles: Array<{ id: string; name: string }> = [
-		{ id: "anthropic.claude-opus-4-7-v1", name: "Claude Opus 4.7" },
-		{ id: "us.anthropic.claude-opus-4-7-v1", name: "Claude Opus 4.7 (US)" },
-		{ id: "eu.anthropic.claude-opus-4-7-v1", name: "Claude Opus 4.7 (EU)" },
-		{ id: "global.anthropic.claude-opus-4-7-v1", name: "Claude Opus 4.7 (Global)" },
+		{ id: "anthropic.claude-opus-4-7", name: "Claude Opus 4.7" },
+		{ id: "us.anthropic.claude-opus-4-7", name: "Claude Opus 4.7 (US)" },
+		{ id: "eu.anthropic.claude-opus-4-7", name: "Claude Opus 4.7 (EU)" },
+		{ id: "global.anthropic.claude-opus-4-7", name: "Claude Opus 4.7 (Global)" },
 	];
 	for (const profile of bedrockOpus47Profiles) {
 		if (!allModels.some((m) => m.provider === "amazon-bedrock" && m.id === profile.id)) {
