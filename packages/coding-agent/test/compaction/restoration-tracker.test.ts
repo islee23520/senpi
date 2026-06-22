@@ -115,6 +115,7 @@ function createAcceptedCompactEvent(): SessionCompactEvent {
 			tokensBefore: 100,
 		},
 		fromExtension: true,
+		willRetry: false,
 	};
 }
 

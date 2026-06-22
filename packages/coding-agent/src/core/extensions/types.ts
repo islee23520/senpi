@@ -643,6 +643,8 @@ export interface SessionCompactEvent {
 	rejectionCause?: CompactionRejectionCause;
 	compactionEntry: CompactionEntry;
 	fromExtension: boolean;
+	/** True when the aborted turn is retried after this compaction (overflow recovery) */
+	willRetry: boolean;
 }
 
 /** Fired before an extension runtime is torn down due to quit, reload, or session replacement. */

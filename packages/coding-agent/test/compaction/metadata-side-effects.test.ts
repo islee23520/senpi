@@ -153,6 +153,7 @@ describe("compaction metadata side effects", () => {
 						accepted: true,
 						compactionEntry: createCompactionEntry("compact-1", keptEntry.id),
 						fromExtension: true,
+						willRetry: true,
 					},
 					ctx,
 				);
