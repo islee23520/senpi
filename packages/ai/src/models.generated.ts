@@ -4239,7 +4239,7 @@ export const MODELS = {
 				cacheRead: 0.5,
 				cacheWrite: 6.25,
 			},
-			contextWindow: 200000,
+			contextWindow: 1000000,
 			maxTokens: 32000,
 		} satisfies Model<"anthropic-messages">,
 		"claude-opus-4.8": {
@@ -16576,7 +16576,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16594,7 +16594,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16612,7 +16612,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16630,7 +16630,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16648,7 +16648,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16666,7 +16666,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi",
 			baseUrl: "https://api.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16686,7 +16686,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16704,7 +16704,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16722,7 +16722,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16740,7 +16740,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16758,7 +16758,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-ams",
 			baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16778,7 +16778,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16796,7 +16796,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16814,7 +16814,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16832,7 +16832,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16850,7 +16850,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-cn",
 			baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16870,7 +16870,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16888,7 +16888,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16906,7 +16906,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -16924,7 +16924,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -16942,7 +16942,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "xiaomi-token-plan-sgp",
 			baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
-			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+			compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 			reasoning: true,
 			input: ["text"],
 			cost: {
