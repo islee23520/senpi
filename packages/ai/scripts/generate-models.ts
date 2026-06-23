@@ -1709,6 +1709,7 @@ async function generateModels() {
 			baseUrl: "https://api.anthropic.com",
 			provider: "anthropic",
 			reasoning: true,
+			thinkingLevelMap: { max: "max" },
 			input: ["text", "image"],
 			cost: {
 				input: 5,

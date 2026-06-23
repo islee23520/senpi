@@ -18,6 +18,7 @@ import type {
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
+import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
@@ -86,8 +87,8 @@ function resolveCacheRetention(cacheRetention?: CacheRetention, env?: ProviderEn
 	return "short";
 }
 
-function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCompat> {
-	const isNativeEndpoint = isOpenAIResponsesNativeEndpoint(model);
+function getCompat(model: Model<"openai-responses">, env?: ProviderEnv): Required<OpenAIResponsesCompat> {
+	const isNativeEndpoint = isOpenAIResponsesNativeEndpoint(model, env);
 	return {
 		supportsDeveloperRole: model.compat?.supportsDeveloperRole ?? true,
 		sendSessionIdHeader: model.compat?.sendSessionIdHeader ?? true,
@@ -97,8 +98,8 @@ function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCo
 	};
 }
 
-function isOpenAIResponsesNativeEndpoint(model: Model<"openai-responses">): boolean {
-	const baseUrl = isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model) : model.baseUrl;
+function isOpenAIResponsesNativeEndpoint(model: Model<"openai-responses">, env?: ProviderEnv): boolean {
+	const baseUrl = isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model, env) : model.baseUrl;
 	try {
 		return new URL(baseUrl || "https://api.openai.com/v1").hostname === "api.openai.com";
 	} catch {
@@ -224,21 +225,21 @@ export const stream: StreamFunction<"openai-responses", OpenAIResponsesOptions> 
 			const apiKey = getClientApiKey(model.provider, options?.apiKey, options?.headers);
 			const cacheRetention = resolveCacheRetention(options?.cacheRetention, options?.env);
 			const cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId;
-			const client = createClient(model, context, apiKey, options?.headers, cacheSessionId);
+			const client = createClient(model, context, apiKey, options?.headers, cacheSessionId, options?.env);
 			let params = buildParams(model, context, options);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
 				params = nextParams as ResponseCreateParamsStreaming;
 			}
 
-			const compat = getCompat(model);
+			const compat = getCompat(model, options?.env);
 			params = sanitizeUnsupportedNativeTools(params, compat);
 			const transport = options?.transport ?? "sse";
 			if (transport !== "sse" && compat.supportsWebSocket) {
 				let websocketStarted = false;
 				try {
 					await processWebSocketStream(
-						resolveOpenAIResponsesWebSocketUrl(model),
+						resolveOpenAIResponsesWebSocketUrl(model, options?.env),
 						params,
 						buildWebSocketHeaders(model, context, apiKey, options?.headers, cacheSessionId),
 						output,
@@ -328,8 +329,9 @@ function createClient(
 	apiKey: string,
 	optionsHeaders?: ProviderHeaders,
 	sessionId?: string,
+	env?: ProviderEnv,
 ) {
-	const compat = getCompat(model);
+	const compat = getCompat(model, env);
 	const headers: ProviderHeaders = { ...model.headers };
 	if (model.provider === "github-copilot") {
 		const hasImages = hasCopilotVisionInput(context.messages);
@@ -354,7 +356,7 @@ function createClient(
 
 	return new OpenAI({
 		apiKey,
-		baseURL: model.baseUrl,
+		baseURL: isCloudflareProvider(model.provider) ? resolveCloudflareBaseUrl(model, env) : model.baseUrl,
 		dangerouslyAllowBrowser: true,
 		defaultHeaders: headers,
 	});
@@ -367,7 +369,7 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 	});
 
 	const cacheRetention = resolveCacheRetention(options?.cacheRetention ?? model.cacheRetention, options?.env);
-	const compat = getCompat(model);
+	const compat = getCompat(model, options?.env);
 	const params: ResponseCreateParamsStreaming = {
 		model: model.id,
 		input: messages,
@@ -716,9 +718,9 @@ async function processWebSocketStream(
 	}
 }
 
-function resolveOpenAIResponsesWebSocketUrl(model: Model<"openai-responses">): string {
+function resolveOpenAIResponsesWebSocketUrl(model: Model<"openai-responses">, env?: ProviderEnv): string {
 	const baseUrl = isCloudflareProvider(model.provider)
-		? resolveCloudflareBaseUrl(model)
+		? resolveCloudflareBaseUrl(model, env)
 		: model.baseUrl || "https://api.openai.com/v1";
 	const url = new URL(baseUrl);
 	if (!url.pathname.endsWith("/responses")) {
@@ -733,7 +735,7 @@ function buildWebSocketHeaders(
 	model: Model<"openai-responses">,
 	context: Context,
 	apiKey: string,
-	optionsHeaders?: Record<string, string>,
+	optionsHeaders?: ProviderHeaders,
 	sessionId?: string,
 ): Headers {
 	const headers = new Headers(model.headers);
@@ -745,7 +747,11 @@ function buildWebSocketHeaders(
 		}
 	}
 	for (const [key, value] of Object.entries(optionsHeaders || {})) {
-		headers.set(key, value);
+		if (value === null) {
+			headers.delete(key);
+		} else {
+			headers.set(key, value);
+		}
 	}
 	if (!headers.has("Authorization")) {
 		headers.set("Authorization", `Bearer ${apiKey}`);

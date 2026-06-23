@@ -6,6 +6,7 @@ import type {
 	ImageContent,
 	Message,
 	Model,
+	ProviderNativeContent,
 	SimpleStreamOptions,
 	StreamFunction,
 	StreamOptions,
@@ -44,7 +45,7 @@ export interface FauxModelDefinition {
 	maxTokens?: number;
 }
 
-export type FauxContentBlock = TextContent | ThinkingContent | ToolCall;
+export type FauxContentBlock = TextContent | ThinkingContent | ToolCall | ProviderNativeContent;
 
 export function fauxText(text: string): TextContent {
 	return { type: "text", text };
@@ -107,10 +108,18 @@ export interface RegisterFauxProviderOptions {
 	provider?: string;
 	models?: FauxModelDefinition[];
 	tokensPerSecond?: number;
+	schedulerHook?: () => void | Promise<void>;
 	tokenSize?: {
 		min?: number;
 		max?: number;
 	};
+}
+
+export interface FauxCallLogEntry {
+	context: Context;
+	options?: StreamOptions;
+	timestamp: number;
+	modelId: string;
 }
 
 export interface FauxProviderRegistration {
@@ -122,6 +131,7 @@ export interface FauxProviderRegistration {
 	setResponses: (responses: FauxResponseStep[]) => void;
 	appendResponses: (responses: FauxResponseStep[]) => void;
 	getPendingResponseCount: () => number;
+	getCallLog: () => FauxCallLogEntry[];
 	unregister: () => void;
 }
 
@@ -135,6 +145,7 @@ export interface FauxProviderHandle {
 	setResponses: (responses: FauxResponseStep[]) => void;
 	appendResponses: (responses: FauxResponseStep[]) => void;
 	getPendingResponseCount: () => number;
+	getCallLog: () => FauxCallLogEntry[];
 }
 
 function estimateTokens(text: string): number {
@@ -143,6 +154,24 @@ function estimateTokens(text: string): number {
 
 function randomId(prefix: string): string {
 	return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+function cloneStreamOptionsForLog(options: StreamOptions | undefined): StreamOptions | undefined {
+	if (!options) return undefined;
+	return { ...options };
+}
+
+function cloneContextForLog(context: Context): Context {
+	return {
+		...context,
+		messages: structuredClone(context.messages),
+		tools: context.tools?.map((tool) => ({
+			name: tool.name,
+			description: tool.description,
+			parameters: structuredClone(tool.parameters),
+			...(tool.freeform ? { freeform: structuredClone(tool.freeform) } : {}),
+		})),
+	};
 }
 
 function contentToText(content: string | Array<TextContent | ImageContent>): string {
@@ -159,7 +188,9 @@ function contentToText(content: string | Array<TextContent | ImageContent>): str
 		.join("\n");
 }
 
-function assistantContentToText(content: Array<TextContent | ThinkingContent | ToolCall>): string {
+function assistantContentToText(
+	content: Array<TextContent | ThinkingContent | ToolCall | ProviderNativeContent>,
+): string {
 	return content
 		.map((block) => {
 			if (block.type === "text") {
@@ -167,6 +198,9 @@ function assistantContentToText(content: Array<TextContent | ThinkingContent | T
 			}
 			if (block.type === "thinking") {
 				return block.thinking;
+			}
+			if (block.type === "providerNative") {
+				return "";
 			}
 			return `${block.name}:${JSON.stringify(block.arguments)}`;
 		})
@@ -297,7 +331,14 @@ function createAbortedMessage(partial: AssistantMessage): AssistantMessage {
 	};
 }
 
-function scheduleChunk(chunk: string, tokensPerSecond: number | undefined): Promise<void> {
+function scheduleChunk(
+	chunk: string,
+	tokensPerSecond: number | undefined,
+	schedulerHook: (() => void | Promise<void>) | undefined,
+): Promise<void> {
+	if (schedulerHook) {
+		return Promise.resolve(schedulerHook());
+	}
 	if (!tokensPerSecond || tokensPerSecond <= 0) {
 		return new Promise((resolve) => queueMicrotask(resolve));
 	}
@@ -311,6 +352,7 @@ async function streamWithDeltas(
 	minTokenSize: number,
 	maxTokenSize: number,
 	tokensPerSecond: number | undefined,
+	schedulerHook: (() => void | Promise<void>) | undefined,
 	signal: AbortSignal | undefined,
 ): Promise<void> {
 	const partial: AssistantMessage = { ...message, content: [] };
@@ -337,7 +379,7 @@ async function streamWithDeltas(
 			partial.content = [...partial.content, { type: "thinking", thinking: "" }];
 			stream.push({ type: "thinking_start", contentIndex: index, partial: { ...partial } });
 			for (const chunk of splitStringByTokenSize(block.thinking, minTokenSize, maxTokenSize)) {
-				await scheduleChunk(chunk, tokensPerSecond);
+				await scheduleChunk(chunk, tokensPerSecond, schedulerHook);
 				if (signal?.aborted) {
 					const aborted = createAbortedMessage(partial);
 					stream.push({ type: "error", reason: "aborted", error: aborted });
@@ -360,7 +402,7 @@ async function streamWithDeltas(
 			partial.content = [...partial.content, { type: "text", text: "" }];
 			stream.push({ type: "text_start", contentIndex: index, partial: { ...partial } });
 			for (const chunk of splitStringByTokenSize(block.text, minTokenSize, maxTokenSize)) {
-				await scheduleChunk(chunk, tokensPerSecond);
+				await scheduleChunk(chunk, tokensPerSecond, schedulerHook);
 				if (signal?.aborted) {
 					const aborted = createAbortedMessage(partial);
 					stream.push({ type: "error", reason: "aborted", error: aborted });
@@ -374,10 +416,14 @@ async function streamWithDeltas(
 			continue;
 		}
 
+		if (block.type === "providerNative") {
+			continue;
+		}
+
 		partial.content = [...partial.content, { type: "toolCall", id: block.id, name: block.name, arguments: {} }];
 		stream.push({ type: "toolcall_start", contentIndex: index, partial: { ...partial } });
 		for (const chunk of splitStringByTokenSize(JSON.stringify(block.arguments), minTokenSize, maxTokenSize)) {
-			await scheduleChunk(chunk, tokensPerSecond);
+			await scheduleChunk(chunk, tokensPerSecond, schedulerHook);
 			if (signal?.aborted) {
 				const aborted = createAbortedMessage(partial);
 				stream.push({ type: "error", reason: "aborted", error: aborted });
@@ -410,8 +456,10 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 	const maxTokenSize = Math.max(minTokenSize, options.tokenSize?.max ?? DEFAULT_MAX_TOKEN_SIZE);
 	let pendingResponses: FauxResponseStep[] = [];
 	const tokensPerSecond = options.tokensPerSecond;
+	const schedulerHook = options.schedulerHook;
 	const state = { callCount: 0 };
 	const promptCache = new Map<string, string>();
+	const callLog: FauxCallLogEntry[] = [];
 
 	const modelDefinitions = options.models?.length
 		? options.models
@@ -443,6 +491,12 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 		const outer = createAssistantMessageEventStream();
 		const step = pendingResponses.shift();
 		state.callCount++;
+		callLog.push({
+			context: cloneContextForLog(context),
+			options: cloneStreamOptionsForLog(streamOptions),
+			timestamp: Date.now(),
+			modelId: requestModel.id,
+		});
 
 		queueMicrotask(async () => {
 			try {
@@ -464,7 +518,15 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 					typeof step === "function" ? await step(context, streamOptions, state, requestModel) : step;
 				let message = cloneMessage(resolved, api, provider, requestModel.id);
 				message = withUsageEstimate(message, context, streamOptions, promptCache);
-				await streamWithDeltas(outer, message, minTokenSize, maxTokenSize, tokensPerSecond, streamOptions?.signal);
+				await streamWithDeltas(
+					outer,
+					message,
+					minTokenSize,
+					maxTokenSize,
+					tokensPerSecond,
+					schedulerHook,
+					streamOptions?.signal,
+				);
 			} catch (error) {
 				const message = createErrorMessage(error, api, provider, requestModel.id);
 				outer.push({ type: "error", reason: "error", error: message });
@@ -504,6 +566,45 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 		getPendingResponseCount() {
 			return pendingResponses.length;
 		},
+		getCallLog() {
+			return callLog.map((entry) => ({
+				context: cloneContextForLog(entry.context),
+				options: cloneStreamOptionsForLog(entry.options),
+				timestamp: entry.timestamp,
+				modelId: entry.modelId,
+			}));
+		},
+	};
+}
+
+const registeredFauxProviders = new Map<string, ReturnType<typeof createFauxCore>>();
+
+export function getRegisteredFauxProvider(api: string): ReturnType<typeof createFauxCore> | undefined {
+	return registeredFauxProviders.get(api);
+}
+
+export function fauxOverflowError(provider: string, message: string): AssistantMessage {
+	return fauxAssistantMessage([], {
+		stopReason: "error",
+		errorMessage: `${provider}: ${message}`,
+	});
+}
+
+export function registerFauxProvider(options: RegisterFauxProviderOptions = {}): FauxProviderRegistration {
+	const core = createFauxCore(options);
+	registeredFauxProviders.set(core.api, core);
+	return {
+		api: core.api,
+		models: core.models,
+		getModel: core.getModel,
+		state: core.state,
+		setResponses: core.setResponses,
+		appendResponses: core.appendResponses,
+		getPendingResponseCount: core.getPendingResponseCount,
+		getCallLog: core.getCallLog,
+		unregister() {
+			registeredFauxProviders.delete(core.api);
+		},
 	};
 }
 
@@ -534,5 +635,6 @@ export function fauxProvider(options: RegisterFauxProviderOptions = {}): FauxPro
 		setResponses: core.setResponses,
 		appendResponses: core.appendResponses,
 		getPendingResponseCount: core.getPendingResponseCount,
+		getCallLog: core.getCallLog,
 	};
 }

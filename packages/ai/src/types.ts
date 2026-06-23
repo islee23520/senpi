@@ -90,6 +90,7 @@ export interface ThinkingBudgets {
 	low?: number;
 	medium?: number;
 	high?: number;
+	max?: number;
 }
 
 // Base options all providers share

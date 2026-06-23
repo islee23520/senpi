@@ -15,7 +15,6 @@ import type {
 	Model,
 	ThinkingLevel as PiThinkingLevel,
 	ProviderEnv,
-	ProviderHeaders,
 	SimpleStreamOptions,
 	StreamFunction,
 	StreamOptions,
@@ -36,8 +35,9 @@ import {
 	mapStopReason,
 	mapToolChoice,
 	retainThoughtSignature,
+	toProviderNativeContent,
 } from "./google-shared.ts";
-import { buildBaseOptions } from "./simple-options.ts";
+import { applyExtraBody, buildBaseOptions, GOOGLE_RESERVED_BODY_KEYS } from "./simple-options.ts";
 
 export interface GoogleVertexOptions extends StreamOptions {
 	toolChoice?: "auto" | "none" | "any";
@@ -92,10 +92,11 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 
 		try {
 			const apiKey = resolveApiKey(options);
+			const headers = providerHeadersToRecord(options?.headers);
 			// Create the client using either a Vertex API key, if provided, or ADC with project and location
 			const client = apiKey
-				? createClientWithApiKey(model, apiKey, options?.headers)
-				: createClient(model, resolveProject(options), resolveLocation(options), options?.headers, options?.env);
+				? createClientWithApiKey(model, apiKey, headers)
+				: createClient(model, resolveProject(options), resolveLocation(options), headers, options?.env);
 			let params = buildParams(model, context, options);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
@@ -105,6 +106,8 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 
 			stream.push({ type: "start", partial: output });
 			let currentBlock: TextContent | ThinkingContent | null = null;
+			let groundingMetadataEmitted = false;
+			let urlContextMetadataEmitted = false;
 			const blocks = output.content;
 			const blockIndex = () => blocks.length - 1;
 			for await (const chunk of googleStream) {
@@ -114,7 +117,9 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 				const candidate = chunk.candidates?.[0];
 				if (candidate?.content?.parts) {
 					for (const part of candidate.content.parts) {
+						let handledAsKnownPart = false;
 						if (part.text !== undefined) {
+							handledAsKnownPart = true;
 							const isThinking = isThinkingPart(part);
 							if (
 								!currentBlock ||
@@ -176,6 +181,7 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 						}
 
 						if (part.functionCall) {
+							handledAsKnownPart = true;
 							if (currentBlock) {
 								if (currentBlock.type === "text") {
 									stream.push({
@@ -220,7 +226,29 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 							});
 							stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
 						}
+
+						if (!handledAsKnownPart) {
+							output.content.push(toProviderNativeContent(part));
+						}
 					}
+				}
+
+				if (candidate?.groundingMetadata && !groundingMetadataEmitted) {
+					output.content.push({
+						type: "providerNative",
+						subtype: "groundingMetadata",
+						raw: candidate.groundingMetadata,
+					});
+					groundingMetadataEmitted = true;
+				}
+
+				if (candidate?.urlContextMetadata && !urlContextMetadataEmitted) {
+					output.content.push({
+						type: "providerNative",
+						subtype: "urlContextMetadata",
+						raw: candidate.urlContextMetadata,
+					});
+					urlContextMetadataEmitted = true;
 				}
 
 				if (candidate?.finishReason) {
@@ -311,14 +339,13 @@ export const streamSimple: StreamFunction<"google-vertex", SimpleStreamOptions> 
 
 	const clampedReasoning = clampThinkingLevel(model, options.reasoning);
 	const effort = (clampedReasoning === "off" ? "high" : clampedReasoning) as ClampedThinkingLevel;
-	const geminiModel = model as unknown as Model<"google-generative-ai">;
 
-	if (isGemini3ProModel(geminiModel) || isGemini3FlashModel(geminiModel)) {
+	if (isGemini3ProModel(model) || isGemini3FlashModel(model)) {
 		return stream(model, context, {
 			...base,
 			thinking: {
 				enabled: true,
-				level: getGemini3ThinkingLevel(effort, geminiModel),
+				level: getGemini3ThinkingLevel(effort, model),
 			},
 		} satisfies GoogleVertexOptions);
 	}
@@ -327,7 +354,7 @@ export const streamSimple: StreamFunction<"google-vertex", SimpleStreamOptions> 
 		...base,
 		thinking: {
 			enabled: true,
-			budgetTokens: getGoogleBudget(geminiModel, effort, options.thinkingBudgets),
+			budgetTokens: getGoogleBudget(model, effort, options.thinkingBudgets),
 		},
 	} satisfies GoogleVertexOptions);
 };
@@ -336,7 +363,7 @@ function createClient(
 	model: Model<"google-vertex">,
 	project: string,
 	location: string,
-	optionsHeaders?: ProviderHeaders,
+	optionsHeaders?: Record<string, string>,
 	env?: ProviderEnv,
 ): GoogleGenAI {
 	const googleAuthOptions = buildGoogleAuthOptions(env);
@@ -353,7 +380,7 @@ function createClient(
 function createClientWithApiKey(
 	model: Model<"google-vertex">,
 	apiKey: string,
-	optionsHeaders?: ProviderHeaders,
+	optionsHeaders?: Record<string, string>,
 ): GoogleGenAI {
 	return new GoogleGenAI({
 		vertexai: true,
@@ -363,7 +390,10 @@ function createClientWithApiKey(
 	});
 }
 
-function buildHttpOptions(model: Model<"google-vertex">, optionsHeaders?: ProviderHeaders): HttpOptions | undefined {
+function buildHttpOptions(
+	model: Model<"google-vertex">,
+	optionsHeaders?: Record<string, string>,
+): HttpOptions | undefined {
 	const httpOptions: HttpOptions = {};
 	const baseUrl = resolveCustomBaseUrl(model.baseUrl);
 	if (baseUrl) {
@@ -374,9 +404,8 @@ function buildHttpOptions(model: Model<"google-vertex">, optionsHeaders?: Provid
 		}
 	}
 
-	const headers = providerHeadersToRecord({ ...model.headers, ...optionsHeaders });
-	if (headers) {
-		httpOptions.headers = headers;
+	if (model.headers || optionsHeaders) {
+		httpOptions.headers = { ...model.headers, ...optionsHeaders };
 	}
 
 	return Object.keys(httpOptions).length > 0 ? httpOptions : undefined;
@@ -442,7 +471,7 @@ function buildParams(
 	context: Context,
 	options: GoogleVertexOptions = {},
 ): GenerateContentParameters {
-	const contents = convertMessages(model, context);
+	const contents = convertMessages(model, context, { preserveThinking: options.thinking?.enabled === true });
 
 	const generationConfig: GenerateContentConfig = {};
 	if (options.temperature !== undefined) {
@@ -487,6 +516,8 @@ function buildParams(
 		config.abortSignal = options.signal;
 	}
 
+	applyExtraBody(config, options?.extraBody, GOOGLE_RESERVED_BODY_KEYS);
+
 	const params: GenerateContentParameters = {
 		model: model.id,
 		contents,
@@ -496,13 +527,13 @@ function buildParams(
 	return params;
 }
 
-type ClampedThinkingLevel = Exclude<PiThinkingLevel, "xhigh">;
+type ClampedThinkingLevel = Exclude<PiThinkingLevel, "xhigh" | "max">;
 
-function isGemini3ProModel(model: Model<"google-generative-ai">): boolean {
+function isGemini3ProModel(model: Pick<Model<Api>, "id">): boolean {
 	return /gemini-3(?:\.\d+)?-pro/.test(model.id.toLowerCase());
 }
 
-function isGemini3FlashModel(model: Model<"google-generative-ai">): boolean {
+function isGemini3FlashModel(model: Pick<Model<Api>, "id">): boolean {
 	const id = model.id.toLowerCase();
 	return /gemini-3(?:\.\d+)?-flash/.test(id) || id === "gemini-flash-latest" || id === "gemini-flash-lite-latest";
 }
@@ -511,11 +542,10 @@ function getDisabledThinkingConfig(model: Model<"google-vertex">): ThinkingConfi
 	// Google docs: Gemini 3.1 Pro cannot disable thinking, and Gemini 3 Flash / Flash-Lite
 	// do not support full thinking-off either. For Gemini 3 models, use the lowest supported
 	// thinkingLevel without includeThoughts so hidden thinking remains invisible to pi.
-	const geminiModel = model as unknown as Model<"google-generative-ai">;
-	if (isGemini3ProModel(geminiModel)) {
+	if (isGemini3ProModel(model)) {
 		return { thinkingLevel: ThinkingLevel.LOW };
 	}
-	if (isGemini3FlashModel(geminiModel)) {
+	if (isGemini3FlashModel(model)) {
 		return { thinkingLevel: ThinkingLevel.MINIMAL };
 	}
 
@@ -523,10 +553,7 @@ function getDisabledThinkingConfig(model: Model<"google-vertex">): ThinkingConfi
 	return { thinkingBudget: 0 };
 }
 
-function getGemini3ThinkingLevel(
-	effort: ClampedThinkingLevel,
-	model: Model<"google-generative-ai">,
-): GoogleThinkingLevel {
+function getGemini3ThinkingLevel(effort: ClampedThinkingLevel, model: Pick<Model<Api>, "id">): GoogleThinkingLevel {
 	if (isGemini3ProModel(model)) {
 		switch (effort) {
 			case "minimal":
@@ -550,7 +577,7 @@ function getGemini3ThinkingLevel(
 }
 
 function getGoogleBudget(
-	model: Model<"google-generative-ai">,
+	model: Pick<Model<Api>, "id">,
 	effort: ClampedThinkingLevel,
 	customBudgets?: ThinkingBudgets,
 ): number {

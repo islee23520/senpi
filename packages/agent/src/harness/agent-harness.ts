@@ -69,7 +69,7 @@ function cloneStreamOptions(streamOptions?: AgentHarnessStreamOptions): AgentHar
 	};
 }
 
-function mergeHeaders(...headers: Array<Record<string, string> | undefined>): Record<string, string> | undefined {
+function _mergeHeaders(...headers: Array<Record<string, string> | undefined>): Record<string, string> | undefined {
 	const merged: Record<string, string> = {};
 	let hasHeaders = false;
 	for (const entry of headers) {

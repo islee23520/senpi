@@ -44,13 +44,48 @@ type BuiltinModelApi<
 	TModelId extends keyof (typeof MODELS)[TProvider],
 > = (typeof MODELS)[TProvider][TModelId] extends { api: infer TApi } ? (TApi extends Api ? TApi : never) : never;
 
+const XIAOMI_MIMO_PROVIDERS = new Set([
+	"xiaomi",
+	"xiaomi-token-plan-cn",
+	"xiaomi-token-plan-ams",
+	"xiaomi-token-plan-sgp",
+]);
+
+function normalizeBuiltinModel<TApi extends Api>(model: Model<TApi> | undefined): Model<TApi> | undefined {
+	if (!model) return undefined;
+
+	if (XIAOMI_MIMO_PROVIDERS.has(model.provider) && model.id === "mimo-v2.5-pro") {
+		return {
+			...model,
+			compat: {
+				...model.compat,
+				requiresReasoningContentOnAssistantMessages: true,
+				thinkingFormat: "deepseek",
+				supportsDisabledThinking: false,
+			},
+		} as Model<TApi>;
+	}
+
+	if (model.provider === "anthropic" && model.id === "claude-opus-4-8") {
+		return {
+			...model,
+			thinkingLevelMap: {
+				...model.thinkingLevelMap,
+				max: "max",
+			},
+		};
+	}
+
+	return model;
+}
+
 /** Typed read of the generated built-in catalog. */
 export function getBuiltinModel<TProvider extends KnownProvider, TModelId extends keyof (typeof MODELS)[TProvider]>(
 	provider: TProvider,
 	modelId: TModelId,
 ): Model<BuiltinModelApi<TProvider, TModelId>> {
 	const models = MODELS[provider] as Record<string, Model<Api>> | undefined;
-	return models?.[modelId as string] as Model<BuiltinModelApi<TProvider, TModelId>>;
+	return normalizeBuiltinModel(models?.[modelId as string]) as Model<BuiltinModelApi<TProvider, TModelId>>;
 }
 
 export function getBuiltinProviders(): KnownProvider[] {
@@ -62,7 +97,11 @@ export function getBuiltinModels<TProvider extends KnownProvider>(
 ): Model<BuiltinModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[] {
 	const models = MODELS[provider] as Record<string, Model<Api>> | undefined;
 	return models
-		? (Object.values(models) as Model<BuiltinModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[])
+		? (Object.values(models)
+				.map((model) => normalizeBuiltinModel(model))
+				.filter((model): model is Model<Api> => model !== undefined) as Model<
+				BuiltinModelApi<TProvider, keyof (typeof MODELS)[TProvider]>
+			>[])
 		: [];
 }
 

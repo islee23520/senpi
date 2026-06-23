@@ -3,6 +3,7 @@ import { defaultProviderAuthContext as defaultAuthContext } from "./auth/context
 import { InMemoryCredentialStore } from "./auth/credential-store.ts";
 import { ModelsError, resolveProviderAuth } from "./auth/resolve.ts";
 import type { AuthContext, AuthResult, CredentialStore, ProviderAuth } from "./auth/types.ts";
+import { MODELS } from "./models.generated.ts";
 import type {
 	Api,
 	ApiStreamOptions,
@@ -19,6 +20,60 @@ import type {
 } from "./types.ts";
 
 export { type AuthModel, ModelsError, type ModelsErrorCode } from "./auth/resolve.ts";
+
+const XIAOMI_MIMO_PROVIDERS = new Set([
+	"xiaomi",
+	"xiaomi-token-plan-cn",
+	"xiaomi-token-plan-ams",
+	"xiaomi-token-plan-sgp",
+]);
+
+function normalizeGeneratedModel<TApi extends Api>(model: Model<TApi> | undefined): Model<TApi> | undefined {
+	if (!model) return undefined;
+	if (XIAOMI_MIMO_PROVIDERS.has(model.provider) && model.id === "mimo-v2.5-pro") {
+		return {
+			...model,
+			compat: {
+				...model.compat,
+				requiresReasoningContentOnAssistantMessages: true,
+				thinkingFormat: "deepseek",
+				supportsDisabledThinking: false,
+			},
+		} as Model<TApi>;
+	}
+	if (model.provider === "anthropic" && model.id === "claude-opus-4-8") {
+		return {
+			...model,
+			thinkingLevelMap: {
+				...model.thinkingLevelMap,
+				max: "max",
+			},
+		};
+	}
+	return model;
+}
+
+export function getModel(provider: string, modelId: string): Model<any> {
+	const providerModels = MODELS[provider as keyof typeof MODELS] as Record<string, Model<Api>> | undefined;
+	const model = normalizeGeneratedModel(providerModels?.[modelId]);
+	if (!model) {
+		throw new Error(`Unknown model: ${provider}/${modelId}`);
+	}
+	return model;
+}
+
+export function getModels(provider: string): Model<any>[] {
+	const providerModels = MODELS[provider as keyof typeof MODELS] as Record<string, Model<Api>> | undefined;
+	return providerModels
+		? Object.values(providerModels)
+				.map((model) => normalizeGeneratedModel(model))
+				.filter((model): model is Model<Api> => model !== undefined)
+		: [];
+}
+
+export function getProviders(): string[] {
+	return Object.keys(MODELS);
+}
 
 /**
  * A provider is the concrete runtime unit. It owns id/name/base metadata,
@@ -385,7 +440,7 @@ export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage
 	return usage.cost;
 }
 
-const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 export function getSupportedThinkingLevels<TApi extends Api>(model: Model<TApi>): ModelThinkingLevel[] {
 	if (!model.reasoning) return ["off"];
@@ -393,7 +448,7 @@ export function getSupportedThinkingLevels<TApi extends Api>(model: Model<TApi>)
 	return EXTENDED_THINKING_LEVELS.filter((level) => {
 		const mapped = model.thinkingLevelMap?.[level];
 		if (mapped === null) return false;
-		if (level === "xhigh") return mapped !== undefined;
+		if (level === "xhigh" || level === "max") return mapped !== undefined;
 		return true;
 	});
 }

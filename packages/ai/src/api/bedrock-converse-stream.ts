@@ -13,6 +13,7 @@ import {
 	type ContentBlockStopEvent,
 	ConversationRole,
 	ConverseStreamCommand,
+	type ConverseStreamCommandInput,
 	type ConverseStreamMetadataEvent,
 	ImageFormat,
 	type Message,
@@ -23,7 +24,7 @@ import {
 	ToolResultStatus,
 } from "@aws-sdk/client-bedrock-runtime";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
-import type { BuildMiddleware, DocumentType, MetadataBearer } from "@smithy/types";
+import type { DocumentType } from "@smithy/types";
 import { HttpProxyAgent } from "http-proxy-agent";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { calculateCost } from "../models.ts";
@@ -53,7 +54,13 @@ import { parseStreamingJson } from "../utils/json-parse.ts";
 import { resolveHttpProxyUrlForTarget } from "../utils/node-http-proxy.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
-import { adjustMaxTokensForThinking, buildBaseOptions, clampReasoning } from "./simple-options.ts";
+import {
+	adjustMaxTokensForThinking,
+	applyExtraBody,
+	BEDROCK_RESERVED_BODY_KEYS,
+	buildBaseOptions,
+	clampReasoning,
+} from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
 export type BedrockThinkingDisplay = "summarized" | "omitted";
@@ -206,14 +213,17 @@ export const stream: StreamFunction<"bedrock-converse-stream", BedrockOptions> =
 		try {
 			const client = new BedrockRuntimeClient(config);
 			const customHeaders = providerHeadersToRecord(options.headers);
-			if (customHeaders) {
+			if (customHeaders && Object.keys(customHeaders).length > 0) {
 				addCustomHeadersMiddleware(client, customHeaders);
 			}
-			const cacheRetention = resolveCacheRetention(options.cacheRetention, options.env);
+			const cacheRetention = resolveCacheRetention(options.cacheRetention ?? model.cacheRetention, options.env);
 			const inferenceMaxTokens = options.maxTokens ?? (isAnthropicClaudeModel(model) ? model.maxTokens : undefined);
-			let commandInput = {
+			let commandInput: ConverseStreamCommandInput & Record<string, unknown> = {
 				modelId: model.id,
-				messages: convertMessages(context, model, cacheRetention, options.env),
+				messages: convertMessages(context, model, cacheRetention, {
+					preserveThinking: options.reasoning !== undefined,
+					env: options.env,
+				}),
 				system: buildSystemPrompt(context.systemPrompt, model, cacheRetention, options.env),
 				inferenceConfig: {
 					...(inferenceMaxTokens !== undefined && { maxTokens: inferenceMaxTokens }),
@@ -223,6 +233,7 @@ export const stream: StreamFunction<"bedrock-converse-stream", BedrockOptions> =
 				additionalModelRequestFields: buildAdditionalModelRequestFields(model, options),
 				...(options.requestMetadata !== undefined && { requestMetadata: options.requestMetadata }),
 			};
+			applyExtraBody(commandInput, options.extraBody, BEDROCK_RESERVED_BODY_KEYS);
 			const nextCommandInput = await options?.onPayload?.(commandInput, model);
 			if (nextCommandInput !== undefined) {
 				commandInput = nextCommandInput as typeof commandInput;
@@ -346,6 +357,13 @@ function isReservedHeader(key: string): boolean {
 	return lower.startsWith("x-amz-") || RESERVED_HEADER_EXACT.has(lower);
 }
 
+function hasHeaders(request: unknown): request is { headers: Record<string, string> } {
+	if (typeof request !== "object" || request === null || !("headers" in request)) {
+		return false;
+	}
+	return typeof request.headers === "object" && request.headers !== null;
+}
+
 /**
  * Attach caller-supplied headers to the outgoing Bedrock request via a Smithy
  * `build`-step middleware. The `build` step runs after request serialisation but
@@ -354,19 +372,21 @@ function isReservedHeader(key: string): boolean {
  * all other caller headers override any existing same-named header on the request.
  */
 function addCustomHeadersMiddleware(client: BedrockRuntimeClient, headers: Record<string, string>): void {
-	const middleware: BuildMiddleware<object, MetadataBearer> = (next) => async (args) => {
-		const request = args.request;
-		if (request && typeof request === "object" && "headers" in request) {
-			const requestHeaders = (request as { headers: Record<string, string> }).headers;
-			for (const [key, value] of Object.entries(headers)) {
-				if (!isReservedHeader(key)) {
-					requestHeaders[key] = value;
+	client.middlewareStack.add(
+		(next) => async (args) => {
+			const request = args.request;
+			if (hasHeaders(request)) {
+				const requestHeaders = request.headers;
+				for (const [key, value] of Object.entries(headers)) {
+					if (!isReservedHeader(key)) {
+						requestHeaders[key] = value;
+					}
 				}
 			}
-		}
-		return next(args);
-	};
-	client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });
+			return next(args);
+		},
+		{ step: "build", name: "pi-ai-custom-headers", priority: "low" },
+	);
 }
 
 export const streamSimple: StreamFunction<"bedrock-converse-stream", SimpleStreamOptions> = (
@@ -578,6 +598,9 @@ function mapThinkingLevelToEffort(
 	const mapped = level ? model.thinkingLevelMap?.[level] : undefined;
 	if (typeof mapped === "string") return mapped as "low" | "medium" | "high" | "xhigh" | "max";
 
+	const candidates = getModelMatchCandidates(model.id, model.name);
+	const isOpus47 = candidates.some((s) => s.includes("opus-4-7") || s.includes("opus-4.7"));
+	const isOpus46 = candidates.some((s) => s.includes("opus-4-6") || s.includes("opus-4.6"));
 	switch (level) {
 		case "minimal":
 		case "low":
@@ -585,6 +608,13 @@ function mapThinkingLevelToEffort(
 		case "medium":
 			return "medium";
 		case "high":
+			return "high";
+		case "xhigh":
+			if (isOpus47) return "xhigh";
+			if (isOpus46) return "max";
+			return "high";
+		case "max":
+			if (isOpus47 || isOpus46) return "max";
 			return "high";
 		default:
 			return "high";
@@ -717,10 +747,12 @@ function convertMessages(
 	context: Context,
 	model: Model<"bedrock-converse-stream">,
 	cacheRetention: CacheRetention,
-	env?: ProviderEnv,
+	options: { preserveThinking?: boolean; env?: ProviderEnv } = {},
 ): Message[] {
 	const result: Message[] = [];
-	const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);
+	const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId, {
+		preserveThinking: options.preserveThinking,
+	});
 
 	for (let i = 0; i < transformedMessages.length; i++) {
 		const m = transformedMessages[i];
@@ -863,7 +895,7 @@ function convertMessages(
 	}
 
 	// Add cache point to the last user message for supported Claude models when caching is enabled
-	if (cacheRetention !== "none" && supportsPromptCaching(model, env) && result.length > 0) {
+	if (cacheRetention !== "none" && supportsPromptCaching(model, options.env) && result.length > 0) {
 		const lastMessage = result[result.length - 1];
 		if (lastMessage.role === ConversationRole.USER && lastMessage.content) {
 			(lastMessage.content as ContentBlock[]).push({
@@ -888,7 +920,7 @@ function convertToolConfig(
 		toolSpec: {
 			name: tool.name,
 			description: tool.description,
-			inputSchema: { json: tool.parameters as unknown as DocumentType },
+			inputSchema: { json: toDocumentType(tool.parameters) },
 		},
 	}));
 
@@ -907,6 +939,10 @@ function convertToolConfig(
 	}
 
 	return { tools: bedrockTools, toolChoice: bedrockToolChoice };
+}
+
+function toDocumentType(value: Tool["parameters"]): DocumentType {
+	return JSON.parse(JSON.stringify(value));
 }
 
 function mapStopReason(reason: string | undefined): StopReason {
@@ -1007,11 +1043,15 @@ function buildAdditionalModelRequestFields(
 						low: 2048,
 						medium: 8192,
 						high: 16384,
-						xhigh: 16384, // Claude doesn't support xhigh, clamp to high
+						xhigh: 16384,
+						max: 16384,
 					};
 
-					// Custom budgets override defaults (xhigh not in ThinkingBudgets, use high)
-					const level = options.reasoning === "xhigh" ? "high" : options.reasoning;
+					// Custom ThinkingBudgets only declares minimal/low/medium/high; xhigh and max
+					// fall back to defaultBudgets (the Bedrock budget-based path doesn't know the
+					// native Anthropic adaptive "max" tier, and this model is not on the adaptive
+					// path anyway).
+					const level = options.reasoning === "xhigh" || options.reasoning === "max" ? "high" : options.reasoning;
 					const budget = options.thinkingBudgets?.[level] ?? defaultBudgets[options.reasoning];
 
 					return {

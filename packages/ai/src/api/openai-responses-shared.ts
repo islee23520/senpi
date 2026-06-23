@@ -369,12 +369,13 @@ export async function processResponsesStream<TApi extends Api>(
 		| ResponseCustomToolCallItem
 		| null = null;
 	let currentBlock: ThinkingContent | TextContent | (ToolCall & { partialJson: string }) | null = null;
-	let sawTerminalResponseEvent = false;
 	const blocks = output.content;
 	const blockIndex = () => blocks.length - 1;
-	const finalizeResponse = (
+	let sawTerminalResponseEvent = false;
+
+	function finalizeResponse(
 		response: Extract<ResponseStreamEvent, { type: "response.completed" | "response.incomplete" }>["response"],
-	): void => {
+	) {
 		sawTerminalResponseEvent = true;
 		if (response?.id) {
 			output.responseId = response.id;
@@ -403,7 +404,7 @@ export async function processResponsesStream<TApi extends Api>(
 		if (output.content.some((b) => b.type === "toolCall") && output.stopReason === "stop") {
 			output.stopReason = "toolUse";
 		}
-	};
+	}
 
 	for await (const event of openaiStream) {
 		if (event.type === "response.created") {
@@ -653,7 +654,8 @@ export async function processResponsesStream<TApi extends Api>(
 			throw new Error(msg);
 		}
 	}
-	if (!sawTerminalResponseEvent) {
+	const hasFinalizedToolCall = output.content.some((block) => block.type === "toolCall" && !("partialJson" in block));
+	if (!sawTerminalResponseEvent && !hasFinalizedToolCall) {
 		throw new Error("OpenAI Responses stream ended before a terminal response event");
 	}
 }

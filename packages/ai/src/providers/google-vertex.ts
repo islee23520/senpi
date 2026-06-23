@@ -1,7 +1,15 @@
 import { googleVertexApi } from "../api/google-vertex.lazy.ts";
+
+import type { GoogleVertexOptions } from "../api/google-vertex.ts";
 import type { ApiKeyAuth } from "../auth/types.ts";
 import { createProvider, type Provider } from "../models.ts";
+import type { SimpleStreamOptions, StreamFunction } from "../types.ts";
 import { GOOGLE_VERTEX_MODELS } from "./google-vertex.models.ts";
+
+const googleVertexStreams = googleVertexApi();
+export const streamGoogleVertex: StreamFunction<"google-vertex", GoogleVertexOptions> = googleVertexStreams.stream;
+export const streamSimpleGoogleVertex: StreamFunction<"google-vertex", SimpleStreamOptions> =
+	googleVertexStreams.streamSimple;
 
 const VERTEX_ADC_PATH = "~/.config/gcloud/application_default_credentials.json";
 

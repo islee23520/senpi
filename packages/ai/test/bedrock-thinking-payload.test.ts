@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type BedrockOptions, stream as streamBedrock } from "../src/api/bedrock-converse-stream.ts";
 import { getModel } from "../src/compat.ts";
-import type { Context, Model } from "../src/types.ts";
+import type { AssistantMessage, Context, Model } from "../src/types.ts";
 import { hasBedrockCredentials } from "./bedrock-utils.ts";
 
 interface BedrockThinkingPayload {

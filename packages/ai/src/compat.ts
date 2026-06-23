@@ -37,7 +37,18 @@ import { openAICompletionsApi } from "./api/openai-completions.lazy.ts";
 import { openAIResponsesApi } from "./api/openai-responses.lazy.ts";
 import { getEnvApiKey } from "./env-api-keys.ts";
 import { builtinModels, getBuiltinModel, getBuiltinModels, getBuiltinProviders } from "./providers/all.ts";
-import { createFauxCore, type FauxProviderRegistration, type RegisterFauxProviderOptions } from "./providers/faux.ts";
+import {
+	type FauxProviderRegistration,
+	getRegisteredFauxProvider,
+	type RegisterFauxProviderOptions,
+	registerFauxProvider as registerFauxProviderCore,
+} from "./providers/faux.ts";
+import {
+	getProtocol,
+	getToolCallFormat,
+	transformContext,
+	wrapStreamWithToolCallMiddleware,
+} from "./tool-call-middleware/index.ts";
 import type {
 	Api,
 	ApiStreamOptions,
@@ -151,21 +162,7 @@ function clearApiProviders(): void {
 }
 
 export function registerFauxProvider(options: RegisterFauxProviderOptions = {}): FauxProviderRegistration {
-	const core = createFauxCore(options);
-	const sourceId = `faux-provider-${Math.random().toString(36).slice(2, 10)}`;
-	registerApiProvider({ api: core.api, stream: core.stream, streamSimple: core.streamSimple }, sourceId);
-	return {
-		api: core.api,
-		models: core.models,
-		getModel: core.getModel,
-		state: core.state,
-		setResponses: core.setResponses,
-		appendResponses: core.appendResponses,
-		getPendingResponseCount: core.getPendingResponseCount,
-		unregister() {
-			unregisterApiProviders(sourceId);
-		},
-	};
+	return registerFauxProviderCore(options);
 }
 
 const BUILTIN_APIS: [Api, ProviderStreams][] = [
@@ -226,6 +223,10 @@ function shouldUseBuiltinModels(model: Model<Api>): boolean {
 }
 
 function resolveApiProvider(api: Api) {
+	const faux = getRegisteredFauxProvider(api);
+	if (faux) {
+		return { api: faux.api, stream: faux.stream, streamSimple: faux.streamSimple };
+	}
 	const provider = getApiProvider(api);
 	if (!provider) {
 		throw new Error(`No API provider registered for api: ${api}`);
@@ -238,6 +239,19 @@ export function stream<TApi extends Api>(
 	context: Context,
 	options?: ProviderStreamOptions,
 ): AssistantMessageEventStream {
+	const format = getToolCallFormat(model);
+	if (format && context.tools && context.tools.length > 0) {
+		const protocol = getProtocol(format);
+		const transformedContext = transformContext(context, protocol);
+		const innerStream = stream(model, transformedContext, { ...options, tools: undefined } as ProviderStreamOptions);
+		return wrapStreamWithToolCallMiddleware(innerStream, protocol, context.tools);
+	}
+
+	const faux = getRegisteredFauxProvider(model.api);
+	if (faux) {
+		return faux.stream(model, context, withEnvApiKey(model, options) as StreamOptions);
+	}
+
 	if (shouldUseBuiltinModels(model)) {
 		return compatModels.stream(model, context, options as ApiStreamOptions<TApi> | undefined);
 	}
@@ -259,6 +273,19 @@ export function streamSimple<TApi extends Api>(
 	context: Context,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
+	const format = getToolCallFormat(model);
+	if (format && context.tools && context.tools.length > 0) {
+		const protocol = getProtocol(format);
+		const transformedContext = transformContext(context, protocol);
+		const innerStream = streamSimple(model, transformedContext, options);
+		return wrapStreamWithToolCallMiddleware(innerStream, protocol, context.tools);
+	}
+
+	const faux = getRegisteredFauxProvider(model.api);
+	if (faux) {
+		return faux.streamSimple(model, context, withEnvApiKey(model, options));
+	}
+
 	if (shouldUseBuiltinModels(model)) {
 		return compatModels.streamSimple(model, context, options);
 	}

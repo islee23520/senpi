@@ -25,7 +25,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { shortHash } from "../utils/hash.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
-import { buildBaseOptions } from "./simple-options.ts";
+import { applyExtraBody, buildBaseOptions, MISTRAL_RESERVED_BODY_KEYS } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
 const MISTRAL_TOOL_CALL_ID_LENGTH = 9;
@@ -35,6 +35,9 @@ const MAX_MISTRAL_ERROR_BODY_CHARS = 4000;
  * Provider-specific options for the Mistral API.
  */
 type MistralReasoningEffort = "none" | "high";
+type MistralChatCompletionStreamRequest = ChatCompletionStreamRequest & {
+	promptCacheKey?: string;
+};
 
 export interface MistralOptions extends StreamOptions {
 	toolChoice?: "auto" | "none" | "any" | "required" | { type: "function"; function: { name: string } };
@@ -68,12 +71,20 @@ export const stream: StreamFunction<"mistral-conversations", MistralOptions> = (
 			});
 
 			const normalizeMistralToolCallId = createMistralToolCallIdNormalizer();
-			const transformedMessages = transformMessages(context.messages, model, (id) => normalizeMistralToolCallId(id));
+			const preserveThinking = options?.promptMode === "reasoning" || options?.reasoningEffort !== undefined;
+			const transformedMessages = transformMessages(
+				context.messages,
+				model,
+				(id) => normalizeMistralToolCallId(id),
+				{
+					preserveThinking,
+				},
+			);
 
 			let payload = buildChatPayload(model, context, transformedMessages, options);
 			const nextPayload = await options?.onPayload?.(payload, model);
 			if (nextPayload !== undefined) {
-				payload = nextPayload as ChatCompletionStreamRequest;
+				payload = nextPayload as MistralChatCompletionStreamRequest;
 			}
 			const mistralStream = await mistral.chat.stream(payload, buildRequestOptions(model, options));
 			stream.push({ type: "start", partial: output });
@@ -242,8 +253,8 @@ function buildChatPayload(
 	context: Context,
 	messages: Message[],
 	options?: MistralOptions,
-): ChatCompletionStreamRequest {
-	const payload: ChatCompletionStreamRequest = {
+): MistralChatCompletionStreamRequest {
+	const payload: MistralChatCompletionStreamRequest = {
 		model: model.id,
 		stream: true,
 		messages: toChatMessages(messages, model.input.includes("image")),
@@ -263,6 +274,8 @@ function buildChatPayload(
 			content: sanitizeSurrogates(context.systemPrompt),
 		});
 	}
+
+	applyExtraBody(payload, options?.extraBody, MISTRAL_RESERVED_BODY_KEYS);
 
 	return payload;
 }
@@ -357,7 +370,7 @@ async function consumeChatStream(
 			for (const item of contentItems) {
 				if (typeof item === "string") {
 					const textDelta = sanitizeSurrogates(item);
-					if (!currentBlock || currentBlock.type !== "text") {
+					if (currentBlock?.type !== "text") {
 						finishCurrentBlock(currentBlock);
 						currentBlock = { type: "text", text: "" };
 						output.content.push(currentBlock);
@@ -380,7 +393,7 @@ async function consumeChatStream(
 						.join("");
 					const thinkingDelta = sanitizeSurrogates(deltaText);
 					if (!thinkingDelta) continue;
-					if (!currentBlock || currentBlock.type !== "thinking") {
+					if (currentBlock?.type !== "thinking") {
 						finishCurrentBlock(currentBlock);
 						currentBlock = { type: "thinking", thinking: "" };
 						output.content.push(currentBlock);
@@ -398,7 +411,7 @@ async function consumeChatStream(
 
 				if (item.type === "text") {
 					const textDelta = sanitizeSurrogates(item.text);
-					if (!currentBlock || currentBlock.type !== "text") {
+					if (currentBlock?.type !== "text") {
 						finishCurrentBlock(currentBlock);
 						currentBlock = { type: "text", text: "" };
 						output.content.push(currentBlock);
@@ -556,6 +569,9 @@ function toChatMessages(messages: Message[], supportsImages: boolean): ChatCompl
 					}
 					continue;
 				}
+				if (block.type !== "toolCall") {
+					continue;
+				}
 				toolCalls.push({
 					id: block.id,
 					type: "function",
@@ -638,7 +654,7 @@ function mapToolChoice(
 ): "auto" | "none" | "any" | "required" | { type: "function"; function: { name: string } } | undefined {
 	if (!choice) return undefined;
 	if (choice === "auto" || choice === "none" || choice === "any" || choice === "required") {
-		return choice as any;
+		return choice;
 	}
 	return {
 		type: "function",

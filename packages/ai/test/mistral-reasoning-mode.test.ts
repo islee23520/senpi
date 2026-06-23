@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getModel, streamSimple } from "../src/compat.ts";
-import type { Context, Model, SimpleStreamOptions } from "../src/types.ts";
+import type { AssistantMessage, Context, Model, SimpleStreamOptions } from "../src/types.ts";
 
 interface MistralPayload {
 	promptMode?: "reasoning";
