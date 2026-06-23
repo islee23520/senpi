@@ -1,4 +1,4 @@
-import { registerApiProvider, unregisterApiProviders } from "../api-registry.ts";
+import { createProvider, type Provider } from "../models.ts";
 import type {
 	AssistantMessage,
 	AssistantMessageEventStream,
@@ -6,7 +6,6 @@ import type {
 	ImageContent,
 	Message,
 	Model,
-	ProviderNativeContent,
 	SimpleStreamOptions,
 	StreamFunction,
 	StreamOptions,
@@ -45,7 +44,7 @@ export interface FauxModelDefinition {
 	maxTokens?: number;
 }
 
-export type FauxContentBlock = TextContent | ThinkingContent | ToolCall | ProviderNativeContent;
+export type FauxContentBlock = TextContent | ThinkingContent | ToolCall;
 
 export function fauxText(text: string): TextContent {
 	return { type: "text", text };
@@ -103,15 +102,6 @@ export type FauxResponseFactory = (
 
 export type FauxResponseStep = AssistantMessage | FauxResponseFactory;
 
-export type FauxSchedulerHook = (chunk: string) => Promise<void> | void;
-
-export interface RequestSnapshot {
-	context: Context;
-	options?: StreamOptions;
-	timestamp: number;
-	modelId: string;
-}
-
 export interface RegisterFauxProviderOptions {
 	api?: string;
 	provider?: string;
@@ -121,7 +111,6 @@ export interface RegisterFauxProviderOptions {
 		min?: number;
 		max?: number;
 	};
-	schedulerHook?: FauxSchedulerHook;
 }
 
 export interface FauxProviderRegistration {
@@ -133,8 +122,19 @@ export interface FauxProviderRegistration {
 	setResponses: (responses: FauxResponseStep[]) => void;
 	appendResponses: (responses: FauxResponseStep[]) => void;
 	getPendingResponseCount: () => number;
-	getCallLog: () => RequestSnapshot[];
 	unregister: () => void;
+}
+
+export interface FauxProviderHandle {
+	provider: Provider;
+	api: string;
+	models: [Model<string>, ...Model<string>[]];
+	getModel(): Model<string>;
+	getModel(modelId: string): Model<string> | undefined;
+	state: { callCount: number };
+	setResponses: (responses: FauxResponseStep[]) => void;
+	appendResponses: (responses: FauxResponseStep[]) => void;
+	getPendingResponseCount: () => number;
 }
 
 function estimateTokens(text: string): number {
@@ -159,9 +159,7 @@ function contentToText(content: string | Array<TextContent | ImageContent>): str
 		.join("\n");
 }
 
-function assistantContentToText(
-	content: Array<TextContent | ThinkingContent | ToolCall | ProviderNativeContent>,
-): string {
+function assistantContentToText(content: Array<TextContent | ThinkingContent | ToolCall>): string {
 	return content
 		.map((block) => {
 			if (block.type === "text") {
@@ -169,9 +167,6 @@ function assistantContentToText(
 			}
 			if (block.type === "thinking") {
 				return block.thinking;
-			}
-			if (block.type === "providerNative") {
-				return `${block.subtype}:${JSON.stringify(block.raw)}`;
 			}
 			return `${block.name}:${JSON.stringify(block.arguments)}`;
 		})
@@ -190,14 +185,6 @@ function messageToText(message: Message): string {
 		return assistantContentToText(message.content);
 	}
 	return toolResultToText(message);
-}
-
-function snapshotContext(context: Context): Context {
-	return {
-		systemPrompt: context.systemPrompt,
-		messages: [...context.messages],
-		tools: context.tools ? [...context.tools] : undefined,
-	};
 }
 
 function serializeContext(context: Context): string {
@@ -310,14 +297,7 @@ function createAbortedMessage(partial: AssistantMessage): AssistantMessage {
 	};
 }
 
-function scheduleChunk(
-	chunk: string,
-	tokensPerSecond: number | undefined,
-	schedulerHook: FauxSchedulerHook | undefined,
-): Promise<void> {
-	if (schedulerHook) {
-		return Promise.resolve(schedulerHook(chunk));
-	}
+function scheduleChunk(chunk: string, tokensPerSecond: number | undefined): Promise<void> {
 	if (!tokensPerSecond || tokensPerSecond <= 0) {
 		return new Promise((resolve) => queueMicrotask(resolve));
 	}
@@ -331,7 +311,6 @@ async function streamWithDeltas(
 	minTokenSize: number,
 	maxTokenSize: number,
 	tokensPerSecond: number | undefined,
-	schedulerHook: FauxSchedulerHook | undefined,
 	signal: AbortSignal | undefined,
 ): Promise<void> {
 	const partial: AssistantMessage = { ...message, content: [] };
@@ -358,7 +337,7 @@ async function streamWithDeltas(
 			partial.content = [...partial.content, { type: "thinking", thinking: "" }];
 			stream.push({ type: "thinking_start", contentIndex: index, partial: { ...partial } });
 			for (const chunk of splitStringByTokenSize(block.thinking, minTokenSize, maxTokenSize)) {
-				await scheduleChunk(chunk, tokensPerSecond, schedulerHook);
+				await scheduleChunk(chunk, tokensPerSecond);
 				if (signal?.aborted) {
 					const aborted = createAbortedMessage(partial);
 					stream.push({ type: "error", reason: "aborted", error: aborted });
@@ -381,7 +360,7 @@ async function streamWithDeltas(
 			partial.content = [...partial.content, { type: "text", text: "" }];
 			stream.push({ type: "text_start", contentIndex: index, partial: { ...partial } });
 			for (const chunk of splitStringByTokenSize(block.text, minTokenSize, maxTokenSize)) {
-				await scheduleChunk(chunk, tokensPerSecond, schedulerHook);
+				await scheduleChunk(chunk, tokensPerSecond);
 				if (signal?.aborted) {
 					const aborted = createAbortedMessage(partial);
 					stream.push({ type: "error", reason: "aborted", error: aborted });
@@ -395,14 +374,10 @@ async function streamWithDeltas(
 			continue;
 		}
 
-		if (block.type !== "toolCall") {
-			continue;
-		}
-
 		partial.content = [...partial.content, { type: "toolCall", id: block.id, name: block.name, arguments: {} }];
 		stream.push({ type: "toolcall_start", contentIndex: index, partial: { ...partial } });
 		for (const chunk of splitStringByTokenSize(JSON.stringify(block.arguments), minTokenSize, maxTokenSize)) {
-			await scheduleChunk(chunk, tokensPerSecond, schedulerHook);
+			await scheduleChunk(chunk, tokensPerSecond);
 			if (signal?.aborted) {
 				const aborted = createAbortedMessage(partial);
 				stream.push({ type: "error", reason: "aborted", error: aborted });
@@ -425,10 +400,9 @@ async function streamWithDeltas(
 	stream.end(message);
 }
 
-export function registerFauxProvider(options: RegisterFauxProviderOptions = {}): FauxProviderRegistration {
+export function createFauxCore(options: RegisterFauxProviderOptions) {
 	const api = options.api ?? randomId(DEFAULT_API);
 	const provider = options.provider ?? DEFAULT_PROVIDER;
-	const sourceId = randomId("faux-provider");
 	const minTokenSize = Math.max(
 		1,
 		Math.min(options.tokenSize?.min ?? DEFAULT_MIN_TOKEN_SIZE, options.tokenSize?.max ?? DEFAULT_MAX_TOKEN_SIZE),
@@ -436,10 +410,8 @@ export function registerFauxProvider(options: RegisterFauxProviderOptions = {}):
 	const maxTokenSize = Math.max(minTokenSize, options.tokenSize?.max ?? DEFAULT_MAX_TOKEN_SIZE);
 	let pendingResponses: FauxResponseStep[] = [];
 	const tokensPerSecond = options.tokensPerSecond;
-	const schedulerHook = options.schedulerHook;
 	const state = { callCount: 0 };
 	const promptCache = new Map<string, string>();
-	const callLog: RequestSnapshot[] = [];
 
 	const modelDefinitions = options.models?.length
 		? options.models
@@ -471,12 +443,6 @@ export function registerFauxProvider(options: RegisterFauxProviderOptions = {}):
 		const outer = createAssistantMessageEventStream();
 		const step = pendingResponses.shift();
 		state.callCount++;
-		callLog.push({
-			context: snapshotContext(context),
-			options: streamOptions,
-			timestamp: Date.now(),
-			modelId: requestModel.id,
-		});
 
 		queueMicrotask(async () => {
 			try {
@@ -498,15 +464,7 @@ export function registerFauxProvider(options: RegisterFauxProviderOptions = {}):
 					typeof step === "function" ? await step(context, streamOptions, state, requestModel) : step;
 				let message = cloneMessage(resolved, api, provider, requestModel.id);
 				message = withUsageEstimate(message, context, streamOptions, promptCache);
-				await streamWithDeltas(
-					outer,
-					message,
-					minTokenSize,
-					maxTokenSize,
-					tokensPerSecond,
-					schedulerHook,
-					streamOptions?.signal,
-				);
+				await streamWithDeltas(outer, message, minTokenSize, maxTokenSize, tokensPerSecond, streamOptions?.signal);
 			} catch (error) {
 				const message = createErrorMessage(error, api, provider, requestModel.id);
 				outer.push({ type: "error", reason: "error", error: message });
@@ -520,8 +478,6 @@ export function registerFauxProvider(options: RegisterFauxProviderOptions = {}):
 	const streamSimple: StreamFunction<string, SimpleStreamOptions> = (streamModel, context, streamOptions) =>
 		stream(streamModel, context, streamOptions);
 
-	registerApiProvider({ api, stream, streamSimple }, sourceId);
-
 	function getModel(): Model<string>;
 	function getModel(requestedModelId: string): Model<string> | undefined;
 	function getModel(requestedModelId?: string): Model<string> | undefined {
@@ -533,33 +489,50 @@ export function registerFauxProvider(options: RegisterFauxProviderOptions = {}):
 
 	return {
 		api,
+		provider,
 		models,
+		stream,
+		streamSimple,
 		getModel,
 		state,
-		setResponses(responses) {
+		setResponses(responses: FauxResponseStep[]) {
 			pendingResponses = [...responses];
 		},
-		appendResponses(responses) {
+		appendResponses(responses: FauxResponseStep[]) {
 			pendingResponses.push(...responses);
 		},
 		getPendingResponseCount() {
 			return pendingResponses.length;
 		},
-		getCallLog() {
-			return callLog.map((entry) => ({ ...entry }));
-		},
-		unregister() {
-			unregisterApiProviders(sourceId);
-		},
 	};
 }
 
-export function fauxOverflowError(
-	provider: "anthropic" | "openai" | "google" | "bedrock" | "generic",
-	phrase: string,
-): AssistantMessage {
-	return fauxAssistantMessage([], {
-		stopReason: "error",
-		errorMessage: `[${provider}] ${phrase}`,
+/**
+ * Faux provider for tests built on explicit `Models` collections:
+ *
+ * ```ts
+ * const faux = fauxProvider();
+ * const models = createModels();
+ * models.setProvider(faux.provider);
+ * faux.setResponses([fauxAssistantMessage("hi")]);
+ * ```
+ */
+export function fauxProvider(options: RegisterFauxProviderOptions = {}): FauxProviderHandle {
+	const core = createFauxCore(options);
+	const provider = createProvider({
+		id: core.provider,
+		auth: { apiKey: { name: "Faux", resolve: async () => ({ auth: {} }) } },
+		models: core.models,
+		api: { stream: core.stream, streamSimple: core.streamSimple },
 	});
+	return {
+		provider,
+		api: core.api,
+		models: core.models,
+		getModel: core.getModel,
+		state: core.state,
+		setResponses: core.setResponses,
+		appendResponses: core.appendResponses,
+		getPendingResponseCount: core.getPendingResponseCount,
+	};
 }
