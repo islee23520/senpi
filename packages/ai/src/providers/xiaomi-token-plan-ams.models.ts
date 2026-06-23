@@ -10,7 +10,7 @@ export const XIAOMI_TOKEN_PLAN_AMS_MODELS = {
 		api: "openai-completions",
 		provider: "xiaomi-token-plan-ams",
 		baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 		reasoning: true,
 		input: ["text", "image"],
 		cost: {
@@ -28,7 +28,7 @@ export const XIAOMI_TOKEN_PLAN_AMS_MODELS = {
 		api: "openai-completions",
 		provider: "xiaomi-token-plan-ams",
 		baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 		reasoning: true,
 		input: ["text"],
 		cost: {
@@ -46,7 +46,7 @@ export const XIAOMI_TOKEN_PLAN_AMS_MODELS = {
 		api: "openai-completions",
 		provider: "xiaomi-token-plan-ams",
 		baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 		reasoning: true,
 		input: ["text", "image"],
 		cost: {
@@ -64,7 +64,7 @@ export const XIAOMI_TOKEN_PLAN_AMS_MODELS = {
 		api: "openai-completions",
 		provider: "xiaomi-token-plan-ams",
 		baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 		reasoning: true,
 		input: ["text"],
 		cost: {
@@ -82,7 +82,7 @@ export const XIAOMI_TOKEN_PLAN_AMS_MODELS = {
 		api: "openai-completions",
 		provider: "xiaomi-token-plan-ams",
 		baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
-		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek"},
+		compat: {"requiresReasoningContentOnAssistantMessages":true,"thinkingFormat":"deepseek","supportsDisabledThinking":false},
 		reasoning: true,
 		input: ["text"],
 		cost: {

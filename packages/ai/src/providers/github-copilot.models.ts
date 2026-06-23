@@ -97,7 +97,7 @@ export const GITHUB_COPILOT_MODELS = {
 			cacheRead: 0.5,
 			cacheWrite: 6.25,
 		},
-		contextWindow: 200000,
+		contextWindow: 1000000,
 		maxTokens: 32000,
 	} satisfies Model<"anthropic-messages">,
 	"claude-opus-4.8": {
