@@ -45,13 +45,7 @@ export function openWebSocketConnection(
 		};
 		const onOpen = () => {
 			cleanup();
-			resolve({
-				close: () => closeWebSocket(socket),
-				onUnexpectedClose: (handler) => {
-					socket.addEventListener("close", () => handler("WebSocket closed unexpectedly."));
-					socket.addEventListener("error", () => handler("WebSocket failed after opening."));
-				},
-			});
+			resolve(new RuntimeWebSocketConnection(socket));
 		};
 		const onError = () => {
 			cleanup();
@@ -66,6 +60,43 @@ export function openWebSocketConnection(
 		socket.addEventListener("error", onError);
 		socket.addEventListener("close", onClose);
 	});
+}
+
+class RuntimeWebSocketConnection implements PiCodexAppServerWebSocketConnection {
+	private readonly socket: PiCodexAppServerWebSocketLike;
+	private failureHandler: ((message: string) => void) | undefined;
+	private failureMessage: string | undefined;
+	private closing = false;
+
+	constructor(socket: PiCodexAppServerWebSocketLike) {
+		this.socket = socket;
+		socket.addEventListener("close", () => {
+			if (this.closing) return;
+			this.recordFailure("WebSocket closed unexpectedly.");
+		});
+		socket.addEventListener("error", () => {
+			if (this.closing) return;
+			this.recordFailure("WebSocket failed after opening.");
+		});
+	}
+
+	async close(): Promise<void> {
+		this.closing = true;
+		await closeWebSocket(this.socket);
+	}
+
+	onUnexpectedClose(handler: (message: string) => void): void {
+		this.failureHandler = handler;
+		if (this.failureMessage) {
+			const message = this.failureMessage;
+			queueMicrotask(() => handler(message));
+		}
+	}
+
+	private recordFailure(message: string): void {
+		this.failureMessage = message;
+		this.failureHandler?.(message);
+	}
 }
 
 function createRuntimeWebSocket(

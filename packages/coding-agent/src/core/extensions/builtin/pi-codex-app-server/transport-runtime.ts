@@ -127,8 +127,8 @@ async function openConnection(
 			);
 			return {
 				mode: "websocket",
-				close: webSocketConnection.close,
-				onFailure: webSocketConnection.onUnexpectedClose,
+				close: () => webSocketConnection.close(),
+				onFailure: (handler) => webSocketConnection.onUnexpectedClose(handler),
 			};
 		}
 	}

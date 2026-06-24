@@ -68,12 +68,16 @@ describe("pi-codex-app-server contract lock", () => {
 		expect(EXTERNAL_PROTOCOL_METHODS.every((method) => method.errorBehavior.length > 0)).toBe(true);
 	});
 
-	it("classifies required app-server surfaces without runtime routing code", () => {
-		const runtimeFileNames = [
-			"transport-runtime.ts",
+	it("classifies required app-server surfaces without routing projection or bridge code", () => {
+		const downstreamFileNames = [
 			"request-router.ts",
 			"notification-projector.ts",
 			"server-request-bridge.ts",
+			"session-registry.ts",
+			"id-mapper.ts",
+			"reconnect-resume.ts",
+			"redaction-scanner.ts",
+			"evidence-packet-writer.ts",
 		];
 
 		const inventoryMethods = APP_SERVER_SURFACE_INVENTORY.map((entry) => entry.method);
@@ -83,7 +87,7 @@ describe("pi-codex-app-server contract lock", () => {
 		expect(inventoryMethods).toEqual(expect.arrayContaining([...PLAN_REQUIRED_APP_SERVER_SURFACES]));
 		expect(missingSurfaces).toEqual([]);
 		expect(classifications.map((classification) => classification?.relayClass)).not.toContain(undefined);
-		for (const fileName of runtimeFileNames) {
+		for (const fileName of downstreamFileNames) {
 			expect(existsSync(join(extensionRoot, fileName))).toBe(false);
 		}
 	});
