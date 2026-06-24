@@ -2,8 +2,11 @@ export const ADAPTER_ERROR_SOURCE = "pi-codex-app-server";
 export const ADAPTER_JSON_RPC_ERROR_CODE = -32080;
 
 export type AdapterErrorCode =
+	| "duplicate-routing-id"
 	| "incompatible-capabilities"
+	| "invalid-session-state"
 	| "malformed-message"
+	| "unsupported-routing-method"
 	| "unsupported-protocol-version"
 	| "unsupported-notification-opt-out";
 
