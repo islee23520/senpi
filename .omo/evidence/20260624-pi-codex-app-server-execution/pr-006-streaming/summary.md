@@ -17,6 +17,11 @@ Scope is intentionally limited to PR-006. It does not implement PR-007 backpress
 
 ## Evidence
 
+Committed sanitized evidence for detached PR review:
+`.omo/evidence/20260624-pi-codex-app-server-execution/pr-006-streaming/sanitized-evidence-addendum.md`.
+
+Full raw artifacts remain under the gitignored paths below for local audit:
+
 - Failing-first proof: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/failing-first.txt`
 - Focused streaming test: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/targeted-streaming.txt`
 - Adjacent contract/routing/streaming suite: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/targeted-adjacent-suite-final.txt`
@@ -27,6 +32,7 @@ Scope is intentionally limited to PR-006. It does not implement PR-007 backpress
 - Adapter harness help smoke: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/drive-adapter-help.txt`
 - Cleanup receipt: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/cleanup-receipt.txt`
 - Commands: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/commands.txt`
+- CamelCase follow-up artifacts: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-006-streaming/camelcase-*.txt`
 
 ## Assertions Covered
 
