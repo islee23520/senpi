@@ -1,0 +1,7 @@
+{
+  "description": "Turn lifecycle maps to app-server turn APIs and preserves expected-turn guard semantics.",
+  "externalMethods": ["turn/start", "turn/steer", "turn/interrupt"],
+  "appServerMethods": ["turn/start", "turn/steer", "turn/interrupt"],
+  "authoritativeIds": ["appThreadId", "appTurnId"],
+  "correlationOnly": ["externalMessageId"]
+}
