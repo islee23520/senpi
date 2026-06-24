@@ -3,6 +3,7 @@ import {
 	createAppServerOverloadError,
 	createStreamBackpressureController,
 	type StreamBackpressureEvent,
+	type StreamBackpressureOutput,
 } from "../../src/core/extensions/builtin/pi-codex-app-server/stream-backpressure.ts";
 
 function event(method: string, sequence: number, streamClass: "lossless" | "best-effort"): StreamBackpressureEvent {
@@ -43,6 +44,7 @@ describe("pi-codex-app-server stream backpressure", () => {
 			"lag",
 			"item/completed",
 		]);
+		expect(drained.map(readOutputSequence)).toEqual([1, 2, 3, 4]);
 		expect(drained[2]).toMatchObject({
 			kind: "lag",
 			method: "lag",
@@ -82,3 +84,8 @@ describe("pi-codex-app-server stream backpressure", () => {
 		});
 	});
 });
+
+function readOutputSequence(event: StreamBackpressureOutput): number {
+	if (event.kind === "semantic" || event.kind === "lag") return event.sequence;
+	return event.envelope.sequence;
+}

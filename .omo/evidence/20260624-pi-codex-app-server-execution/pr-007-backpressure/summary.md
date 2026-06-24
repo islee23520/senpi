@@ -96,8 +96,32 @@ pi-codex-app-server-backpressure.test.ts: 76 pure LOC
 - Lossless events are not dropped under best-effort pressure.
 - Best-effort progress drops increment dropped-progress accounting.
 - A `lag` event appears before the next lossless event after best-effort drops.
+- The `lag` event consumes its own monotonic adapter sequence; `nextLosslessSequence` points to the following lossless event.
 - Terminal flush drains queued progress and lossless turn completion.
 - App-server overload is preserved as retryable JSON-RPC `-32001`.
+
+## Review Follow-Up: Lag Marker Sequence
+
+The review blocker at PR #79 identified that the original lag marker reused the
+following lossless event sequence. The follow-up regression now fails if emitted
+sequences are duplicate or non-monotonic. Red output before the fix showed:
+
+```text
+expected [ 1, 2, 4, 4 ] to deeply equal [ 1, 2, 3, 4 ]
+```
+
+After the fix, the lag marker uses the last dropped progress event's consumed
+adapter sequence, while `nextLosslessSequence` still points to the following
+lossless event. Refreshed artifacts:
+
+- `followup-lag-sequence-failing-first.txt`: failed with duplicate sequence `[1, 2, 4, 4]`.
+- `followup-lag-sequence-targeted-final.txt`: 1 file / 3 tests passed.
+- `followup-lag-sequence-adjacent-final.txt`: 5 files / 21 tests passed.
+- `followup-lag-sequence-npm-run-check-final.txt`: `npm run check` passed.
+- `followup-lag-sequence-senpi-qa-common-self-check.txt`: 9/9 passed.
+- `followup-lag-sequence-senpi-qa-cli-smoke.txt`: 5/5 passed.
+- `followup-lag-sequence-senpi-qa-mock-loop.txt`: 5/5 passed.
+- `followup-lag-sequence-drive-adapter-help.txt`: adapter harness help rendered.
 
 ## Project Tracking
 

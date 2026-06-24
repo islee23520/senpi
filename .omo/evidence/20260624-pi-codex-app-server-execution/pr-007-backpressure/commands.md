@@ -40,3 +40,8 @@ NODE_PATH=/Users/yeongyu/local-workspaces/senpi/node_modules \
     packages/coding-agent/src/core/extensions/builtin/pi-codex-app-server/stream-backpressure.ts \
     packages/coding-agent/test/suite/pi-codex-app-server-backpressure.test.ts
 ```
+
+Review follow-up for lag marker sequence monotonicity reused the same targeted,
+adjacent, check, and senpi QA commands. Refreshed local artifact filenames use
+the `followup-lag-sequence-*` prefix under
+`local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-007-backpressure/`.

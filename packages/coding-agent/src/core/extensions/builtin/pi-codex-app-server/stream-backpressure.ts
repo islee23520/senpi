@@ -59,6 +59,7 @@ class DefaultStreamBackpressureController implements StreamBackpressureControlle
 	private droppedProgressEvents = 0;
 	private emittedLagMarkers = 0;
 	private pendingDroppedProgressEvents = 0;
+	private pendingLagSequence: number | undefined;
 
 	constructor(options: StreamBackpressureOptions) {
 		this.connectionId = options.connectionId;
@@ -94,6 +95,7 @@ class DefaultStreamBackpressureController implements StreamBackpressureControlle
 		if (this.countQueuedBestEffortEvents() >= this.bestEffortQueueLimit) {
 			this.droppedProgressEvents += 1;
 			this.pendingDroppedProgressEvents += 1;
+			this.pendingLagSequence = readSequence(event);
 			return;
 		}
 		this.queue.push(event);
@@ -101,8 +103,12 @@ class DefaultStreamBackpressureController implements StreamBackpressureControlle
 
 	private enqueueLossless(event: StreamBackpressureEvent): void {
 		if (this.pendingDroppedProgressEvents > 0) {
-			this.queue.push(this.createLagEvent(readSequence(event)));
+			const nextLosslessSequence = readSequence(event);
+			this.queue.push(
+				this.createLagEvent(this.pendingLagSequence ?? nextLosslessSequence - 1, nextLosslessSequence),
+			);
 			this.pendingDroppedProgressEvents = 0;
+			this.pendingLagSequence = undefined;
 			this.emittedLagMarkers += 1;
 		}
 		this.queue.push(event);
@@ -112,12 +118,12 @@ class DefaultStreamBackpressureController implements StreamBackpressureControlle
 		return this.queue.filter((event) => readStreamClass(event) === "best-effort").length;
 	}
 
-	private createLagEvent(nextLosslessSequence: number): LagStreamEvent {
+	private createLagEvent(sequence: number, nextLosslessSequence: number): LagStreamEvent {
 		return {
 			kind: "lag",
 			method: "lag",
 			connectionId: this.connectionId,
-			sequence: nextLosslessSequence,
+			sequence,
 			streamClass: "control",
 			droppedProgressEvents: this.pendingDroppedProgressEvents,
 			nextLosslessSequence,
