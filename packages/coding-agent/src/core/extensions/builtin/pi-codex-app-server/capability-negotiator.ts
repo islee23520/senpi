@@ -26,9 +26,9 @@ export interface ExternalInitializeCapabilities {
 
 export interface AppServerInitializeCapabilities {
 	readonly experimentalApi?: boolean;
-	readonly attestationRequests?: boolean;
-	readonly mcpFormElicitation?: boolean;
-	readonly notificationOptOuts?: readonly string[];
+	readonly requestAttestation?: boolean;
+	readonly mcpServerOpenaiFormElicitation?: boolean;
+	readonly optOutNotificationMethods?: readonly string[] | null;
 }
 
 export interface CapabilityNegotiationInput {
@@ -140,8 +140,8 @@ function buildCapabilityFlags(
 	if (external.filesystem) flags.push("filesystem");
 	if (external.appPluginConfig) flags.push("app-plugin-config");
 	if (appServer?.experimentalApi) flags.push("app-server-experimental-api");
-	if (appServer?.attestationRequests) flags.push("app-server-attestation");
-	if (appServer?.mcpFormElicitation) flags.push("app-server-mcp-form-elicitation");
+	if (appServer?.requestAttestation) flags.push("app-server-attestation");
+	if (appServer?.mcpServerOpenaiFormElicitation) flags.push("app-server-mcp-form-elicitation");
 	return flags;
 }
 
@@ -149,7 +149,7 @@ function mapNotificationOptOuts(
 	external: ExternalInitializeCapabilities,
 	appServer: AppServerInitializeCapabilities | undefined,
 ): readonly string[] {
-	const appServerOptOuts = new Set<string>(appServer?.notificationOptOuts ?? []);
+	const appServerOptOuts = new Set<string>(appServer?.optOutNotificationMethods ?? []);
 	if (appServerOptOuts.size === 0) return [];
 	return external.notificationOptOuts.filter((method) => appServerOptOuts.has(method));
 }

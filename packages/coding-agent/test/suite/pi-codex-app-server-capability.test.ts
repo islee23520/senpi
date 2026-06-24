@@ -30,9 +30,9 @@ describe("pi-codex-app-server capability negotiation", () => {
 			external: parsed,
 			appServer: {
 				experimentalApi: true,
-				attestationRequests: true,
-				mcpFormElicitation: true,
-				notificationOptOuts: ["warning", "thread/tokenUsage/updated", "configWarning"],
+				requestAttestation: true,
+				mcpServerOpenaiFormElicitation: true,
+				optOutNotificationMethods: ["warning", "thread/tokenUsage/updated", "configWarning"],
 			},
 		});
 

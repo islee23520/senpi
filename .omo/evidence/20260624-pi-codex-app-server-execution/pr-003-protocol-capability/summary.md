@@ -20,6 +20,15 @@ No runtime transport, child process, websocket, unix socket, session routing, st
 - Adapter harness help smoke: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-003-protocol-capability/drive-adapter-help.txt`
 - Cleanup receipt: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-003-protocol-capability/cleanup-receipt.txt`
 
+Follow-up for PR review comment `4786308592`:
+
+- Updated app-server-side initialize capability field names to match Codex `InitializeCapabilities`: `requestAttestation`, `mcpServerOpenaiFormElicitation`, and `optOutNotificationMethods`.
+- Refreshed targeted PR-003 test: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-003-protocol-capability/targeted-capability-followup-after-cleanup.txt`
+- Refreshed contract/skeleton/capability suite: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-003-protocol-capability/targeted-suite-followup-after-cleanup.txt`
+- Refreshed full check after ignored `.codegraph` symlink cleanup: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-003-protocol-capability/npm-run-check-followup-after-cleanup.txt`
+- Refreshed senpi QA: `senpi-qa-common-self-check-followup.txt`, `senpi-qa-cli-smoke-followup.txt`, `senpi-qa-mock-loop-followup.txt`, and `drive-adapter-help-followup.txt`
+- Tool-state cleanup receipt: `local-ignore/qa-evidence/20260624-pi-codex-app-server/pr-003-protocol-capability/codegraph-symlink-cleanup.txt`
+
 ## Project tracking
 
 BLOCKED:missing-gh-project-scope - `gh project list --owner code-yeongyu --format json --limit 20` failed because the token lacks `read:project`.
