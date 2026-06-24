@@ -1,0 +1,6 @@
+{
+  "description": "Session lifecycle maps to thread lifecycle while preserving app-server thread and session ids.",
+  "externalMethods": ["session/new", "session/resume", "session/fork"],
+  "appServerMethods": ["thread/start", "thread/resume", "thread/fork"],
+  "authoritativeIds": ["appThreadId", "appSessionId"]
+}
