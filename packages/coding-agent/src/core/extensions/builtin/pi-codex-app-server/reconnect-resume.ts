@@ -137,7 +137,7 @@ class DefaultReconnectResumeCoordinator implements ReconnectResumeCoordinator {
 		const params = readRecord(input.params);
 		if (!params) return invalidSession("Terminal notification params must be an object.");
 		const appThreadId = readString(params, "threadId") ?? readString(params, "thread_id");
-		const appTurnId = readString(params, "turnId") ?? readString(params, "turn_id") ?? readString(params, "id");
+		const appTurnId = readAppTurnId(params);
 		if (!appThreadId || !appTurnId) return invalidSession("Terminal notification requires thread and turn IDs.");
 		const binding = this.sessionRegistry.getByAppThreadId(appThreadId);
 		if (!binding || binding.tombstoned)
@@ -149,6 +149,7 @@ class DefaultReconnectResumeCoordinator implements ReconnectResumeCoordinator {
 		this.completedTurnKeys.add(terminalKey);
 		const appItemId = readString(params, "itemId") ?? readString(params, "item_id");
 		this.sessionRegistry.updateReplayCursor(binding.externalSessionId, {
+			...binding.replayCursor,
 			lastCompletedTurnId: appTurnId,
 			...(appItemId ? { lastProjectedItemId: appItemId } : {}),
 			lastLosslessSequence: input.sequence,
@@ -203,6 +204,13 @@ function withOptionalCursor(
 
 function isTerminalNotification(method: string): boolean {
 	return method === "turn/completed" || method === "error";
+}
+
+function readAppTurnId(params: Readonly<Record<string, unknown>>): string | undefined {
+	const topLevelTurnId = readString(params, "turnId") ?? readString(params, "turn_id") ?? readString(params, "id");
+	if (topLevelTurnId) return topLevelTurnId;
+	const turn = readRecord(params.turn);
+	return turn ? readString(turn, "id") : undefined;
 }
 
 function invalidSession(message: string): { readonly kind: "adapter-error"; readonly error: AdapterJsonRpcError } {
