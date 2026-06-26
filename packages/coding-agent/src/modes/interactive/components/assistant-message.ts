@@ -2,6 +2,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
 import { formatProviderNativeBody, formatProviderNativeSummary } from "../../provider-native-rendering.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { createBoundedRenderSignature } from "./render-signature.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -101,9 +102,10 @@ export class AssistantMessageComponent extends Container {
 	}
 
 	updateContent(message: AssistantMessage): void {
+		const previousMessage = this.lastMessage;
 		this.lastMessage = message;
 		const messageSignature = this.createMessageSignature(message);
-		if (this.lastMessageSignature === messageSignature) {
+		if (previousMessage === message && this.lastMessageSignature === messageSignature) {
 			return;
 		}
 		this.lastMessageSignature = messageSignature;
@@ -203,7 +205,7 @@ export class AssistantMessageComponent extends Container {
 	}
 
 	private createMessageSignature(message: AssistantMessage): string {
-		return JSON.stringify({
+		return createBoundedRenderSignature({
 			content: message.content,
 			hiddenThinkingLabel: this.hiddenThinkingLabel,
 			hideThinkingBlock: this.hideThinkingBlock,

@@ -6,6 +6,7 @@ import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/rend
 import { stripAnsi } from "../../../utils/ansi.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
+import { createBoundedRenderSignature } from "./render-signature.ts";
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
@@ -178,6 +179,7 @@ export class ToolExecutionComponent extends Container {
 
 	updateArgs(args: any): void {
 		this.args = args;
+		this.lastDisplaySignature = undefined;
 		this.updateSpinnerAnimation();
 		this.updateDisplay();
 	}
@@ -202,6 +204,7 @@ export class ToolExecutionComponent extends Container {
 		if (!isPartial) {
 			this.argsComplete = true;
 		}
+		this.lastDisplaySignature = undefined;
 		this.updateSpinnerAnimation();
 		this.updateDisplay();
 		this.maybeConvertImagesForKitty();
@@ -440,7 +443,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private createRenderSignature(): string {
-		return JSON.stringify({
+		return createBoundedRenderSignature({
 			args: this.args,
 			argsComplete: this.argsComplete,
 			executionStarted: this.executionStarted,
