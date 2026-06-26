@@ -482,6 +482,8 @@ export function getDefaultSessionDir(cwd: string, agentDir: string = getDefaultA
 }
 
 const SESSION_READ_BUFFER_SIZE = 1024 * 1024;
+const SESSION_HEADER_READ_BUFFER_SIZE = 4 * 1024;
+const SESSION_HEADER_MAX_BYTES = SESSION_READ_BUFFER_SIZE;
 
 function parseSessionEntryLine(line: string): FileEntry | null {
 	if (!line.trim()) return null;
@@ -539,20 +541,51 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 }
 
 function readSessionHeader(filePath: string): SessionHeader | null {
+	let fd: number | undefined;
 	try {
-		const fd = openSync(filePath, "r");
-		const buffer = Buffer.alloc(512);
-		const bytesRead = readSync(fd, buffer, 0, 512, 0);
-		closeSync(fd);
-		const firstLine = buffer.toString("utf8", 0, bytesRead).split("\n")[0];
-		if (!firstLine) return null;
+		fd = openSync(filePath, "r");
+		const decoder = new StringDecoder("utf8");
+		const buffer = Buffer.allocUnsafe(SESSION_HEADER_READ_BUFFER_SIZE);
+		let pending = "";
+		let firstLine: string | undefined;
+		let totalBytesRead = 0;
+
+		while (firstLine === undefined) {
+			const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+			if (bytesRead === 0) {
+				firstLine = pending + decoder.end();
+				break;
+			}
+			totalBytesRead += bytesRead;
+
+			pending += decoder.write(buffer.subarray(0, bytesRead));
+			const newlineIndex = pending.indexOf("\n");
+			if (newlineIndex !== -1) {
+				firstLine = pending.slice(0, newlineIndex);
+			} else if (totalBytesRead >= SESSION_HEADER_MAX_BYTES) {
+				return null;
+			}
+		}
+
+		if (!firstLine.trim()) return null;
 		const header = JSON.parse(firstLine) as Record<string, unknown>;
 		if (header.type !== "session" || typeof header.id !== "string") {
 			return null;
 		}
-		return header as unknown as SessionHeader;
+		return {
+			type: "session",
+			id: header.id,
+			timestamp: typeof header.timestamp === "string" ? header.timestamp : "",
+			cwd: typeof header.cwd === "string" ? header.cwd : "",
+			...(typeof header.version === "number" ? { version: header.version } : {}),
+			...(typeof header.parentSession === "string" ? { parentSession: header.parentSession } : {}),
+		};
 	} catch {
 		return null;
+	} finally {
+		if (fd !== undefined) {
+			closeSync(fd);
+		}
 	}
 }
 
@@ -1211,6 +1244,37 @@ export class SessionManager {
 		return buildSessionContext(this.getEntries(), this.leafId);
 	}
 
+	hasContextMessages(): boolean {
+		return this.hasBranchEntry(
+			(entry) =>
+				entry.type === "message" ||
+				entry.type === "custom_message" ||
+				entry.type === "compaction" ||
+				(entry.type === "branch_summary" && Boolean(entry.summary)),
+		);
+	}
+
+	hasThinkingLevelChanges(): boolean {
+		return this.hasBranchEntry((entry) => entry.type === "thinking_level_change");
+	}
+
+	countCompactions(): number {
+		let count = 0;
+		for (const entry of this.fileEntries) {
+			if (entry.type === "compaction") count++;
+		}
+		return count;
+	}
+
+	private hasBranchEntry(predicate: (entry: SessionEntry) => boolean): boolean {
+		let current = this.leafId ? this.byId.get(this.leafId) : undefined;
+		while (current) {
+			if (predicate(current)) return true;
+			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+		}
+		return false;
+	}
+
 	/**
 	 * Get session header.
 	 */
@@ -1457,8 +1521,7 @@ export class SessionManager {
 	static open(path: string, sessionDir?: string, cwdOverride?: string): SessionManager {
 		const resolvedPath = resolvePath(path);
 		// Extract cwd from session header if possible, otherwise use process.cwd()
-		const entries = loadEntriesFromFile(resolvedPath);
-		const header = entries.find((e) => e.type === "session") as SessionHeader | undefined;
+		const header = readSessionHeader(resolvedPath);
 		const cwd = cwdOverride ?? header?.cwd ?? process.cwd();
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ? normalizePath(sessionDir) : resolve(resolvedPath, "..");
