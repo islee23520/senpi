@@ -724,7 +724,7 @@ export async function main(args: string[], options?: MainOptions) {
 		} = buildSessionOptions(
 			parsed,
 			scopedModels,
-			sessionManager.buildSessionContext().messages.length > 0,
+			sessionManager.hasContextMessages(),
 			modelRegistry,
 			settingsManager,
 		);

@@ -15,7 +15,7 @@ import { findInitialModel, getModelNarrowingPatterns, resolveModelScope } from "
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
-import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
+import { getDefaultSessionDir, type SessionContext, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { getSupportedThinkingLevels } from "./thinking-levels.ts";
 import { time } from "./timings.ts";
@@ -197,22 +197,28 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		time("resourceLoader.reload");
 	}
 
-	// Check if session has existing data to restore
-	const existingSession = sessionManager.buildSessionContext();
-	const hasExistingSession = existingSession.messages.length > 0;
-	const hasThinkingEntry = sessionManager.getBranch().some((entry) => entry.type === "thinking_level_change");
+	const hasExistingSession = sessionManager.hasContextMessages();
+	const hasThinkingEntry = sessionManager.hasThinkingLevelChanges();
+	let existingSession: SessionContext | undefined;
+	const getExistingSession = (): SessionContext => {
+		existingSession ??= sessionManager.buildSessionContext();
+		return existingSession;
+	};
 
 	let model = options.model;
 	let modelFallbackMessage: string | undefined;
 
 	// If session has data, try to restore model from it
-	if (!model && hasExistingSession && existingSession.model) {
-		const restoredModel = modelRegistry.find(existingSession.model.provider, existingSession.model.modelId);
-		if (restoredModel && modelRegistry.hasConfiguredAuth(restoredModel)) {
-			model = restoredModel;
-		}
-		if (!model) {
-			modelFallbackMessage = `Could not restore model ${existingSession.model.provider}/${existingSession.model.modelId}`;
+	if (!model && hasExistingSession) {
+		const sessionContext = getExistingSession();
+		if (sessionContext.model) {
+			const restoredModel = modelRegistry.find(sessionContext.model.provider, sessionContext.model.modelId);
+			if (restoredModel && modelRegistry.hasConfiguredAuth(restoredModel)) {
+				model = restoredModel;
+			}
+			if (!model) {
+				modelFallbackMessage = `Could not restore model ${sessionContext.model.provider}/${sessionContext.model.modelId}`;
+			}
 		}
 	}
 
@@ -239,7 +245,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// If session has data, restore thinking level from it
 	if (thinkingLevel === undefined && hasExistingSession) {
 		thinkingLevel = hasThinkingEntry
-			? (existingSession.thinkingLevel as ThinkingLevel)
+			? (getExistingSession().thinkingLevel as ThinkingLevel)
 			: (settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL);
 	}
 
@@ -378,7 +384,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// Restore messages if session has existing data
 	if (hasExistingSession) {
-		agent.state.messages = existingSession.messages;
+		agent.state.messages = getExistingSession().messages;
 		if (!hasThinkingEntry) {
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
 		}
