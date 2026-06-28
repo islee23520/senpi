@@ -4,20 +4,32 @@
 
 ### Added
 
+- Added the Claude Opus 4.8 prompt preset.
 - Added an `externalEditor` settings.json override for Ctrl+G external editor commands, with default fallbacks to Notepad on Windows and `nano` elsewhere ([#6122](https://github.com/earendil-works/pi/issues/6122)).
+- Added install-lock generation so the coding-agent production install tree is checked during validation and release.
+- Added the experimental pi Codex app-server integration, including protocol contracts, capability negotiation, transport/runtime plumbing, routing state, stream projection, callback bridge support, backpressure semantics, MCP tool callbacks, reconnect/resume handling, pass-through gates, and QA evidence packets.
 
 ### Changed
+
+- Updated the base system prompt with stronger execution-stance and style anchors.
+- Updated the OpenAI default model used by the coding agent.
 
 ### Fixed
 
 - Fixed bash command output collection to keep reading delayed descendant stdout after the parent process exits ([#5303](https://github.com/earendil-works/pi/issues/5303)).
 - Fixed builtin webfetch extraction for Tistory-style articles so the post body and readable line breaks are preserved instead of blog chrome or category blocks.
+- Fixed builtin webfetch extraction to prefer article titles when reader-mode metadata is available.
 - Fixed `--session` and `SessionManager.open()` to reject non-empty invalid session files without overwriting them ([#6002](https://github.com/earendil-works/pi/issues/6002)).
+- Fixed invalid session file errors to be shorter and easier to read.
+- Fixed session resume performance by avoiding eager session reads, preserving resident JSON semantics, and bounding TUI render signatures.
+- Fixed resumed sessions to show resources before messages ([#6048](https://github.com/earendil-works/pi/pull/6048) by [@haoqixu](https://github.com/haoqixu)).
 - Fixed user-message transcript rendering to keep visible backslashes in Markdown escape sequences such as `\"` ([#6105](https://github.com/earendil-works/pi/issues/6105)).
 - Fixed assistant messages stopped by output length to show a visible incomplete-response error ([#4290](https://github.com/earendil-works/pi/issues/4290)).
 - Fixed `--no-session --session-id` so ephemeral CLI runs can use deterministic session IDs for provider cache affinity ([#6070](https://github.com/earendil-works/pi/issues/6070)).
 - Fixed disk BMP image files to be detected, converted to PNG, and attached through `read` and CLI `@file` inputs ([#6047](https://github.com/earendil-works/pi/issues/6047)).
+- Fixed benchmark timing output after TUI shutdown and drained startup benchmark replies before exit ([#6030](https://github.com/earendil-works/pi/issues/6030)).
 - Fixed auto-retry for provider stream errors that explicitly tell callers to retry the request ([#6019](https://github.com/earendil-works/pi/issues/6019)).
+- Fixed app-server callback retries, notification IDs, resume cursors, runtime guards, capability fields, protocol inventory classification, and session routing behavior.
 
 ## [2026.6.23-2] - 2026-06-23
 
