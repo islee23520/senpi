@@ -117,6 +117,12 @@ describe("prompt preset resolver", () => {
 
 	it.each([
 		{
+			id: "claude-opus-4-8",
+			provider: "anthropic",
+			api: "anthropic-messages" as const,
+			expectedName: "claude-opus-4-8",
+		},
+		{
 			id: "claude-opus-4-7",
 			provider: "anthropic",
 			api: "anthropic-messages" as const,
@@ -373,6 +379,20 @@ describe("prompt preset resolver", () => {
 		expect(preset?.prompt).toContain("full set rather than the first item");
 	});
 
+	it("does not include Kimi tuning in claude-opus-4-8 preset", () => {
+		// given
+		const settings: PromptPresetSettings = { promptPreset: "auto" };
+		const model = createModel("claude-opus-4-8", "anthropic", "anthropic-messages");
+
+		// when
+		const preset = resolvePreset(model, settings);
+
+		// then
+		expect(preset?.name).toBe("claude-opus-4-8");
+		expect(preset?.prompt).not.toContain("filler verification language");
+		expect(preset?.prompt).not.toContain("outcome-first");
+	});
+
 	it("does not include Kimi tuning in claude-opus-4-7 preset", () => {
 		// given
 		const settings: PromptPresetSettings = { promptPreset: "auto" };
@@ -442,6 +462,14 @@ describe("prompt preset resolver", () => {
 		const preset = resolvePreset(model, settings);
 		expect(preset?.name).toBe("gpt-5.3-codex");
 		expect(preset?.prompt).toContain("Bias hard toward action");
+	});
+
+	it("resolves claude-opus-4-8 preset", () => {
+		const settings: PromptPresetSettings = { promptPreset: "auto" };
+		const model = createModel("claude-opus-4-8", "anthropic", "anthropic-messages");
+		const preset = resolvePreset(model, settings);
+		expect(preset?.name).toBe("claude-opus-4-8");
+		expect(preset?.prompt).toContain("tool calls over reasoning");
 	});
 
 	it("resolves claude-opus-4-5 preset", () => {

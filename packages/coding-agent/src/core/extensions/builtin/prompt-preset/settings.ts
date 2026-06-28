@@ -2,6 +2,7 @@ import type { Settings, SettingsManager } from "../../../settings-manager.ts";
 
 export type PromptPresetName =
 	| "auto"
+	| "claude-opus-4-8"
 	| "claude-opus-4-7"
 	| "claude-opus-4-6"
 	| "claude-opus-4-5"
@@ -22,6 +23,7 @@ type SettingsWithPromptPreset = Settings & { promptPreset?: string };
 
 const VALID_PRESETS: ReadonlySet<string> = new Set<PromptPresetName>([
 	"auto",
+	"claude-opus-4-8",
 	"claude-opus-4-7",
 	"claude-opus-4-6",
 	"claude-opus-4-5",

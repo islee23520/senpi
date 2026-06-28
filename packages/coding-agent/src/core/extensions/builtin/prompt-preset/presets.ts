@@ -3,6 +3,7 @@ import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/bu
 import { buildClaudeOpus45Prompt } from "./claude-opus-4-5.ts";
 import { buildClaudeOpus46Prompt } from "./claude-opus-4-6.ts";
 import { buildClaudeOpus47Prompt } from "./claude-opus-4-7.ts";
+import { buildClaudeOpus48Prompt } from "./claude-opus-4-8.ts";
 import { buildGlm52Prompt } from "./glm-5-2.ts";
 import { buildGpt52Prompt } from "./gpt-5.2.ts";
 import { buildGpt53CodexPrompt } from "./gpt-5.3-codex.ts";
@@ -73,10 +74,13 @@ function isGlm52Model(model: ModelWithPromptPresetMetadata): boolean {
 	return hasGlm52Signal(model.id) || (model.name !== undefined && hasGlm52Signal(model.name));
 }
 
-type ClaudeOpusVersion = "claude-opus-4-7" | "claude-opus-4-6" | "claude-opus-4-5";
+type ClaudeOpusVersion = "claude-opus-4-8" | "claude-opus-4-7" | "claude-opus-4-6" | "claude-opus-4-5";
 
 function extractClaudeOpusVersion(modelId: string): ClaudeOpusVersion | undefined {
 	const normalized = normalizeModelId(modelId);
+	if (normalized.includes("opus-4-8")) {
+		return "claude-opus-4-8";
+	}
 	if (normalized.includes("opus-4-7")) {
 		return "claude-opus-4-7";
 	}
@@ -140,6 +144,8 @@ function buildPreset(name: ResolvedPresetName, options: BuildDynamicSystemPrompt
 			return { name, prompt: buildKimiK27Prompt(options) };
 		case "kimi-k2-6":
 			return { name, prompt: buildKimiK26Prompt(options) };
+		case "claude-opus-4-8":
+			return { name, prompt: buildClaudeOpus48Prompt(options) };
 		case "claude-opus-4-7":
 			return { name, prompt: buildClaudeOpus47Prompt(options) };
 		case "claude-opus-4-6":
