@@ -31,6 +31,7 @@
 - Fixed auto-retry for provider stream errors that explicitly tell callers to retry the request ([#6019](https://github.com/earendil-works/pi/issues/6019)).
 - Fixed app-server callback retries, notification IDs, resume cursors, runtime guards, capability fields, protocol inventory classification, and session routing behavior.
 - Fixed standalone Bun binary startup by preparing css-tree patch data in a compile-friendly form during binary packaging.
+- Fixed the release script to stamp the orchestrator package changelog with the released version.
 
 ## [2026.6.23-2] - 2026-06-23
 
