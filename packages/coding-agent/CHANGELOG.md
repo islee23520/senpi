@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Fixed CI binary packaging to rebuild the trusted `canvas` native binding before Bun compile.
+
 ## [2026.6.28-2] - 2026-06-28
 
 ### Added
