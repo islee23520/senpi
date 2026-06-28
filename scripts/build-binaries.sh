@@ -114,6 +114,8 @@ else
     echo "==> Skipping package build (--skip-build)"
 fi
 
+node scripts/prepare-bun-compile-assets.mjs
+
 echo "==> Building binaries..."
 cd packages/coding-agent
 

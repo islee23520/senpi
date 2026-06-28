@@ -30,6 +30,7 @@
 - Fixed benchmark timing output after TUI shutdown and drained startup benchmark replies before exit ([#6030](https://github.com/earendil-works/pi/issues/6030)).
 - Fixed auto-retry for provider stream errors that explicitly tell callers to retry the request ([#6019](https://github.com/earendil-works/pi/issues/6019)).
 - Fixed app-server callback retries, notification IDs, resume cursors, runtime guards, capability fields, protocol inventory classification, and session routing behavior.
+- Fixed standalone Bun binary startup by preparing css-tree patch data in a compile-friendly form during binary packaging.
 
 ## [2026.6.23-2] - 2026-06-23
 
