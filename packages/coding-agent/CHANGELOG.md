@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Fixed bash command output collection to keep reading delayed descendant stdout after the parent process exits ([#5303](https://github.com/earendil-works/pi/issues/5303)).
 - Fixed builtin webfetch extraction for Tistory-style articles so the post body and readable line breaks are preserved instead of blog chrome or category blocks.
 - Fixed `--session` and `SessionManager.open()` to reject non-empty invalid session files without overwriting them ([#6002](https://github.com/earendil-works/pi/issues/6002)).
 - Fixed user-message transcript rendering to keep visible backslashes in Markdown escape sequences such as `\"` ([#6105](https://github.com/earendil-works/pi/issues/6105)).
