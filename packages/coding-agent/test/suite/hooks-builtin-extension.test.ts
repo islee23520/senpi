@@ -33,6 +33,32 @@ function getBuiltinExtension(id: string): BuiltinExtensionFactory {
 	return extension;
 }
 
+function hookConfig(command: string): unknown {
+	return {
+		hooks: {
+			PreToolUse: [
+				{
+					hooks: [{ type: "command", command }],
+				},
+			],
+		},
+	};
+}
+
+function packageManifest(name: string, hooks: string[]): unknown {
+	return {
+		name,
+		pi: {
+			hooks,
+		},
+	};
+}
+
+function writeJson(path: string, value: unknown): void {
+	mkdirSync(join(path, ".."), { recursive: true });
+	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
+}
+
 describe("builtin hooks extension registration and resource plumbing", () => {
 	it("registers hooks before the permission system builtin", () => {
 		// Given
@@ -151,6 +177,89 @@ describe("builtin hooks extension registration and resource plumbing", () => {
 			preSessionHookSourcePaths: [resolve(preSessionHookPath)],
 			runtimeHookSourcePaths: [resolve(runtimeHookPath)],
 		});
+	});
+
+	it("discovers package hook resources before session start in canonical scope buckets", async () => {
+		// Given
+		const cwd = createTempDir("senpi-hooks-package-sources-cwd");
+		const agentDir = join(cwd, "agent");
+		const globalPackage = join(cwd, "global-package");
+		const projectPackage = join(cwd, "project-package");
+		const temporaryPackage = join(cwd, "temporary-package");
+		const additionalHookPath = join(cwd, "additional-hooks.json");
+		const globalHookPath = join(globalPackage, "hooks", "global-hooks.json");
+		const projectHookPath = join(projectPackage, "hooks", "project-hooks.json");
+		const temporaryHookPath = join(temporaryPackage, "hooks", "temporary-hooks.json");
+		mkdirSync(agentDir, { recursive: true });
+		mkdirSync(join(cwd, ".senpi"), { recursive: true });
+		writeJson(globalHookPath, hookConfig("node hooks/global.mjs"));
+		writeJson(projectHookPath, hookConfig("node hooks/project.mjs"));
+		writeJson(temporaryHookPath, hookConfig("node hooks/temporary.mjs"));
+		writeJson(additionalHookPath, hookConfig("node hooks/additional.mjs"));
+		writeJson(join(globalPackage, "package.json"), packageManifest("global-package", ["hooks/global-hooks.json"]));
+		writeJson(join(projectPackage, "package.json"), packageManifest("project-package", ["hooks/project-hooks.json"]));
+		writeJson(
+			join(temporaryPackage, "package.json"),
+			packageManifest("temporary-package", ["hooks/temporary-hooks.json"]),
+		);
+		writeJson(join(agentDir, "settings.json"), { packages: [globalPackage] });
+		writeJson(join(cwd, ".senpi", "settings.json"), { packages: [projectPackage] });
+		const loader = new DefaultResourceLoader({
+			cwd,
+			agentDir,
+			additionalExtensionPaths: [temporaryPackage],
+			additionalHookPaths: [additionalHookPath],
+			noExtensions: true,
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+		});
+
+		// When
+		await loader.reload();
+
+		// Then
+		expect(loader.getLoadedHookSources()).toMatchObject({
+			globalHookSourcePaths: [resolve(globalHookPath)],
+			projectHookSourcePaths: [resolve(projectHookPath)],
+			preSessionHookSourcePaths: [resolve(temporaryHookPath), resolve(additionalHookPath)],
+			runtimeHookSourcePaths: [],
+		});
+	});
+
+	it("refreshes package hook resources on reload after manifest changes", async () => {
+		// Given
+		const cwd = createTempDir("senpi-hooks-package-reload-cwd");
+		const agentDir = join(cwd, "agent");
+		const globalPackage = join(cwd, "global-package");
+		const firstHookPath = join(globalPackage, "hooks", "first.json");
+		const secondHookPath = join(globalPackage, "hooks", "second.json");
+		mkdirSync(agentDir, { recursive: true });
+		writeJson(firstHookPath, hookConfig("node hooks/first.mjs"));
+		writeJson(secondHookPath, hookConfig("node hooks/second.mjs"));
+		writeJson(join(globalPackage, "package.json"), packageManifest("reload-package", ["hooks/first.json"]));
+		writeJson(join(agentDir, "settings.json"), { packages: [globalPackage] });
+		const loader = new DefaultResourceLoader({
+			cwd,
+			agentDir,
+			noExtensions: true,
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+		});
+		await loader.reload();
+		expect(loader.getLoadedHookSources().globalHookSourcePaths).toEqual([resolve(firstHookPath)]);
+
+		// When
+		writeJson(join(globalPackage, "package.json"), packageManifest("reload-package", ["hooks/second.json"]));
+		await loader.reload();
+		const afterAdd = loader.getLoadedHookSources().globalHookSourcePaths;
+		writeJson(join(globalPackage, "package.json"), packageManifest("reload-package", []));
+		await loader.reload();
+
+		// Then
+		expect(afterAdd).toEqual([resolve(secondHookPath)]);
+		expect(loader.getLoadedHookSources().globalHookSourcePaths).toEqual([]);
 	});
 
 	it("keeps malformed hook source diagnostics nonfatal during no-op startup", async () => {

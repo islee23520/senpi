@@ -389,8 +389,10 @@ Default senpi hook files are discovered from:
 | Source | Timing | Notes |
 |--------|--------|-------|
 | `~/.senpi/agent/hooks.json` | pre-session | Global hook config. |
+| Global package `pi.hooks` or `hooks/*.json` | pre-session | Package hook config loaded after the global hook file. |
 | `.senpi/hooks.json` | pre-session | Project hook config, loaded after project trust. |
-| SDK or host-provided `new DefaultResourceLoader({ additionalHookPaths })` | pre-session | Package/plugin hosts can inject resolved hook JSON files before `session_start`. |
+| Project package `pi.hooks` or `hooks/*.json` | pre-session | Package hook config loaded after the project hook file. |
+| Temporary package sources and SDK/host-provided `new DefaultResourceLoader({ additionalHookPaths })` | pre-session | Package/plugin hook JSON files resolved before `session_start`. |
 | `resources_discover` `hookPaths` | runtime | Late sources. They can affect later hook events in the current runtime and `SessionStart` on `/reload` or the next session. |
 
 #### Minimal project hook
@@ -501,7 +503,7 @@ Command stdout may be empty or JSON. Universal JSON fields include `decision`, `
 
 #### Plugin hooks
 
-Plugin hook manifests are host/package integration inputs, not automatic default senpi discovery. A host can call senpi's plugin hook manifest helper for a plugin root and feed its parsed result into its own hook integration, or resolve hook JSON files and pass those file paths through `additionalHookPaths` before startup.
+Plugin hook manifests are package integration inputs. Installed senpi packages can expose hook JSON files through `package.json` under `pi.hooks` or by placing JSON files under `hooks/`; those sources are discovered before `session_start` in global, project, or temporary package scope.
 
 Plugin hook manifests live at `.codex-plugin/plugin.json` under the plugin root. A manifest can point to hook JSON files:
 
@@ -537,7 +539,7 @@ It can also inline hook config directly:
 
 `hooks` may also be an array mixing paths, nested arrays, and inline hook objects. Hook paths must stay inside the plugin root. The manifest helper also understands a plugin default hook file at `hooks/hooks.json` unless the host disables default plugin hooks. Plugin commands that reference `${PLUGIN_ROOT}`, `$PLUGIN_ROOT`, or `%PLUGIN_ROOT%` must resolve to existing files inside the plugin root.
 
-Package/plugin hook sources resolved by a host before the session starts are pre-session sources when the host passes them to senpi as additional hook paths. SDK hosts can provide that timing explicitly:
+SDK hosts can still provide explicit pre-session hook sources:
 
 ```typescript
 const loader = new DefaultResourceLoader({
