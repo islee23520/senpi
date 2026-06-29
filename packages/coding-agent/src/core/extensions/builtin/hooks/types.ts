@@ -124,7 +124,14 @@ export type HookRuntimeState = {
 
 export type HookInputWire =
 	| { readonly event: "SessionStart"; readonly sessionId: string; readonly cwd: string }
-	| { readonly event: "UserPromptSubmit"; readonly prompt: string; readonly cwd: string }
+	| {
+			readonly event: "UserPromptSubmit";
+			readonly prompt: string;
+			readonly cwd: string;
+			readonly session_id?: string;
+			readonly permission_mode?: string;
+			readonly transcript_path?: string;
+	  }
 	| {
 			readonly event: "PreToolUse";
 			readonly toolName: string;

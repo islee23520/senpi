@@ -1,6 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
-import type { ExtensionAPI, ExtensionContext, LoadedHookSources } from "../../types.ts";
+import type { BeforeAgentStartEventResult, ExtensionAPI, ExtensionContext, LoadedHookSources } from "../../types.ts";
 import { loadHookConfigSources } from "./config-loader.ts";
+import { dispatchHookEvent } from "./dispatcher.ts";
+import {
+	appendSystemMessages,
+	buildUserPromptHookInput,
+	formatPromptContextMessage,
+	HOOK_CUSTOM_MESSAGE_TYPE,
+	type PendingPromptHookContext,
+	promptBlockReasonFromResult,
+	promptContextFromResult,
+	safeDiagnosticDetails,
+} from "./prompt-adapter.ts";
 import { emptyHookTrustState } from "./trust.ts";
 import { FileHookStateStorage } from "./trust-storage.ts";
 import type {
@@ -29,6 +40,8 @@ export type {
 } from "./types.ts";
 
 export default function hooksExtension(pi: ExtensionAPI): void {
+	const pendingPromptContexts: PendingPromptHookContext[] = [];
+
 	const refreshState = (ctx: ExtensionContext): HookRuntimeState => {
 		const sources = ctx.getLoadedHookSources?.() ?? fallbackHookSources(ctx.cwd);
 		const parsed = loadHookConfigSources({
@@ -55,6 +68,78 @@ export default function hooksExtension(pi: ExtensionAPI): void {
 		);
 		return { parsed, trust };
 	};
+
+	pi.on("input", async (event, ctx) => {
+		if (event.source === "extension") return undefined;
+		pendingPromptContexts.splice(0);
+		const state = refreshState(ctx);
+		const input = buildUserPromptHookInput({
+			cwd: ctx.cwd,
+			permissionMode: "default",
+			prompt: event.text,
+			sessionId: ctx.sessionManager.getSessionId(),
+			transcriptPath: ctx.sessionManager.getSessionFile(),
+		});
+		const result = await dispatchHookEvent({
+			cwd: ctx.cwd,
+			handlers: state.parsed.executableHandlers,
+			input,
+			signal: ctx.signal,
+			trustOptions: { platform: process.platform },
+			trustState: state.trust,
+		});
+		if (result.decision.kind === "block") {
+			const reason = promptBlockReasonFromResult(result);
+			ctx.ui.notify(reason, "warning");
+			pi.sendMessage(
+				{
+					customType: HOOK_CUSTOM_MESSAGE_TYPE,
+					content: reason,
+					display: false,
+					details: {
+						decision: "block",
+						event: "UserPromptSubmit",
+						sourcePath: result.decision.source.sourcePath,
+					},
+				},
+				{ triggerTurn: false },
+			);
+			return { action: "handled" };
+		}
+		if (ctx.isIdle()) {
+			const pending = promptContextFromResult(result);
+			if (pending !== undefined) {
+				pendingPromptContexts.push(pending);
+			}
+		}
+		return { action: "continue" };
+	});
+
+	pi.on("before_agent_start", async (event) => {
+		const pending = pendingPromptContexts.shift();
+		if (pending === undefined) return undefined;
+
+		const messageContent = formatPromptContextMessage(pending);
+		const systemPrompt = appendSystemMessages(event.systemPrompt, pending.systemMessages);
+		if (messageContent === undefined && systemPrompt === event.systemPrompt) return undefined;
+
+		const result: BeforeAgentStartEventResult = {};
+		if (messageContent !== undefined) {
+			result.message = {
+				customType: HOOK_CUSTOM_MESSAGE_TYPE,
+				content: messageContent,
+				display: false,
+				details: {
+					event: "UserPromptSubmit",
+					diagnostics: pending.diagnostics.map(safeDiagnosticDetails),
+				},
+			};
+		}
+		if (systemPrompt !== event.systemPrompt) {
+			result.systemPrompt = systemPrompt;
+		}
+		return result;
+	});
 
 	pi.registerCommand("hooks", {
 		description: "Inspect loaded builtin hook sources and diagnostics.",
