@@ -9,6 +9,8 @@ import type { ExecutableHookHandler, HookInputWire } from "../../src/core/extens
 
 const tempRoots: string[] = [];
 const PLUGIN_ROOT_TOKEN = "$" + "{PLUGIN_ROOT}";
+const GITHUB_CLASSIC_PAT = "ghp_0123456789abcdef0123456789abcdef0123";
+const GITHUB_FINE_GRAINED_PAT = "github_pat_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 afterEach(() => {
 	delete process.env.SENPI_TEST_ALLOWED;
@@ -148,8 +150,8 @@ describe("builtin hooks safety policy", () => {
 		writeFileSync(
 			scriptPath,
 			[
-				"process.stdout.write('SECRET_TOKEN=stdout-secret\\n' + 'o'.repeat(200));",
-				"process.stderr.write('Authorization: Bearer stderr-secret\\n' + 'e'.repeat(200));",
+				`process.stdout.write('SECRET_TOKEN=stdout-secret\\n${GITHUB_CLASSIC_PAT}\\nghp_short\\n' + 'o'.repeat(200));`,
+				`process.stderr.write('Authorization: Bearer stderr-secret\\n${GITHUB_FINE_GRAINED_PAT}\\ngithub_pat_short\\n' + 'e'.repeat(200));`,
 			].join("\n"),
 		);
 		const input: HookInputWire = { cwd: pluginRoot, event: "SessionStart", sessionId: "s1" };
@@ -160,15 +162,19 @@ describe("builtin hooks safety policy", () => {
 			input,
 			{
 				cwd: pluginRoot,
-				outputPolicy: { maxStderrBytes: 64, maxStdoutBytes: 64, spillDir },
+				outputPolicy: { maxStderrBytes: 192, maxStdoutBytes: 192, spillDir },
 			},
 		);
 
 		// Then
 		expect(result.stdout).toContain("[REDACTED]");
 		expect(result.stderr).toContain("[REDACTED]");
+		expect(result.stdout).toContain("ghp_short");
+		expect(result.stderr).toContain("github_pat_short");
 		expect(result.stdout).not.toContain("stdout-secret");
 		expect(result.stderr).not.toContain("stderr-secret");
+		expect(result.stdout).not.toContain(GITHUB_CLASSIC_PAT);
+		expect(result.stderr).not.toContain(GITHUB_FINE_GRAINED_PAT);
 		expect(result.outputSafety.stdout).toEqual(
 			expect.objectContaining({ redacted: true, spilled: true, truncated: true }),
 		);
@@ -177,8 +183,14 @@ describe("builtin hooks safety policy", () => {
 		);
 		expect(result.outputSafety.stdout.spillPath).toEqual(expect.any(String));
 		expect(result.outputSafety.stderr.spillPath).toEqual(expect.any(String));
-		expect(readFileSync(result.outputSafety.stdout.spillPath ?? "", "utf8")).not.toContain("stdout-secret");
-		expect(readFileSync(result.outputSafety.stderr.spillPath ?? "", "utf8")).not.toContain("stderr-secret");
+		const stdoutSpill = readFileSync(result.outputSafety.stdout.spillPath ?? "", "utf8");
+		const stderrSpill = readFileSync(result.outputSafety.stderr.spillPath ?? "", "utf8");
+		expect(stdoutSpill).toContain("ghp_short");
+		expect(stderrSpill).toContain("github_pat_short");
+		expect(stdoutSpill).not.toContain("stdout-secret");
+		expect(stderrSpill).not.toContain("stderr-secret");
+		expect(stdoutSpill).not.toContain(GITHUB_CLASSIC_PAT);
+		expect(stderrSpill).not.toContain(GITHUB_FINE_GRAINED_PAT);
 	});
 
 	it("uses the Codex-compatible 600 second timeout by default", async () => {

@@ -60,10 +60,18 @@ export function applyHookOutputSafety(
 }
 
 function redactHookOutput(text: string): string {
+	return redactHookTokenValues(
+		text
+			.replace(/\b([A-Z][A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|AUTH)[A-Z0-9_]*)=([^\s'"]+)/g, "$1=[REDACTED]")
+			.replace(/\b(Authorization:\s*Bearer\s+)([^\s'"]+)/gi, "$1[REDACTED]")
+			.replace(/\b(Bearer\s+)(sk-[A-Za-z0-9._-]+)/g, "$1[REDACTED]"),
+	);
+}
+
+export function redactHookTokenValues(text: string, replacement = "[REDACTED]"): string {
 	return text
-		.replace(/\b([A-Z][A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|AUTH)[A-Z0-9_]*)=([^\s'"]+)/g, "$1=[REDACTED]")
-		.replace(/\b(Authorization:\s*Bearer\s+)([^\s'"]+)/gi, "$1[REDACTED]")
-		.replace(/\b(Bearer\s+)(sk-[A-Za-z0-9._-]+)/g, "$1[REDACTED]");
+		.replace(/\bghp_[A-Za-z0-9]{20,}\b/g, replacement)
+		.replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, replacement);
 }
 
 function spillRedactedOutput(stream: "stderr" | "stdout", text: string, policy: HookOutputPolicy | undefined): string {

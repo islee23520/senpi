@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../../types.ts";
+import { redactHookTokenValues } from "./output-bounds.ts";
 import { createHookTrustEntry, type HookTrustRecord, hookTrustStorageScope, listHookTrustRecords } from "./trust.ts";
 import type { HookStateStorage } from "./trust-storage.ts";
 import type {
@@ -227,15 +228,18 @@ export function formatHookDiagnostics(diagnostics: readonly HookDiagnostic[]): s
 }
 
 function sanitizeDisplayText(value: string): string {
-	return value
-		.replace(
-			/(--(?:api-key|apikey|auth|authorization|password|secret|token)=)(?:"[^"]*"|'[^']*'|\S+)/gi,
-			"$1[redacted]",
-		)
-		.replace(
-			/(--(?:api-key|apikey|auth|authorization|password|secret|token)\s+)(?:"[^"]*"|'[^']*'|\S+)/gi,
-			"$1[redacted]",
-		)
-		.replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
-		.replace(/\b(?:sk|pk|rk|ghp|github_pat|glpat)-[A-Za-z0-9._-]+/g, "[redacted]");
+	return redactHookTokenValues(
+		value
+			.replace(
+				/(--(?:api-key|apikey|auth|authorization|password|secret|token)=)(?:"[^"]*"|'[^']*'|\S+)/gi,
+				"$1[redacted]",
+			)
+			.replace(
+				/(--(?:api-key|apikey|auth|authorization|password|secret|token)\s+)(?:"[^"]*"|'[^']*'|\S+)/gi,
+				"$1[redacted]",
+			)
+			.replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
+			.replace(/\b(?:sk|pk|rk|glpat)-[A-Za-z0-9._-]+/g, "[redacted]"),
+		"[redacted]",
+	);
 }
