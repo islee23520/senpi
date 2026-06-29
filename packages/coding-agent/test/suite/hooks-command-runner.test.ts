@@ -49,12 +49,16 @@ function createTempDir(name: string): string {
 	return dir;
 }
 
-function assertProcessExited(pid: number): void {
-	try {
-		process.kill(pid, 0);
-	} catch (error) {
-		if (error instanceof Error && "code" in error && error.code === "ESRCH") return;
-		throw error;
+async function waitForProcessExit(pid: number): Promise<void> {
+	const deadline = Date.now() + 2_000;
+	while (Date.now() < deadline) {
+		try {
+			process.kill(pid, 0);
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "ESRCH") return;
+			throw error;
+		}
+		await delay(10);
 	}
 	throw new Error(`process ${pid} is still running`);
 }
@@ -147,7 +151,7 @@ describe("builtin hooks command runner", () => {
 		expect(result.exitCode).toBeNull();
 		expect(result.timeoutSeconds).toBe(0.1);
 		expect(existsSync(pidPath)).toBe(true);
-		assertProcessExited(Number(readFileSync(pidPath, "utf8")));
+		await waitForProcessExit(Number(readFileSync(pidPath, "utf8")));
 	});
 
 	it("rejects invalid timeout values before starting a command", async () => {
@@ -194,7 +198,7 @@ describe("builtin hooks command runner", () => {
 		expect(result.aborted).toBe(true);
 		expect(result.timedOut).toBe(false);
 		expect(result.exitCode).toBeNull();
-		assertProcessExited(Number(readFileSync(pidPath, "utf8")));
+		await waitForProcessExit(Number(readFileSync(pidPath, "utf8")));
 	});
 
 	it("caps stdout and stderr in memory before concatenation", async () => {
