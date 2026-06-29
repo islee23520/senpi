@@ -38,6 +38,7 @@ See [examples/extensions/](../examples/extensions/) for working implementations.
 - [Events](#events)
   - [Lifecycle Overview](#lifecycle-overview)
   - [Resource Events](#resource-events)
+  - [Builtin Hooks](#builtin-hooks)
   - [Session Events](#session-events)
   - [Agent Events](#agent-events)
   - [Model Events](#model-events)
@@ -378,6 +379,219 @@ pi.on("resources_discover", async (event, _ctx) => {
   };
 });
 ```
+
+### Builtin Hooks
+
+The builtin `hooks` extension runs trusted command hooks from JSON config files. It is intended for local guardrails and migration from Claude-style command hooks, while keeping the extension API as the primary senpi customization surface.
+
+Default senpi hook files are discovered from:
+
+| Source | Timing | Notes |
+|--------|--------|-------|
+| `~/.senpi/agent/hooks.json` | pre-session | Global hook config. |
+| `.senpi/hooks.json` | pre-session | Project hook config, loaded after project trust. |
+| SDK or host-provided `new DefaultResourceLoader({ additionalHookPaths })` | pre-session | Package/plugin hosts can inject resolved hook JSON files before `session_start`. |
+| `resources_discover` `hookPaths` | runtime | Late sources. They can affect later hook events in the current runtime and `SessionStart` on `/reload` or the next session. |
+
+#### Minimal project hook
+
+Create `.senpi/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .senpi/hooks/log-pretool.mjs",
+            "timeout": 10,
+            "statusMessage": "Checking bash command"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Create `.senpi/hooks/log-pretool.mjs`:
+
+```javascript
+let stdin = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  stdin += chunk;
+});
+process.stdin.on("end", () => {
+  const input = JSON.parse(stdin);
+  const command = String(input.tool_input?.command ?? "");
+  if (command.includes("rm -rf")) {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "Refusing destructive shell command"
+      }
+    }));
+    return;
+  }
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow"
+    }
+  }));
+});
+```
+
+Start senpi in the project and inspect hooks:
+
+```bash
+senpi
+/hooks list
+/hooks trust hk_example_PreToolUse_0_0
+```
+
+The real hook id is shown by `/hooks list`. A command hook must be trusted before it runs. Project hook trust is writable only when the project is trusted.
+
+Exact command grammar:
+
+```text
+Usage: /hooks [list|diagnostics|trust <id>|disable <id>|enable <id>|reload]
+```
+
+`/hooks list` shows executable hooks, ids, trust state, disabled state, matcher, status message, and a redacted command preview. `/hooks diagnostics` shows malformed, unsupported, untrusted, and skipped hook details. `/hooks reload` runs the normal extension/resource reload flow.
+
+#### Command handler JSON
+
+Only command handlers are executable in builtin hooks v1:
+
+```json
+{
+  "type": "command",
+  "command": "node ./hooks/check.mjs",
+  "commandWindows": "node .\\hooks\\check.mjs",
+  "timeout": 30,
+  "statusMessage": "Running hook"
+}
+```
+
+`command` is required and runs through the host shell with the hook input JSON on stdin. `commandWindows` or `command_windows` can override the command on Windows. `timeout` is seconds and defaults to 600. `statusMessage` is display text only.
+
+Hook commands inherit a minimal environment (`PATH`, home/user/shell/temp variables, and Windows shell basics). Hooks loaded through the plugin manifest helper also receive `PLUGIN_ROOT`, `PLUGIN_DATA`, `CLAUDE_PLUGIN_ROOT`, and `CLAUDE_PLUGIN_DATA`. Every command receives `SENPI_HOOK_SOURCE` and `SENPI_HOOK_EVENT`. Do not put API keys or tokens in hook config, command text, status messages, stdout, stderr, or diagnostics. Read secrets inside the command from your own secret store and avoid echoing them.
+
+#### Event map
+
+| Event | senpi source | Supported behavior |
+|-------|--------------|--------------------|
+| `SessionStart` | `session_start` | Runs on startup/reload/new/resume/fork. `additionalContext` is recorded as hidden hook context. Decisions are diagnostics only. |
+| `UserPromptSubmit` | `input` plus `before_agent_start` | Can block the prompt. `additionalContext` is injected as hidden context for the turn. `systemMessage` appends to the turn system prompt. |
+| `PreToolUse` | `tool_call` | Can deny/block, ask (represented as block), allow/approve, mutate `updatedInput` only with `permissionDecision: "allow"`, and add context for the matching tool result. |
+| `PostToolUse` | `tool_result` | Can block by replacing the tool result with an error, replace tool output with `updatedToolOutput`, and append `additionalContext`. |
+| `PreCompact` | `session_before_compact` | Can block/cancel compaction with `decision: "block"` or exit code 2. `additionalContext` and `customInstructions` are diagnostic-only. |
+| `PostCompact` | `session_compact` | Runs after accepted compactions. Output fields are currently diagnostic-only. |
+| `Stop` | `agent_end` | Can block by sending a follow-up prompt from `additionalContext` or `reason`. Reentry is capped at eight blocks per turn. |
+
+Matchers are strings. For tool events, matchers match tool names. For lifecycle events, `*`, event names, reasons such as `startup`, `reload`, `manual`, or `overflow`, comma/pipe-separated literals, and JavaScript regular expressions are supported.
+
+Command stdout may be empty or JSON. Universal JSON fields include `decision`, `reason`, `additionalContext`, `continue`, `stopReason`, `suppressOutput`, `systemMessage`, and `hookSpecificOutput`. `hookSpecificOutput.hookEventName` must match the current event when present. Exit code `2` is treated as a block decision with stderr as the reason.
+
+#### Plugin hooks
+
+Plugin hook manifests are host/package integration inputs, not automatic default senpi discovery. A host can call senpi's plugin hook manifest helper for a plugin root and feed its parsed result into its own hook integration, or resolve hook JSON files and pass those file paths through `additionalHookPaths` before startup.
+
+Plugin hook manifests live at `.codex-plugin/plugin.json` under the plugin root. A manifest can point to hook JSON files:
+
+```json
+{
+  "name": "example-hooks-plugin",
+  "hooks": "./hooks/pretool.json"
+}
+```
+
+It can also inline hook config directly:
+
+```json
+{
+  "name": "inline-hooks-plugin",
+  "hooks": {
+    "hooks": {
+      "SessionStart": [
+        {
+          "matcher": "startup|reload",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "node ${PLUGIN_ROOT}/hooks/session-start.mjs"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+`hooks` may also be an array mixing paths, nested arrays, and inline hook objects. Hook paths must stay inside the plugin root. The manifest helper also understands a plugin default hook file at `hooks/hooks.json` unless the host disables default plugin hooks. Plugin commands that reference `${PLUGIN_ROOT}`, `$PLUGIN_ROOT`, or `%PLUGIN_ROOT%` must resolve to existing files inside the plugin root.
+
+Package/plugin hook sources resolved by a host before the session starts are pre-session sources when the host passes them to senpi as additional hook paths. SDK hosts can provide that timing explicitly:
+
+```typescript
+const loader = new DefaultResourceLoader({
+  cwd,
+  agentDir,
+  additionalHookPaths: ["/absolute/path/to/package-hooks.json"],
+});
+```
+
+Pre-session sources are visible to `SessionStart` on initial startup.
+
+#### Runtime hook sources
+
+Extensions can return late hook paths from `resources_discover`:
+
+```typescript
+import { join } from "node:path";
+import type { ExtensionAPI } from "@code-yeongyu/senpi";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("resources_discover", (event, ctx) => {
+    if (event.reason !== "reload") return {};
+    return {
+      hookPaths: [join(ctx.cwd, ".senpi", "generated-hooks.json")],
+    };
+  });
+}
+```
+
+These paths are runtime sources. They can affect later hook events in the current runtime, but their `SessionStart` hooks do not run for the already-started initial session. On `/hooks reload` or `/reload`, runtime `SessionStart` hooks are visible to the reloaded session. If a runtime source contains `SessionStart`, senpi records a diagnostic: `Runtime SessionStart hooks are loaded for reload or the next session only.`
+
+#### Not yet supported
+
+The builtin hooks implementation intentionally does not claim full Claude hook coverage. Unsupported shapes produce warnings or diagnostics and are not executed.
+
+| Area | Not yet supported |
+|------|-------------------|
+| Events | `PermissionRequest`, `PermissionDenied`, `SubagentStart`, `SubagentStop`, `Notification`, `Setup`, `UserPromptExpansion`, `PostToolUseFailure`, `PostToolBatch`, `TaskCreated`, `TaskCompleted`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `MessageDisplay`, `SessionEnd`, `Elicitation`, `ElicitationResult`. |
+| Handler types | `prompt`, `agent`, `http`, and `mcp_tool`. |
+| Command forms | Exec-form commands, object-valued `command`, separate `args`, `shell`, and command handlers with `async: true`. |
+| Command fields | `if`, `asyncRewake`, `terminalSequence`, and `continueOnBlock`. |
+| Prompt mutation | UserPromptSubmit prompt replacement fields such as `prompt`, `updatedPrompt`, and `replacementPrompt`. |
+| Async behavior | Claude-style async hooks and `asyncRewake`. |
+| PreCompact mutation | `customInstructions` does not change compaction in builtin hooks v1. |
+
+#### omo-codex migration notes
+
+For omo-codex or Claude-style hook configs, migrate the lowest-risk checks first:
+
+- Keep existing `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `SessionStart`, `PreCompact`, `PostCompact`, and `Stop` command hooks if they use shell command strings.
+- Move `http`, `mcp_tool`, `prompt`, and `agent` hooks to senpi extensions or tools.
+- Replace `if` conditions with logic inside the command script or with matcher strings for tool/lifecycle selection.
+- Treat `Notification`, subagent/task/teammate/worktree events, and prompt replacement as deferred; document them in plugin README files instead of assuming execution.
+- When the host uses the plugin manifest helper, use `PLUGIN_ROOT` and `PLUGIN_DATA` for plugin-relative scripts and state. Keep secrets out of manifests and hook JSON.
 
 ### Session Events
 

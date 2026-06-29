@@ -409,6 +409,7 @@ The default export can also be `async`. pi waits for async extension factories b
 - Custom tools (or replace built-in tools entirely)
 - Sub-agents and plan mode
 - Custom compaction and summarization
+- Builtin command hooks for local guardrails
 - Permission gates and path protection
 - Custom editors and UI components
 - Status lines, headers, footers
@@ -419,7 +420,7 @@ The default export can also be `async`. pi waits for async extension factories b
 - Games while waiting (yes, Doom runs)
 - ...anything you can dream up
 
-Place in `~/.pi/agent/extensions/`, `.pi/extensions/`, or a [pi package](#pi-packages) to share with others. See [docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
+Place in `~/.pi/agent/extensions/`, `.pi/extensions/`, or a [pi package](#pi-packages) to share with others. See [docs/extensions.md](docs/extensions.md), [Builtin Hooks](docs/extensions.md#builtin-hooks), and [examples/extensions/](examples/extensions/).
 
 ### Themes
 
