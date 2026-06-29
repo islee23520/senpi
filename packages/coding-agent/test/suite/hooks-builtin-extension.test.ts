@@ -14,8 +14,6 @@ import { createTestExtensionsResult } from "../utilities.ts";
 const createdDirs: string[] = [];
 const T10_FORBIDDEN_ADAPTER_EVENTS = [
 	"session_start",
-	"tool_call",
-	"tool_result",
 	"session_before_compact",
 	"session_compact",
 	"agent_end",
@@ -57,7 +55,7 @@ describe("builtin hooks extension registration and resource plumbing", () => {
 		expect(hooksIndex).toBeLessThan(permissionIndex);
 	});
 
-	it("registers only the T11 prompt adapter runtime handlers", async () => {
+	it("registers the T11 prompt and T12 tool adapter runtime handlers only", async () => {
 		// Given
 		const cwd = createTempDir("senpi-hooks-t10-registration-cwd");
 		const hooksExtension = getBuiltinExtension("hooks");
@@ -79,10 +77,12 @@ describe("builtin hooks extension registration and resource plumbing", () => {
 		expect(loadedHooksExtension.commands.has("hooks")).toBe(true);
 		expect(registeredEvents.has("input")).toBe(true);
 		expect(registeredEvents.has("before_agent_start")).toBe(true);
+		expect(registeredEvents.has("tool_call")).toBe(true);
+		expect(registeredEvents.has("tool_result")).toBe(true);
 		for (const event of T10_FORBIDDEN_ADAPTER_EVENTS) {
 			expect(registeredEvents.has(event)).toBe(false);
 		}
-		expect(Array.from(registeredEvents).sort()).toEqual(["before_agent_start", "input"]);
+		expect(Array.from(registeredEvents).sort()).toEqual(["before_agent_start", "input", "tool_call", "tool_result"]);
 	});
 
 	it("collects resource-discovered hook paths as runtime hook sources", async () => {

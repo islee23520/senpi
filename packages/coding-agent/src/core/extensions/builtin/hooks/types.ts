@@ -137,6 +137,11 @@ export type HookInputWire =
 			readonly toolName: string;
 			readonly toolInput: unknown;
 			readonly cwd: string;
+			readonly session_id?: string;
+			readonly hook_event_name?: "PreToolUse";
+			readonly tool_name?: string;
+			readonly tool_input?: unknown;
+			readonly tool_use_id?: string;
 	  }
 	| {
 			readonly event: "PostToolUse";
@@ -144,6 +149,12 @@ export type HookInputWire =
 			readonly toolInput: unknown;
 			readonly toolOutput: unknown;
 			readonly cwd: string;
+			readonly session_id?: string;
+			readonly hook_event_name?: "PostToolUse";
+			readonly tool_name?: string;
+			readonly tool_input?: unknown;
+			readonly tool_response?: unknown;
+			readonly tool_use_id?: string;
 	  }
 	| { readonly event: "PreCompact"; readonly reason: string; readonly cwd: string }
 	| { readonly event: "PostCompact"; readonly reason: string; readonly cwd: string }

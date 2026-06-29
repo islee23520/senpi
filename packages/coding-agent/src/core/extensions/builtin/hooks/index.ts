@@ -12,6 +12,13 @@ import {
 	promptContextFromResult,
 	safeDiagnosticDetails,
 } from "./prompt-adapter.ts";
+import {
+	applyPostToolUseResult,
+	applyPreToolUseResult,
+	buildPostToolUseHookInput,
+	buildPreToolUseHookInput,
+	toolContextsFromResult,
+} from "./tool-adapter.ts";
 import { emptyHookTrustState } from "./trust.ts";
 import { FileHookStateStorage } from "./trust-storage.ts";
 import type {
@@ -41,6 +48,7 @@ export type {
 
 export default function hooksExtension(pi: ExtensionAPI): void {
 	const pendingPromptContexts: PendingPromptHookContext[] = [];
+	const pendingPreToolContexts = new Map<string, readonly string[]>();
 
 	const refreshState = (ctx: ExtensionContext): HookRuntimeState => {
 		const sources = ctx.getLoadedHookSources?.() ?? fallbackHookSources(ctx.cwd);
@@ -139,6 +147,44 @@ export default function hooksExtension(pi: ExtensionAPI): void {
 			result.systemPrompt = systemPrompt;
 		}
 		return result;
+	});
+
+	pi.on("tool_call", async (event, ctx) => {
+		pendingPreToolContexts.delete(event.toolCallId);
+		const state = refreshState(ctx);
+		const result = await dispatchHookEvent({
+			cwd: ctx.cwd,
+			handlers: state.parsed.executableHandlers,
+			input: buildPreToolUseHookInput(event, ctx),
+			signal: ctx.signal,
+			trustOptions: { platform: process.platform },
+			trustState: state.trust,
+		});
+		const toolResult = applyPreToolUseResult(event, result);
+		if (toolResult?.block) {
+			pendingPreToolContexts.delete(event.toolCallId);
+			return toolResult;
+		}
+		const contexts = toolContextsFromResult(result);
+		if (contexts.length > 0) {
+			pendingPreToolContexts.set(event.toolCallId, contexts);
+		}
+		return toolResult;
+	});
+
+	pi.on("tool_result", async (event, ctx) => {
+		const preToolContexts = pendingPreToolContexts.get(event.toolCallId) ?? [];
+		pendingPreToolContexts.delete(event.toolCallId);
+		const state = refreshState(ctx);
+		const result = await dispatchHookEvent({
+			cwd: ctx.cwd,
+			handlers: state.parsed.executableHandlers,
+			input: buildPostToolUseHookInput(event, ctx),
+			signal: ctx.signal,
+			trustOptions: { platform: process.platform },
+			trustState: state.trust,
+		});
+		return applyPostToolUseResult(event, result, preToolContexts);
 	});
 
 	pi.registerCommand("hooks", {
