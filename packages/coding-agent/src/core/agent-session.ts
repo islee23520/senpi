@@ -2542,12 +2542,12 @@ export class AgentSession {
 			return;
 		}
 
-		const { skillPaths, promptPaths, themePaths } = await this._extensionRunner.emitResourcesDiscover(
+		const { skillPaths, promptPaths, themePaths, hookPaths } = await this._extensionRunner.emitResourcesDiscover(
 			this._cwd,
 			reason,
 		);
 
-		if (skillPaths.length === 0 && promptPaths.length === 0 && themePaths.length === 0) {
+		if (skillPaths.length === 0 && promptPaths.length === 0 && themePaths.length === 0 && hookPaths.length === 0) {
 			return;
 		}
 
@@ -2555,11 +2555,14 @@ export class AgentSession {
 			skillPaths: this.buildExtensionResourcePaths(skillPaths),
 			promptPaths: this.buildExtensionResourcePaths(promptPaths),
 			themePaths: this.buildExtensionResourcePaths(themePaths),
+			hookPaths: this.buildExtensionResourcePaths(hookPaths),
 		};
 
 		this._resourceLoader.extendResources(extensionPaths);
-		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
-		this.agent.state.systemPrompt = this._baseSystemPrompt;
+		if (skillPaths.length > 0 || promptPaths.length > 0 || themePaths.length > 0) {
+			this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+			this.agent.state.systemPrompt = this._baseSystemPrompt;
+		}
 	}
 
 	private buildExtensionResourcePaths(entries: Array<{ path: string; extensionPath: string }>): Array<{
@@ -2751,6 +2754,17 @@ export class AgentSession {
 				getMessageRevision: () => this.getMessageRevision(),
 				applyCompaction: (precomputed, options) => this.applyCompaction(precomputed, options),
 				getSystemPrompt: () => this.systemPrompt,
+				getLoadedHookSources: () =>
+					this._resourceLoader.getLoadedHookSources?.() ?? {
+						agentDir: this._cwd,
+						cwd: this._cwd,
+						globalHookSourcePaths: [],
+						globalHooksPath: `${this._cwd}/hooks.json`,
+						preSessionHookSourcePaths: [],
+						projectHookSourcePaths: [],
+						projectHooksPath: `${this._cwd}/.senpi/hooks.json`,
+						runtimeHookSourcePaths: [],
+					},
 				getSystemPromptOptions: () => this._baseSystemPromptOptions,
 			},
 			{

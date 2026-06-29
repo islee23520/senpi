@@ -1,5 +1,29 @@
 # Core Extensions Changes
 
+## 2026-06-29 - Builtin hooks extension runtime resource plumbing
+
+### What changed
+
+- Added builtin extension id `hooks` before `permission-system` so builtin command hooks can inspect tool calls before permission prompts.
+- Added `ResourcesDiscoverResult.hookPaths`, `ResourceExtensionPaths.hookPaths`, `DefaultResourceLoader.getLoadedHookSources()`, and `ExtensionContext.getLoadedHookSources()` for hook config source injection.
+- `ExtensionRunner.emitResourcesDiscover()` now collects hook paths, and `AgentSession.extendResourcesFromExtensions()` passes them to the resource loader as runtime hook sources.
+- `builtin/hooks/index.ts` now loads settings/default files, pre-session hook paths, and runtime hook paths lazily; malformed hook sources become diagnostics instead of startup failures.
+- Registered `/hooks` for command-output diagnostics and basic loaded-hook status.
+
+### Semantics
+
+- Initial `SessionStart` only sees pre-session sources: settings/default hook files and `DefaultResourceLoaderOptions.additionalHookPaths`.
+- Runtime `hookPaths` returned from `resources_discover` are late sources. They are visible to later hook events in the current runtime and to reload/next-session `SessionStart`, where `SessionStart` hooks from runtime sources emit the existing caveat diagnostic.
+- Malformed user/runtime hook JSON is nonfatal. Managed or builtin hook safety invariant failures remain hard failures at the dispatch layer rather than being trusted silently.
+
+### Expected merge conflict zones
+
+- MEDIUM: `types.ts` public API additions around `ExtensionContext`, `ResourcesDiscoverResult`, and `ExtensionContextActions`.
+- MEDIUM: `runner.ts` resource discovery aggregation and context construction.
+- MEDIUM: `resource-loader.ts` extension resource plumbing.
+- LOW: `agent-session.ts` `extendResourcesFromExtensions()` resource handoff.
+- LOW: `builtin/index.ts` registration order near `permission-system`.
+
 ## 2026-06-15 - Remove kimi-web-search builtin; fold Kimi search into pi-websearch
 
 ### What changed

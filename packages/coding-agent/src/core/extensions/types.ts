@@ -373,6 +373,8 @@ export interface ExtensionContext {
 	applyCompaction(precomputed: CompactionResult, options: ApplyCompactionOptions): Promise<ApplyCompactionResult>;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
+	/** Get hook source paths currently visible to the builtin hooks extension. */
+	getLoadedHookSources?(): LoadedHookSources;
 }
 
 /**
@@ -582,6 +584,8 @@ export interface ResourcesDiscoverResult {
 	skillPaths?: string[];
 	promptPaths?: string[];
 	themePaths?: string[];
+	/** Hook config paths discovered after initial session_start; visible to later hooks and reloads. */
+	hookPaths?: string[];
 }
 
 // ============================================================================
@@ -1635,7 +1639,21 @@ export interface ExtensionContextActions {
 	getMessageRevision: () => number;
 	applyCompaction: (precomputed: CompactionResult, options: ApplyCompactionOptions) => Promise<ApplyCompactionResult>;
 	getSystemPrompt: () => string;
+	getLoadedHookSources: () => LoadedHookSources;
 	getSystemPromptOptions?: () => BuildSystemPromptOptions;
+}
+
+export interface LoadedHookSources {
+	readonly cwd: string;
+	readonly agentDir: string;
+	readonly globalHooksPath: string;
+	readonly projectHooksPath: string;
+	readonly globalSettingsHooks?: unknown;
+	readonly projectSettingsHooks?: unknown;
+	readonly globalHookSourcePaths: readonly string[];
+	readonly projectHookSourcePaths: readonly string[];
+	readonly preSessionHookSourcePaths: readonly string[];
+	readonly runtimeHookSourcePaths: readonly string[];
 }
 
 /**
