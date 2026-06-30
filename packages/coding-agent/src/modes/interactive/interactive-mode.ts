@@ -374,6 +374,7 @@ export class InteractiveMode {
 	private workingMessage: string | undefined = undefined;
 	private workingVisible = true;
 	private workingIndicatorOptions: WorkingIndicatorOptions | undefined = undefined;
+	private workingStartedAt: number | undefined = undefined;
 	private readonly defaultWorkingMessage = "Working";
 	private readonly defaultHiddenThinkingLabel = "Thinking...";
 	private hiddenThinkingLabel = this.defaultHiddenThinkingLabel;
@@ -1930,7 +1931,7 @@ export class InteractiveMode {
 		this.activeToolExecutions.set(event.toolCallId, label);
 		this.workingMessage = label;
 		this.activeToolExecutionTerminalTitle = `${APP_TITLE} - ${label}`;
-		this.updateWorkingIndicatorMessage();
+		this.refreshWorkingLoaderMessage();
 		this.applyTerminalTitle();
 	}
 
@@ -1948,7 +1949,7 @@ export class InteractiveMode {
 			this.workingMessageBeforeActiveTool = undefined;
 			this.activeToolExecutionTerminalTitle = undefined;
 		}
-		this.updateWorkingIndicatorMessage();
+		this.refreshWorkingLoaderMessage();
 		this.applyTerminalTitle();
 	}
 
@@ -1971,7 +1972,7 @@ export class InteractiveMode {
 		this.activeToolExecutionTerminalTitle = undefined;
 		this.workingMessage = this.workingMessageBeforeActiveTool;
 		this.workingMessageBeforeActiveTool = undefined;
-		this.updateWorkingIndicatorMessage();
+		this.refreshWorkingLoaderMessage();
 		this.applyTerminalTitle();
 	}
 
@@ -1983,6 +1984,26 @@ export class InteractiveMode {
 		}
 		this.hookStatusContainer.clear();
 		this.stopToolHookStatusTimer();
+	}
+
+	private getWorkingElapsedSeconds(): number {
+		if (this.workingStartedAt === undefined) {
+			return 0;
+		}
+		return Math.max(0, Math.floor((Date.now() - this.workingStartedAt) / 1000));
+	}
+
+	private getWorkingLoaderMessage(): string {
+		return this.workingMessage ?? this.defaultWorkingMessage;
+	}
+
+	private refreshWorkingLoaderMessage(): void {
+		if (this.activeStatusIndicator?.kind === "working") {
+			this.activeStatusIndicator.setMessage(this.getWorkingLoaderMessage());
+			return;
+		}
+		const legacyLoader = (this as { loadingAnimation?: { setMessage(message: string): void } }).loadingAnimation;
+		legacyLoader?.setMessage(this.getWorkingLoaderMessage());
 	}
 
 	private getWorkingIndicatorOptions(): LoaderIndicatorOptions {
@@ -1997,7 +2018,7 @@ export class InteractiveMode {
 				messageFormatter: (message, animationElapsedMs) =>
 					formatWorkingStatusMessageFrame(
 						message,
-						Math.floor(animationElapsedMs / 1000),
+						this.getWorkingElapsedSeconds(),
 						keyText("app.interrupt"),
 						animationElapsedMs,
 						{
@@ -2014,6 +2035,9 @@ export class InteractiveMode {
 	}
 
 	private showStatusIndicator(indicator: StatusIndicator): void {
+		if (indicator.kind === "working") {
+			this.workingStartedAt = Date.now();
+		}
 		this.activeStatusIndicator?.dispose();
 		this.activeStatusIndicator = indicator;
 		this.statusContainer.clear();
@@ -2031,8 +2055,12 @@ export class InteractiveMode {
 			return;
 		}
 		const hadActiveStatusIndicator = this.activeStatusIndicator !== undefined;
+		const isClearingWorking = this.activeStatusIndicator?.kind === "working";
 		this.activeStatusIndicator?.dispose();
 		this.activeStatusIndicator = undefined;
+		if (isClearingWorking) {
+			this.workingStartedAt = undefined;
+		}
 		this.statusContainer.clear();
 		if (hadActiveStatusIndicator && this.ui.getClearOnShrink()) {
 			this.statusContainer.addChild(this.idleStatus);
@@ -3276,7 +3304,11 @@ export class InteractiveMode {
 				this.defaultEditor.onEscape = () => {
 					this.session.abortCompaction();
 				};
-				this.showStatusIndicator(new CompactionStatusIndicator(this.ui, event.reason));
+				const indicator = new CompactionStatusIndicator(this.ui, event.reason);
+				this.activeStatusIndicator?.dispose();
+				this.activeStatusIndicator = indicator;
+				this.statusContainer.clear();
+				this.statusContainer.addChild(indicator);
 				this.autoCompactionProgressText = "";
 				this.ui.requestRender();
 				break;

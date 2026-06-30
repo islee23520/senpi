@@ -89,6 +89,7 @@ export class AssistantMessageComponent extends Container {
 	setOutputPad(padding: number): void {
 		this.outputPad = padding;
 		if (this.lastMessage) {
+			this.lastMessageSignature = undefined;
 			this.updateContent(this.lastMessage);
 		}
 	}

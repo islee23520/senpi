@@ -772,9 +772,6 @@ export class AgentSession {
 
 			this._resolveRetry();
 			await this._checkCompaction(msg);
-			if (this.agent.hasQueuedMessages()) {
-				await this._continueAgentAfterCurrentRun();
-			}
 		}
 
 		if (event.type === "agent_end") {
@@ -2332,7 +2329,7 @@ export class AgentSession {
 				this._incrementMessageRevision();
 			}
 			if (requestReason) {
-				await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck);
+				await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck, "overflow", willRetry);
 			} else {
 				await this._runAutoCompaction("overflow", willRetry);
 			}
@@ -2376,14 +2373,16 @@ export class AgentSession {
 	private async _runPrePromptCompaction(
 		lastAssistantMessage: AssistantMessage,
 		skipAbortedCheck: boolean,
+		reason: "pre_prompt" | "overflow" = "pre_prompt",
+		willRetry = false,
 	): Promise<void> {
-		this._emit({ type: "compaction_start", reason: "pre_prompt" });
+		this._emit({ type: "compaction_start", reason });
 		this._compactionAbortController = new AbortController();
 
 		try {
 			const execution = await this._executeCompaction({
-				reason: "pre_prompt",
-				willRetry: false,
+				reason,
+				willRetry,
 				lastAssistantMessage,
 				skipAbortedCheck,
 			});
@@ -2399,10 +2398,10 @@ export class AgentSession {
 				errorMessage === "Compaction cancelled" || (error instanceof Error && error.name === "AbortError");
 			this._emit({
 				type: "compaction_end",
-				reason: "pre_prompt",
+				reason,
 				result: undefined,
 				aborted,
-				willRetry: false,
+				willRetry,
 				errorMessage: aborted ? undefined : `Pre-prompt compaction failed: ${errorMessage}`,
 			});
 		} finally {

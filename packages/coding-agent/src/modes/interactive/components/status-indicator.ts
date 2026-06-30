@@ -82,7 +82,9 @@ export class CompactionStatusIndicator extends StatusIndicator {
 					? `Context overflow detected, compacting... ${cancelHint}`
 					: reason === "pre_prompt"
 						? `Compacting before next prompt... ${cancelHint}`
-						: `Auto-compacting... ${cancelHint}`;
+						: reason === "threshold"
+							? `Auto-compacting... ${cancelHint}`
+							: `Compacting context... ${cancelHint}`;
 		super(
 			"compaction",
 			ui,
