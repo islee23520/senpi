@@ -4,6 +4,10 @@
 
 ### Added
 
+### Fixed
+
+- Fixed the initial TUI render to clear dirty lines before drawing the first frame.
+
 ## [2026.6.28-4] - 2026-06-28
 
 ### Added

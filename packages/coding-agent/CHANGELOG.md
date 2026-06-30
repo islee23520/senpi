@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added the builtin hooks extension with trusted command hook loading, plugin and package hook discovery, prompt/tool/lifecycle/compaction/stop event adapters, `/hooks` inspection and trust commands, and stop-loop guards.
 - Added builtin hooks documentation covering supported events, command hook JSON, plugin manifest sources, trust commands, runtime hook paths, migration notes, and current unsupported Claude-only hook shapes.
 
 ### Changed
@@ -11,6 +12,8 @@
 ### Fixed
 
 - Fixed update notifications to link to the senpi changelog for the specific advertised release instead of the drifting upstream `main` changelog.
+- Fixed `/hooks` command output and diagnostics to redact GitHub personal access tokens.
+- Fixed hook timeout validation to reject invalid timeout values before command execution.
 
 ## [2026.6.28-4] - 2026-06-28
 
