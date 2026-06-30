@@ -8,6 +8,7 @@ import filesExtension from "./files.ts";
 import goalExtension from "./goal/index.ts";
 import gptApplyPatchExtension from "./gpt-apply-patch/index.ts";
 import historySearchExtension from "./history-search/index.ts";
+import hooksExtension from "./hooks/index.ts";
 import nestedAgentsMdExtension from "./nested-agents-md/index.ts";
 import openaiWebSearchExtension from "./openai-web-search/index.ts";
 import permissionSystemExtension from "./permission-system/index.ts";
@@ -39,6 +40,7 @@ export const globalDefaultExtensionFactories = {
 } satisfies Record<(typeof globalDefaultExtensionIds)[number], ExtensionFactory>;
 
 export const builtinExtensions: BuiltinExtensionFactory[] = [
+	{ id: "hooks", factory: hooksExtension },
 	{ id: "permission-system", factory: permissionSystemExtension },
 	{ id: "gpt-apply-patch", factory: gptApplyPatchExtension },
 	{ id: "prompt-preset", factory: promptPresetExtension },

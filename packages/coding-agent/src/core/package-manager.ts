@@ -71,6 +71,7 @@ export interface ResolvedPaths {
 	skills: ResolvedResource[];
 	prompts: ResolvedResource[];
 	themes: ResolvedResource[];
+	hooks: ResolvedResource[];
 }
 
 export type MissingSourceAction = "install" | "skip" | "error";
@@ -160,6 +161,7 @@ interface PiManifest {
 	skills?: string[];
 	prompts?: string[];
 	themes?: string[];
+	hooks?: string[];
 }
 
 interface ResourceAccumulator {
@@ -167,6 +169,7 @@ interface ResourceAccumulator {
 	skills: Map<string, { metadata: PathMetadata; enabled: boolean }>;
 	prompts: Map<string, { metadata: PathMetadata; enabled: boolean }>;
 	themes: Map<string, { metadata: PathMetadata; enabled: boolean }>;
+	hooks: Map<string, { metadata: PathMetadata; enabled: boolean }>;
 }
 
 /**
@@ -192,17 +195,19 @@ interface PackageFilter {
 	skills?: string[];
 	prompts?: string[];
 	themes?: string[];
+	hooks?: string[];
 }
 
-type ResourceType = "extensions" | "skills" | "prompts" | "themes";
+type ResourceType = "extensions" | "skills" | "prompts" | "themes" | "hooks";
 
-const RESOURCE_TYPES: ResourceType[] = ["extensions", "skills", "prompts", "themes"];
+const RESOURCE_TYPES: ResourceType[] = ["extensions", "skills", "prompts", "themes", "hooks"];
 
 const FILE_PATTERNS: Record<ResourceType, RegExp> = {
 	extensions: /\.(ts|js)$/,
 	skills: /\.md$/,
 	prompts: /\.md$/,
 	themes: /\.json$/,
+	hooks: /\.json$/,
 };
 
 const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
@@ -2266,12 +2271,14 @@ export class DefaultPackageManager implements PackageManager {
 			skills: (globalSettings.skills ?? []) as string[],
 			prompts: (globalSettings.prompts ?? []) as string[],
 			themes: (globalSettings.themes ?? []) as string[],
+			hooks: (globalSettings.hooks ?? []) as string[],
 		};
 		const projectOverrides = {
 			extensions: (projectSettings.extensions ?? []) as string[],
 			skills: (projectSettings.skills ?? []) as string[],
 			prompts: (projectSettings.prompts ?? []) as string[],
 			themes: (projectSettings.themes ?? []) as string[],
+			hooks: (projectSettings.hooks ?? []) as string[],
 		};
 
 		const userDirs = {
@@ -2279,12 +2286,14 @@ export class DefaultPackageManager implements PackageManager {
 			skills: join(globalBaseDir, "skills"),
 			prompts: join(globalBaseDir, "prompts"),
 			themes: join(globalBaseDir, "themes"),
+			hooks: join(globalBaseDir, "hooks"),
 		};
 		const projectDirs = {
 			extensions: join(projectBaseDir, "extensions"),
 			skills: join(projectBaseDir, "skills"),
 			prompts: join(projectBaseDir, "prompts"),
 			themes: join(projectBaseDir, "themes"),
+			hooks: join(projectBaseDir, "hooks"),
 		};
 		const legacyProjectBaseDir = join(this.cwd, ".pi");
 		const legacyProjectDirs = {
@@ -2292,6 +2301,7 @@ export class DefaultPackageManager implements PackageManager {
 			skills: join(legacyProjectBaseDir, "skills"),
 			prompts: join(legacyProjectBaseDir, "prompts"),
 			themes: join(legacyProjectBaseDir, "themes"),
+			hooks: join(legacyProjectBaseDir, "hooks"),
 		};
 		const userAgentsSkillsDir = join(getHomeDir(), ".agents", "skills");
 		const projectTrusted = this.settingsManager.isProjectTrusted();
@@ -2364,6 +2374,13 @@ export class DefaultPackageManager implements PackageManager {
 				projectOverrides.themes,
 				projectBaseDir,
 			);
+			addResources(
+				"hooks",
+				collectFiles(projectDirs.hooks, FILE_PATTERNS.hooks),
+				projectMetadata,
+				projectOverrides.hooks,
+				projectBaseDir,
+			);
 		}
 
 		if (resolve(legacyProjectBaseDir) !== resolve(projectBaseDir)) {
@@ -2398,6 +2415,13 @@ export class DefaultPackageManager implements PackageManager {
 				collectAutoThemeEntries(legacyProjectDirs.themes),
 				legacyProjectMetadata,
 				projectOverrides.themes,
+				legacyProjectBaseDir,
+			);
+			addResources(
+				"hooks",
+				collectFiles(legacyProjectDirs.hooks, FILE_PATTERNS.hooks),
+				legacyProjectMetadata,
+				projectOverrides.hooks,
 				legacyProjectBaseDir,
 			);
 		}
@@ -2448,6 +2472,13 @@ export class DefaultPackageManager implements PackageManager {
 			userOverrides.themes,
 			globalBaseDir,
 		);
+		addResources(
+			"hooks",
+			collectFiles(userDirs.hooks, FILE_PATTERNS.hooks),
+			userMetadata,
+			userOverrides.hooks,
+			globalBaseDir,
+		);
 	}
 
 	private collectFilesFromPaths(paths: string[], resourceType: ResourceType): string[] {
@@ -2482,6 +2513,8 @@ export class DefaultPackageManager implements PackageManager {
 				return accumulator.prompts;
 			case "themes":
 				return accumulator.themes;
+			case "hooks":
+				return accumulator.hooks;
 			default:
 				throw new Error(`Unknown resource type: ${resourceType}`);
 		}
@@ -2505,6 +2538,7 @@ export class DefaultPackageManager implements PackageManager {
 			skills: new Map(),
 			prompts: new Map(),
 			themes: new Map(),
+			hooks: new Map(),
 		};
 	}
 
@@ -2533,6 +2567,7 @@ export class DefaultPackageManager implements PackageManager {
 			skills: mapToResolved(accumulator.skills),
 			prompts: mapToResolved(accumulator.prompts),
 			themes: mapToResolved(accumulator.themes),
+			hooks: mapToResolved(accumulator.hooks),
 		};
 	}
 

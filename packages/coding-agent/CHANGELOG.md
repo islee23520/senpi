@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added builtin hooks documentation covering supported events, command hook JSON, plugin manifest sources, trust commands, runtime hook paths, migration notes, and current unsupported Claude-only hook shapes.
+
 ### Changed
 
 ### Fixed

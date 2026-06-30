@@ -100,6 +100,16 @@ describe("ExtensionRunner", () => {
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
 		getCompactionSettings: () => DEFAULT_COMPACTION_SETTINGS,
 		getSystemPrompt: () => "",
+		getLoadedHookSources: () => ({
+			agentDir: tempDir,
+			cwd: tempDir,
+			globalHookSourcePaths: [],
+			globalHooksPath: path.join(tempDir, "hooks.json"),
+			preSessionHookSourcePaths: [],
+			projectHookSourcePaths: [],
+			projectHooksPath: path.join(tempDir, ".senpi", "hooks.json"),
+			runtimeHookSourcePaths: [],
+		}),
 	};
 
 	type JsonContextFixture = {

@@ -23,7 +23,13 @@ import {
 	loadExtensionFromFactory,
 	loadExtensions,
 } from "./extensions/loader.ts";
-import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
+import type {
+	Extension,
+	ExtensionFactory,
+	ExtensionRuntime,
+	LoadExtensionsResult,
+	LoadedHookSources,
+} from "./extensions/types.ts";
 import { DefaultPackageManager, type PathMetadata, type ResolvedResource } from "./package-manager.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
@@ -37,6 +43,7 @@ export interface ResourceExtensionPaths {
 	skillPaths?: Array<{ path: string; metadata: PathMetadata }>;
 	promptPaths?: Array<{ path: string; metadata: PathMetadata }>;
 	themePaths?: Array<{ path: string; metadata: PathMetadata }>;
+	hookPaths?: Array<{ path: string; metadata: PathMetadata }>;
 }
 
 export interface ResourceLoaderReloadOptions {
@@ -51,6 +58,7 @@ export interface ResourceLoader {
 	getAgentsFiles(): { agentsFiles: Array<{ path: string; content: string }> };
 	getSystemPrompt(): string | undefined;
 	getAppendSystemPrompt(): string[];
+	getLoadedHookSources?(): LoadedHookSources;
 	extendResources(paths: ResourceExtensionPaths): void;
 	reload(options?: ResourceLoaderReloadOptions): Promise<void>;
 }
@@ -199,6 +207,7 @@ export interface DefaultResourceLoaderOptions {
 	additionalSkillPaths?: string[];
 	additionalPromptTemplatePaths?: string[];
 	additionalThemePaths?: string[];
+	additionalHookPaths?: string[];
 	extensionFactories?: ExtensionFactory[];
 	noExtensions?: boolean;
 	noSkills?: boolean;
@@ -233,6 +242,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private additionalSkillPaths: string[];
 	private additionalPromptTemplatePaths: string[];
 	private additionalThemePaths: string[];
+	private additionalHookPaths: string[];
 	private builtinExtensionFactories: BuiltinExtensionFactory[];
 	private extensionFactories: ExtensionFactory[];
 	private noExtensions: boolean;
@@ -271,6 +281,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private extensionThemeSourceInfos: Map<string, SourceInfo>;
 	private lastPromptPaths: string[];
 	private lastThemePaths: string[];
+	private globalHookSourcePaths: string[];
+	private projectHookSourcePaths: string[];
+	private preSessionHookSourcePaths: string[];
+	private loadedHookSources: LoadedHookSources;
 	private loaded: boolean;
 
 	constructor(options: DefaultResourceLoaderOptions) {
@@ -287,6 +301,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.additionalSkillPaths = options.additionalSkillPaths ?? [];
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
 		this.additionalThemePaths = options.additionalThemePaths ?? [];
+		this.additionalHookPaths = options.additionalHookPaths ?? [];
 		this.builtinExtensionFactories = builtinExtensions;
 		this.extensionFactories = options.extensionFactories ?? [];
 		this.noExtensions = options.noExtensions ?? false;
@@ -314,6 +329,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.extensionThemeSourceInfos = new Map();
 		this.lastPromptPaths = [];
 		this.lastThemePaths = [];
+		this.globalHookSourcePaths = [];
+		this.projectHookSourcePaths = [];
+		this.preSessionHookSourcePaths = [];
+		this.loadedHookSources = this.buildLoadedHookSources([]);
 		this.loaded = false;
 	}
 
@@ -345,10 +364,15 @@ export class DefaultResourceLoader implements ResourceLoader {
 		return [];
 	}
 
+	getLoadedHookSources(): LoadedHookSources {
+		return this.loadedHookSources;
+	}
+
 	extendResources(paths: ResourceExtensionPaths): void {
 		const skillPaths = this.normalizeExtensionPaths(paths.skillPaths ?? []);
 		const promptPaths = this.normalizeExtensionPaths(paths.promptPaths ?? []);
 		const themePaths = this.normalizeExtensionPaths(paths.themePaths ?? []);
+		const hookPaths = this.normalizeExtensionPaths(paths.hookPaths ?? []);
 
 		for (const entry of skillPaths) {
 			this.extensionSkillSourceInfos.set(entry.path, createSourceInfo(entry.path, entry.metadata));
@@ -382,6 +406,14 @@ export class DefaultResourceLoader implements ResourceLoader {
 				themePaths.map((entry) => entry.path),
 			);
 			this.updateThemesFromPaths(this.lastThemePaths);
+		}
+
+		if (hookPaths.length > 0) {
+			const runtimeHookSourcePaths = this.mergePaths(
+				[...this.loadedHookSources.runtimeHookSourcePaths],
+				hookPaths.map((entry) => entry.path),
+			);
+			this.loadedHookSources = this.buildLoadedHookSources(runtimeHookSourcePaths);
 		}
 	}
 
@@ -435,6 +467,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const enabledSkillResources = getEnabledResources(resolvedPaths.skills);
 		const enabledPrompts = getEnabledPaths(resolvedPaths.prompts);
 		const enabledThemes = getEnabledPaths(resolvedPaths.themes);
+		const enabledHookResources = getEnabledResources(resolvedPaths.hooks);
 
 		const enabledSkills = enabledSkillResources.map((resource) => this.mapSkillPath(resource, metadataByPath));
 
@@ -452,11 +485,24 @@ export class DefaultResourceLoader implements ResourceLoader {
 		for (const r of cliExtensionPaths.themes) {
 			metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
 		}
+		for (const r of cliExtensionPaths.hooks) {
+			metadataByPath.set(r.path, { source: "cli", scope: "temporary", origin: "top-level" });
+		}
 
 		const cliEnabledExtensions = getEnabledPaths(cliExtensionPaths.extensions);
 		const cliEnabledSkills = getEnabledPaths(cliExtensionPaths.skills);
 		const cliEnabledPrompts = getEnabledPaths(cliExtensionPaths.prompts);
 		const cliEnabledThemes = getEnabledPaths(cliExtensionPaths.themes);
+		const cliEnabledHooks = getEnabledPaths(cliExtensionPaths.hooks);
+
+		this.globalHookSourcePaths = enabledHookResources
+			.filter((resource) => resource.metadata.scope === "user")
+			.map((resource) => resource.path);
+		this.projectHookSourcePaths = enabledHookResources
+			.filter((resource) => resource.metadata.scope === "project")
+			.map((resource) => resource.path);
+		this.preSessionHookSourcePaths = this.mergePaths(cliEnabledHooks, this.additionalHookPaths);
+		this.loadedHookSources = this.buildLoadedHookSources([...this.loadedHookSources.runtimeHookSourcePaths]);
 
 		const extensionPaths = this.noExtensions
 			? cliEnabledExtensions
@@ -710,6 +756,19 @@ export class DefaultResourceLoader implements ResourceLoader {
 				metadata,
 			};
 		});
+	}
+
+	private buildLoadedHookSources(runtimeHookSourcePaths: readonly string[]): LoadedHookSources {
+		return {
+			agentDir: this.agentDir,
+			cwd: this.cwd,
+			globalHookSourcePaths: this.globalHookSourcePaths.map((path) => this.resolveResourcePath(path)),
+			globalHooksPath: this.resolveResourcePath(join(this.agentDir, "hooks.json")),
+			preSessionHookSourcePaths: this.preSessionHookSourcePaths.map((path) => this.resolveResourcePath(path)),
+			projectHookSourcePaths: this.projectHookSourcePaths.map((path) => this.resolveResourcePath(path)),
+			projectHooksPath: this.resolveResourcePath(join(this.cwd, CONFIG_DIR_NAME, "hooks.json")),
+			runtimeHookSourcePaths: runtimeHookSourcePaths.map((path) => this.resolveResourcePath(path)),
+		};
 	}
 
 	private updateSkillsFromPaths(skillPaths: string[], metadataByPath?: Map<string, PathMetadata>): void {
