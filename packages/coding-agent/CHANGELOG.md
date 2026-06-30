@@ -23,6 +23,8 @@
 - Fixed extension tool changes to apply before the next provider request in the same agent run without dropping `before_agent_start` system-prompt overrides ([#6162](https://github.com/earendil-works/pi/issues/6162)).
 - Fixed a crash when undici emits an internal client error while terminating a mid-stream HTTP response ([#6133](https://github.com/earendil-works/pi/issues/6133)).
 - Fixed interactive status indicators so ending work, retry, compaction, or branch-summary indicators no longer shrink the TUI when clear-on-shrink is enabled ([#6026](https://github.com/earendil-works/pi/pull/6026)).
+- Fixed fork interactive working status updates to preserve elapsed timing and active tool labels after upstream status indicator changes.
+- Fixed fork compaction status handling to preserve overflow/pre-prompt reasons and progress rendering after upstream merge.
 
 ## [2026.6.30] - 2026-06-30
 
