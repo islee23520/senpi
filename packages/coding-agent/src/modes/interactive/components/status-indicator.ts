@@ -1,5 +1,4 @@
-import { type Component, Loader, type TUI } from "@earendil-works/pi-tui";
-import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts";
+import { type Component, Loader, type LoaderIndicatorOptions, type TUI } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { keyText } from "./keybinding-hints.ts";
@@ -15,7 +14,7 @@ export class StatusIndicator extends Loader {
 		spinnerColorFn: (str: string) => string,
 		messageColorFn: (str: string) => string,
 		message: string,
-		indicator?: WorkingIndicatorOptions,
+		indicator?: LoaderIndicatorOptions,
 	) {
 		super(ui, spinnerColorFn, messageColorFn, message, indicator);
 		this.kind = kind;
@@ -27,7 +26,7 @@ export class StatusIndicator extends Loader {
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
-	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions) {
+	constructor(ui: TUI, message: string, indicator?: LoaderIndicatorOptions) {
 		super(
 			"working",
 			ui,
@@ -71,7 +70,7 @@ export class RetryStatusIndicator extends StatusIndicator {
 	}
 }
 
-export type CompactionStatusReason = "manual" | "threshold" | "overflow" | "pre_prompt";
+export type CompactionStatusReason = "manual" | "threshold" | "overflow" | "pre_prompt" | "branch" | "extension";
 
 export class CompactionStatusIndicator extends StatusIndicator {
 	constructor(ui: TUI, reason: CompactionStatusReason) {

@@ -36,6 +36,7 @@ import {
 	fuzzyFilter,
 	getCapabilities,
 	hyperlink,
+	type LoaderIndicatorOptions,
 	Markdown,
 	matchesKey,
 	ProcessTerminal,
@@ -1984,7 +1985,7 @@ export class InteractiveMode {
 		this.stopToolHookStatusTimer();
 	}
 
-	private getWorkingIndicatorOptions(): WorkingIndicatorOptions {
+	private getWorkingIndicatorOptions(): LoaderIndicatorOptions {
 		return (
 			this.workingIndicatorOptions ?? {
 				frames: theme.getColorMode() === "truecolor" ? ["•"] : [theme.fg("accent", "•"), theme.fg("muted", "◦")],
