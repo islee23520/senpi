@@ -38,6 +38,8 @@ import {
 
 export type AppServerDaemonVerb = "start" | "stop" | "status" | "restart";
 
+export { runAppServerDaemonCommand } from "./daemon.ts";
+
 export type AppServerListen =
 	| { readonly kind: "stdio"; readonly url: "stdio://" }
 	| { readonly kind: "unix"; readonly url: string; readonly path?: string }
@@ -287,11 +289,6 @@ export async function runAppServerMode(options: AppServerModeOptions): Promise<v
 		process.off("SIGINT", handleSignal);
 		process.off("SIGTERM", handleSignal);
 	}
-}
-
-export async function runAppServerDaemonCommand(_options: AppServerDaemonCommandOptions): Promise<never> {
-	console.error("app-server mode scaffolding — not yet wired");
-	process.exit(3);
 }
 
 type AppServerRuntime = {
