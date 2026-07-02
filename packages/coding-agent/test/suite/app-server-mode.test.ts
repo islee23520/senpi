@@ -61,17 +61,7 @@ describe("app-server mode entry", () => {
 			expect(await reader.readUntilResponse(3)).toMatchObject({
 				id: 3,
 				result: {
-					data: [
-						expect.objectContaining({
-							id: threadId,
-							sessionId: threadId,
-							modelProvider: expect.any(String),
-							createdAt: expect.any(Number),
-							updatedAt: expect.any(Number),
-							status: { type: "idle" },
-							turns: [],
-						}),
-					],
+					data: [threadId],
 				},
 			});
 			socket.send(JSON.stringify({ id: 4, method: "thread/unsubscribe", params: { threadId } }));
@@ -148,16 +138,7 @@ describe("app-server mode entry", () => {
 			expect(await secondReader.readUntilResponse(4)).toMatchObject({
 				id: 4,
 				result: {
-					data: [
-						expect.objectContaining({
-							id: threadId,
-							sessionId: threadId,
-							modelProvider: expect.any(String),
-							createdAt: expect.any(Number),
-							status: { type: "active", activeFlags: [] },
-							turns: [],
-						}),
-					],
+					data: [threadId],
 				},
 			});
 			completionGate.resolve();
@@ -176,7 +157,7 @@ describe("app-server mode entry", () => {
 			secondSocket.send(JSON.stringify({ id: 6, method: "thread/loaded/list", params: {} }));
 			expect(await secondReader.readUntilResponse(6)).toMatchObject({
 				id: 6,
-				result: { data: [expect.objectContaining({ id: threadId })] },
+				result: { data: [threadId] },
 			});
 			expect(faux.state.callCount).toBe(1);
 		} finally {

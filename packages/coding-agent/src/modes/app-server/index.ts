@@ -2,13 +2,7 @@ import { isIP } from "node:net";
 import { APP_NAME, ENV_SESSION_DIR, getAgentDir } from "../../config.ts";
 import type { AgentSession } from "../../core/agent-session.ts";
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "../../core/sdk.ts";
-import type {
-	ThreadLoadedListResponse,
-	TurnInterruptParams,
-	TurnStartParams,
-	TurnSteerParams,
-	UserInput,
-} from "./protocol/index.ts";
+import type { TurnInterruptParams, TurnStartParams, TurnSteerParams, UserInput } from "./protocol/index.ts";
 import type { ClassifiedIncoming, RpcEnvelope, RpcResponse } from "./rpc/envelope.ts";
 import { createRegistry, type MethodRegistry, type RpcRequest } from "./rpc/registry.ts";
 import { ApprovalBridge, createAppServerUIContext } from "./server/approvals.ts";
@@ -27,7 +21,6 @@ import {
 	type TurnEngineStore,
 	type TurnEngineThreadEntry,
 } from "./threads/turns.ts";
-import { buildWireThread } from "./threads/wire-thread.ts";
 import { type StdioTransport, startStdioTransport } from "./transports/stdio.ts";
 import { startAppServerUnixSocketListener, type UnixSocketListenerHandle } from "./transports/unix-socket.ts";
 import {
@@ -394,7 +387,7 @@ function createAppServerRuntime(requestShutdown: (reason: string) => void): AppS
 		notifications,
 		idleUnloadMinutes: 30,
 	});
-	registerLoadedThreadObjectListHandler(registry, threads, turnLog);
+	registerLoadedThreadObjectListHandler(registry, threads);
 
 	return { core, threads, turnLog, turns };
 }
@@ -438,24 +431,20 @@ function registerTurnHandlers(registry: MethodRegistry, turns: TurnEngineApi): v
 	});
 }
 
-function registerLoadedThreadObjectListHandler(
-	registry: MethodRegistry,
-	threads: ThreadRegistry,
-	turnLog: TurnLog,
-): void {
+function registerLoadedThreadObjectListHandler(registry: MethodRegistry, threads: ThreadRegistry): void {
 	registry.register("thread/loaded/list", {
 		scope: "thread",
 		handler: (context) => {
 			const params = objectValue(context.request.params);
 			const cursor = decodeCursor(optionalString(params.cursor) ?? null);
 			const limit = optionalNumber(params.limit) ?? Number.POSITIVE_INFINITY;
-			const loaded = threads.listLoaded();
+			const loaded = threads.listLoaded().map((thread) => thread.id);
 			const data = loaded.slice(cursor, cursor + limit);
 			const nextOffset = cursor + data.length;
 			return {
-				data: data.map((thread) => buildWireThread(thread, turnLog, false)),
+				data,
 				nextCursor: nextOffset < loaded.length ? encodeCursor(nextOffset) : null,
-			} satisfies ThreadLoadedListResponse;
+			};
 		},
 	});
 }
