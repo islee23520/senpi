@@ -57,6 +57,40 @@ describe("app-server approval bridge", () => {
 		await expect(approval).resolves.toEqual({ allow: true, decision: "accept" });
 	});
 
+	it("emits resolved notifications through the injected sender when a client responds", async () => {
+		// Given: a bridge with one subscribed client and a pending approval.
+		const sent: SentMessage[] = [];
+		const bridge = new ApprovalBridge(createSender(sent, 1));
+		const approval = bridge.requestApproval("thread-a", "commandExecution", {
+			turnId: "turn-1",
+			itemId: "item-1",
+			toolName: "bash",
+			command: "npm test",
+		});
+
+		// When: the client answers the approval request.
+		expect(bridge.resolveResponse({ id: 0, result: { decision: "decline", reason: "not now" } })).toBe(true);
+
+		// Then: the same sender seam is used to publish the resolved notification.
+		expect(sent).toEqual([
+			expect.objectContaining({
+				threadId: "thread-a",
+				message: expect.objectContaining({
+					id: 0,
+					method: "item/commandExecution/requestApproval",
+				}),
+			}),
+			{
+				threadId: "thread-a",
+				message: {
+					method: "serverRequest/resolved",
+					params: { threadId: "thread-a", requestId: 0 },
+				},
+			},
+		]);
+		await expect(approval).resolves.toEqual({ allow: false, decision: "decline", reason: "not now" });
+	});
+
 	it("uses first-responder-wins when two fake subscribers answer the same request", async () => {
 		// Given: a bridge whose router reaches two subscribers.
 		const sent: SentMessage[] = [];
