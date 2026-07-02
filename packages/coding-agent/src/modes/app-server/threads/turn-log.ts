@@ -38,6 +38,14 @@ export class TurnLog {
 		turn.items.push(cloneWireItem(item));
 	}
 
+	completeTurn(threadId: string, turnId: string, status: Exclude<TurnStatus, "running">): void {
+		const turn = this.getThreadTurns(threadId).find((candidate) => candidate.turnId === turnId);
+		if (!turn) {
+			throw new Error(`Turn not found: ${turnId}`);
+		}
+		turn.status = status;
+	}
+
 	readTurns(threadId: string): LoggedTurn[] {
 		return this.getThreadTurns(threadId).map(cloneTurn);
 	}

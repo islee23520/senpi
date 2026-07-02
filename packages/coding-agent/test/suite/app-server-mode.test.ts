@@ -172,6 +172,78 @@ describe("app-server mode entry", () => {
 			banner.restore();
 		}
 	});
+
+	it("returns interrupted turn status from thread read after interrupting an active turn", async () => {
+		// Given: app-server mode has a running turn held open by the faux provider.
+		const root = await scratchRoot();
+		const completionGate = createDeferred();
+		const faux = registerFauxProvider({ schedulerHook: () => completionGate.promise });
+		faux.setResponses([fauxAssistantMessage("should not finish before interrupt")]);
+		await seedFauxConfig(root, faux);
+		vi.stubEnv("SENPI_CODING_AGENT_DIR", join(root, "agent"));
+		vi.stubEnv("SENPI_CODING_AGENT_SESSION_DIR", join(root, "sessions"));
+		vi.stubEnv("PI_OFFLINE", "1");
+		vi.spyOn(process, "exit").mockImplementation(exitThrows);
+		const banner = captureStderrPort();
+		const mode = runAppServerMode({
+			kind: "server",
+			listen: {
+				kind: "ws",
+				url: "ws://127.0.0.1:0",
+				host: "127.0.0.1",
+				port: 0,
+			},
+			wsAuth: { kind: "off" },
+			jsonLogs: false,
+		});
+		runningModes.push(mode);
+
+		const port = await Promise.race([banner.wait, mode.then(() => failModeExited())]);
+		const socket = await openSocket(port);
+		const reader = new BufferedSocketReader(socket);
+		try {
+			await initializeSocket(socket, reader);
+			socket.send(JSON.stringify({ id: 2, method: "thread/start", params: { cwd: root } }));
+			const threadId = threadIdFromResponse(await reader.readUntilResponse(2));
+			socket.send(
+				JSON.stringify({
+					id: 3,
+					method: "turn/start",
+					params: { threadId, input: [{ type: "text", text: "interrupt me" }] },
+				}),
+			);
+			const turnId = turnIdFromResponse(await reader.readUntilResponse(3));
+			await eventually(() => expect(faux.state.callCount).toBe(1));
+
+			// When: the active turn is interrupted and then read back through thread/read.
+			socket.send(JSON.stringify({ id: 4, method: "turn/interrupt", params: { threadId, turnId } }));
+			expect(await reader.readUntilResponse(4)).toEqual({ id: 4, result: {} });
+			expect(await reader.readUntilNotification("turn/completed")).toMatchObject({
+				method: "turn/completed",
+				params: { threadId, turn: expect.objectContaining({ id: turnId, status: "interrupted" }) },
+			});
+			socket.send(JSON.stringify({ id: 5, method: "thread/read", params: { threadId, includeTurns: true } }));
+
+			// Then: thread/read exposes the terminal interrupted status, not stale inProgress state.
+			expect(await reader.readUntilResponse(5)).toMatchObject({
+				id: 5,
+				result: {
+					thread: {
+						turns: [expect.objectContaining({ id: turnId, status: "interrupted" })],
+					},
+				},
+			});
+		} finally {
+			reader.dispose();
+			socket.close();
+			faux.unregister();
+			process.emit("SIGTERM", "SIGTERM");
+			await expect(mode).resolves.toBeUndefined();
+			runningModes.splice(runningModes.indexOf(mode), 1);
+			banner.restore();
+			completionGate.resolve();
+		}
+	});
 });
 
 function exitThrows(code?: string | number | null): never {
