@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { request } from "node:http";
-import WebSocket from "ws";
 import { ServerCore } from "../../../src/modes/app-server/server/server-core.ts";
 import { startAppServerWebSocketListener } from "../../../src/modes/app-server/transports/websocket.ts";
 
@@ -8,7 +7,7 @@ const port = parsePort(process.argv.slice(2));
 const handle = await startAppServerWebSocketListener({
 	host: "127.0.0.1",
 	port,
-	auth: { kind: "off" },
+	auth: { kind: "token-value", token: "task14-gate-review-token" },
 	core: new ServerCore({ codexHome: "/tmp/senpi-task14-ws-noauth", version: "2026.7.2" }),
 });
 
@@ -18,20 +17,9 @@ try {
 	assert.equal(await httpStatus(port, "/healthz"), 200);
 	assert.equal(await httpStatus(port, "/healthz", { Origin: "https://example.test" }), 403);
 	assert.equal(await upgradeStatus(port, { Origin: "https://example.test" }), 403);
+	assert.equal(await upgradeStatus(port), 401);
 
-	const socket = await openSocket(port);
-	socket.send(
-		JSON.stringify({
-			id: 1,
-			method: "initialize",
-			params: { clientInfo: { name: "qa-noauth", title: "QA", version: "0.0.1" } },
-		}),
-	);
-	const response = await readSocketJson(socket);
-	assert.equal(response.id, 1);
-	assert.ok("result" in response);
-	socket.close();
-	console.log(JSON.stringify({ ok: true, port, checks: ["readyz", "healthz", "origin403", "noauthInitialize"] }));
+	console.log(JSON.stringify({ ok: true, port, checks: ["readyz", "healthz", "origin403", "missingBearer401"] }));
 } finally {
 	await handle.close();
 }
@@ -55,7 +43,7 @@ async function httpStatus(port: number, path: string, headers: Record<string, st
 	return response.status;
 }
 
-function upgradeStatus(port: number, headers: Record<string, string>): Promise<number> {
+function upgradeStatus(port: number, headers: Record<string, string> = {}): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const req = request({
 			host: "127.0.0.1",
@@ -80,38 +68,4 @@ function upgradeStatus(port: number, headers: Record<string, string>): Promise<n
 		req.once("error", reject);
 		req.end();
 	});
-}
-
-function openSocket(port: number): Promise<WebSocket> {
-	return new Promise((resolve, reject) => {
-		const socket = new WebSocket(`ws://127.0.0.1:${port}/`);
-		socket.once("open", () => resolve(socket));
-		socket.once("error", reject);
-	});
-}
-
-function readSocketJson(socket: WebSocket): Promise<Record<string, unknown>> {
-	return new Promise((resolve, reject) => {
-		socket.once("message", (data, isBinary) => {
-			if (isBinary) {
-				reject(new Error("expected text websocket frame"));
-				return;
-			}
-			try {
-				const parsed: unknown = JSON.parse(data.toString("utf8"));
-				if (!isRecord(parsed)) {
-					reject(new Error("expected object websocket payload"));
-					return;
-				}
-				resolve(parsed);
-			} catch (error: unknown) {
-				reject(error);
-			}
-		});
-		socket.once("error", reject);
-	});
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
