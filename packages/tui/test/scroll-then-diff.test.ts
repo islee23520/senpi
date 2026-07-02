@@ -140,7 +140,6 @@ describe("scroll-then-diff viewport rendering", () => {
 		const { tui, writes } = await renderTick(pureAppendLines());
 
 		assert.strictEqual(writes, PURE_APPEND_GOLDEN);
-		console.log(`pure-append-golden bytes=${Buffer.byteLength(writes)} region=${writes.includes(REGION_1_TO_5)}`);
 		tui.stop();
 	});
 
@@ -161,9 +160,6 @@ describe("scroll-then-diff viewport rendering", () => {
 			`bounded tail mutation should stay below fallback fixture ${PRE_CHANGE_TAIL_MUTATE_FALLBACK_BYTES}, got ${Buffer.byteLength(writes)}`,
 		);
 		assert.deepStrictEqual(await fullRenderViewport(tailMutateLines()), terminal.getViewport());
-		console.log(
-			`bounded-tail-mutate bytes=${Buffer.byteLength(writes)} fallbackFixture=${PRE_CHANGE_TAIL_MUTATE_FALLBACK_BYTES} region=${writes.includes(REGION_1_TO_5)} bottomSentinelsAbsent=true`,
-		);
 		tui.stop();
 	});
 
@@ -172,7 +168,6 @@ describe("scroll-then-diff viewport rendering", () => {
 
 		assert.ok(!SCROLL_REGION_PATTERN.test(writes), "excess mutations should not use the scroll-region fast path");
 		assert.deepStrictEqual(terminal.getViewport(), await fullRenderViewport(excessMutationLines()));
-		console.log(`excess-mutation-fallback bytes=${Buffer.byteLength(writes)} region=false`);
 		tui.stop();
 	});
 
@@ -198,7 +193,6 @@ describe("scroll-then-diff viewport rendering", () => {
 		}
 
 		assert.deepStrictEqual(terminal.getViewport(), await fullRenderViewport(lines));
-		console.log("screen-state-equivalence ticks=50 result=match");
 		tui.stop();
 	});
 });
