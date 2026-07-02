@@ -130,6 +130,46 @@ export const CURSOR_MARKER = "\x1b_pi:c\x07";
 
 export { visibleWidth };
 
+const renderErrorLoggedClasses = new Set<string>();
+let renderErrorLogWrites = 0;
+
+export function __renderErrorLogStats(): { writes: number } | undefined {
+	if (process.env.PI_TUI_TEST_SEAMS !== "1") {
+		return undefined;
+	}
+	return { writes: renderErrorLogWrites };
+}
+
+function componentRenderErrorName(component: Component): string {
+	return component.constructor.name || "AnonymousComponent";
+}
+
+function logRenderErrorOnce(component: Component, error: unknown): void {
+	const componentName = componentRenderErrorName(component);
+	if (renderErrorLoggedClasses.has(componentName)) {
+		return;
+	}
+	renderErrorLoggedClasses.add(componentName);
+	renderErrorLogWrites += 1;
+
+	const errorText = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+	const logPath = path.join(os.homedir(), ".senpi", "agent", "senpi-debug.log");
+	const msg = `[${new Date().toISOString()}] render error: ${componentName}: ${errorText}\n`;
+	appendRenderErrorLogBestEffort(logPath, msg);
+}
+
+function appendRenderErrorLogBestEffort(logPath: string, msg: string): void {
+	try {
+		fs.mkdirSync(path.dirname(logPath), { recursive: true });
+		fs.appendFileSync(logPath, msg);
+	} catch (error) {
+		if (error instanceof Error) {
+			return;
+		}
+		throw error;
+	}
+}
+
 /**
  * Anchor position for overlays
  */
@@ -317,7 +357,15 @@ export class Container implements Component {
 	render(width: number): string[] {
 		const lines: string[] = [];
 		for (const child of this.children) {
-			const childLines = child.render(width);
+			let childLines: string[];
+			try {
+				childLines = child.render(width);
+			} catch (error) {
+				logRenderErrorOnce(child, error);
+				const componentName = componentRenderErrorName(child);
+				// Focus ownership stays unchanged; render containment must not steal or clear focus implicitly.
+				childLines = [`[render error: ${componentName}]`];
+			}
 			for (const line of childLines) {
 				lines.push(line);
 			}
@@ -353,6 +401,7 @@ export class TUI extends Container {
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
 	private muxViewportRepaintCount = 0;
+	private overWideCrashDumpWritten = false;
 	private stopped = false;
 	private pendingOsc11BackgroundReplies = 0;
 	private pendingOsc11BackgroundQueries: PendingOsc11BackgroundQuery[] = [];
@@ -1890,33 +1939,46 @@ export class TUI extends Container {
 			}
 
 			buffer += `\x1b[2K${TUI.SEGMENT_RESET}`; // Clear current line
-			if (!isImage && visibleWidth(line) > width) {
+			const lineWidth = visibleWidth(line);
+			if (!isImage && lineWidth > width) {
 				// Log all lines to crash file for debugging
 				const crashLogPath = path.join(os.homedir(), ".senpi", "agent", "senpi-crash.log");
 				const crashData = [
 					`Crash at ${new Date().toISOString()}`,
 					`Terminal width: ${width}`,
-					`Line ${i} visible width: ${visibleWidth(line)}`,
+					`Line ${i} visible width: ${lineWidth}`,
 					"",
 					"=== All rendered lines ===",
 					...newLines.map((l, idx) => `[${idx}] (w=${visibleWidth(l)}) ${l}`),
 					"",
 				].join("\n");
-				fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
-				fs.writeFileSync(crashLogPath, crashData);
+				if (process.env.PI_TUI_STRICT_RENDER === "1") {
+					fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
+					fs.writeFileSync(crashLogPath, crashData);
 
-				// Clean up terminal state before throwing
-				this.stop();
+					// Clean up terminal state before throwing
+					this.stop();
 
-				const errorMsg = [
-					`Rendered line ${i} exceeds terminal width (${visibleWidth(line)} > ${width}).`,
-					"",
-					"This is likely caused by a custom TUI component not truncating its output.",
-					"Use visibleWidth() to measure and truncateToWidth() to truncate lines.",
-					"",
-					`Debug log written to: ${crashLogPath}`,
-				].join("\n");
-				throw new Error(errorMsg);
+					const errorMsg = [
+						`Rendered line ${i} exceeds terminal width (${lineWidth} > ${width}).`,
+						"",
+						"This is likely caused by a custom TUI component not truncating its output.",
+						"Use visibleWidth() to measure and truncateToWidth() to truncate lines.",
+						"",
+						`Debug log written to: ${crashLogPath}`,
+					].join("\n");
+					throw new Error(errorMsg);
+				}
+
+				if (!this.overWideCrashDumpWritten) {
+					fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
+					fs.writeFileSync(crashLogPath, crashData);
+					this.overWideCrashDumpWritten = true;
+				}
+				const truncatedLine = sliceByColumn(line, 0, width, true) + TUI.SEGMENT_RESET;
+				newLines[i] = truncatedLine;
+				buffer += truncatedLine;
+				continue;
 			}
 			buffer += line;
 		}
