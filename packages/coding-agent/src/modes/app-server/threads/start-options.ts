@@ -1,5 +1,4 @@
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
-import { getBuiltinModels, getBuiltinProviders } from "@earendil-works/pi-ai/providers/all";
+import { type Api, getModels, getProviders, type Model } from "@earendil-works/pi-ai/compat";
 import type { AskForApproval } from "../protocol/generated/v2/index.ts";
 import { objectValue, optionalString } from "./handler-params.ts";
 
@@ -60,9 +59,9 @@ function isGranularApproval(value: unknown): value is GranularApproval {
 }
 
 function findBuiltinModel(provider: string, modelId: string): Model<Api> | undefined {
-	for (const builtinProvider of getBuiltinProviders()) {
+	for (const builtinProvider of getProviders()) {
 		if (builtinProvider === provider) {
-			return getBuiltinModels(builtinProvider).find((model) => model.id === modelId);
+			return getModels(builtinProvider).find((model) => model.id === modelId);
 		}
 	}
 	return undefined;
