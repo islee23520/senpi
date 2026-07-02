@@ -102,6 +102,7 @@ interface ViewportInsertScrollPlan {
 	viewportTop: number;
 	regionBottom: number;
 	insertedRows: string[];
+	mutatedRows: Array<{ screenRow: number; content: string }>;
 }
 
 interface ViewportRenderStats {
@@ -150,6 +151,8 @@ export { visibleWidth };
 const renderErrorLoggedClasses = new Set<string>();
 let renderErrorLogWrites = 0;
 const VIEWPORT_RENDER_OVERSCAN = 16;
+// Keep scroll-region wins cheap when a few visible rows mutate during append streaming.
+const MAX_SCROLL_DIFF_ROWS = 4;
 const viewportRenderStats = {
 	lastNormalizedLines: 0,
 	lastKittyImageScannedLines: 0,
@@ -1523,9 +1526,13 @@ export class TUI extends Container {
 			return undefined;
 		}
 
+		const mutatedRows: Array<{ screenRow: number; content: string }> = [];
 		for (let row = 0; row < regionHeight - lineCountDelta; row++) {
 			if (previousVisible[row + lineCountDelta] !== nextVisible[row]) {
-				return undefined;
+				mutatedRows.push({ screenRow: row, content: nextVisible[row] });
+				if (mutatedRows.length > MAX_SCROLL_DIFF_ROWS) {
+					return undefined;
+				}
 			}
 		}
 
@@ -1533,6 +1540,7 @@ export class TUI extends Container {
 			viewportTop,
 			regionBottom: regionHeight - 1,
 			insertedRows: nextVisible.slice(regionHeight - lineCountDelta, regionHeight),
+			mutatedRows,
 		};
 	}
 
@@ -1553,17 +1561,23 @@ export class TUI extends Container {
 		buffer += "\x1b[r";
 
 		const firstInsertedScreenRow = regionBottom - plan.insertedRows.length + 1;
+		let finalPaintedScreenRow = firstInsertedScreenRow + plan.insertedRows.length - 1;
 		for (let index = 0; index < plan.insertedRows.length; index++) {
 			const screenRow = firstInsertedScreenRow + index;
 			buffer += `\x1b[${screenRow + 1};1H\x1b[2K${TUI.SEGMENT_RESET}`;
 			buffer += plan.insertedRows[index] ?? "";
+		}
+		for (const row of plan.mutatedRows) {
+			buffer += `\x1b[${row.screenRow + 1};1H\x1b[2K${TUI.SEGMENT_RESET}`;
+			buffer += row.content;
+			finalPaintedScreenRow = row.screenRow;
 		}
 
 		buffer += TUI.FRAME_END;
 		this.terminal.write(buffer);
 
 		this.cursorRow = Math.max(0, newLines.length - 1);
-		this.hardwareCursorRow = plan.viewportTop + firstInsertedScreenRow + plan.insertedRows.length - 1;
+		this.hardwareCursorRow = plan.viewportTop + finalPaintedScreenRow;
 		this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
 		this.previousViewportTop = plan.viewportTop;
 		this.positionHardwareCursor(cursorPos, newLines.length);
