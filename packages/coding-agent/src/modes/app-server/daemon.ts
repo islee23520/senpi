@@ -109,7 +109,7 @@ async function startDaemon(paths: DaemonPaths, listen: AppServerListen): Promise
 	const pid = await spawnDaemon(paths, listen);
 	const ready = await pollProbe(paths, listen, 10_000);
 	if (!ready) {
-		await stopValidatedPid(paths, { pid, processStartTime: (await readProcessStartTime(pid)) ?? "" }, "SIGTERM");
+		await stopValidatedPid({ pid, processStartTime: (await readProcessStartTime(pid)) ?? "" }, "SIGTERM");
 		await cleanupState(paths, listen);
 		throw new Error("spawned daemon did not answer initialize within 10s");
 	}
@@ -126,9 +126,9 @@ async function stopDaemon(paths: DaemonPaths, listen: AppServerListen): Promise<
 		await cleanupState(paths, listen);
 		return { status: "not-running" };
 	}
-	await stopValidatedPid(paths, pidFile, "SIGTERM");
+	await stopValidatedPid(pidFile, "SIGTERM");
 	if (await processMatchesPidFile(pidFile)) {
-		await stopValidatedPid(paths, pidFile, "SIGKILL");
+		await stopValidatedPid(pidFile, "SIGKILL");
 	}
 	await waitForGone(pidFile, 10_000);
 	await cleanupState(paths, listen);

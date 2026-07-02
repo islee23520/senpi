@@ -1,14 +1,9 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
 
 export interface DaemonPidFile {
 	readonly pid: number;
 	readonly processStartTime: string;
 }
-
-type DaemonStateDir = {
-	readonly dir: string;
-};
 
 export function parseDaemonPidFile(text: string): DaemonPidFile | undefined {
 	let parsed: unknown;
@@ -35,11 +30,7 @@ export async function processMatchesPidFile(
 	return current === pidFile.processStartTime;
 }
 
-export async function stopValidatedPid(
-	paths: DaemonStateDir,
-	pidFile: DaemonPidFile,
-	signal: NodeJS.Signals,
-): Promise<void> {
+export async function stopValidatedPid(pidFile: DaemonPidFile, signal: NodeJS.Signals): Promise<void> {
 	if (!(await processMatchesPidFile(pidFile))) return;
 	try {
 		process.kill(pidFile.pid, signal);
@@ -48,7 +39,6 @@ export async function stopValidatedPid(
 	}
 	if (signal === "SIGTERM") await waitForGone(pidFile, 10_000);
 	if (signal === "SIGKILL") await waitForGone(pidFile, 2_000);
-	await mkdir(paths.dir, { recursive: true });
 }
 
 export async function waitForGone(pidFile: DaemonPidFile, timeoutMs: number): Promise<boolean> {

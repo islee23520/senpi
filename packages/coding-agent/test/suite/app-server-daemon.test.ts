@@ -1,10 +1,14 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseDaemonPidFile, processMatchesPidFile } from "../../src/modes/app-server/daemon/process.ts";
+import {
+	parseDaemonPidFile,
+	processMatchesPidFile,
+	stopValidatedPid,
+} from "../../src/modes/app-server/daemon/process.ts";
 import { createDaemonPaths, withDaemonStateLock } from "../../src/modes/app-server/daemon.ts";
 
 const roots: string[] = [];
@@ -57,6 +61,32 @@ describe("app-server daemon state", () => {
 		// Then: the second operation enters only after the first exits.
 		expect(results).toEqual(["first", "second"]);
 		expect(events).toEqual(["first-enter", "first-exit", "second-enter"]);
+	});
+
+	it("does not recreate state directories after signaling a validated pid", async () => {
+		// Given: a validated daemon pid and a removed state directory.
+		const root = await scratchRoot("senpi-daemon-stop-");
+		const stateDir = join(root, "agent", "app-server-daemon");
+		const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+			stdio: ["ignore", "ignore", "ignore"],
+		});
+		if (child.pid === undefined) throw new Error("expected child pid");
+		const pidFile = {
+			pid: child.pid,
+			processStartTime: await waitForChildStartTime(child.pid),
+		};
+		await rm(stateDir, { recursive: true, force: true });
+
+		try {
+			// When: the validated pid is stopped through the process helper.
+			await stopValidatedPid(pidFile, "SIGTERM");
+
+			// Then: the helper only signals the process and leaves directory ownership to the caller.
+			await expect(access(stateDir)).rejects.toMatchObject({ code: "ENOENT" });
+			await eventually(async () => expect(await processMatchesPidFile(pidFile)).toBe(false));
+		} finally {
+			if (await processMatchesPidFile(pidFile)) child.kill("SIGKILL");
+		}
 	});
 });
 
@@ -197,6 +227,16 @@ async function readProcessStartTime(pid: number): Promise<string | undefined> {
 	});
 }
 
+async function waitForChildStartTime(pid: number): Promise<string> {
+	const deadline = Date.now() + 2_000;
+	while (Date.now() <= deadline) {
+		const startTime = await readProcessStartTime(pid);
+		if (startTime) return startTime;
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	throw new Error(`child pid ${pid} had no process start time`);
+}
+
 async function eventually(assertion: () => void | Promise<void>): Promise<void> {
 	const deadline = Date.now() + 2_000;
 	let lastError: unknown;
@@ -205,6 +245,7 @@ async function eventually(assertion: () => void | Promise<void>): Promise<void> 
 			await assertion();
 			return;
 		} catch (error: unknown) {
+			if (!(error instanceof Error)) throw error;
 			lastError = error;
 		}
 		await new Promise((resolve) => setTimeout(resolve, 20));
