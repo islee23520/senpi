@@ -150,6 +150,7 @@ export { visibleWidth };
 
 const renderErrorLoggedClasses = new Set<string>();
 let renderErrorLogWrites = 0;
+const DIAGNOSTIC_LOG_MODE = 0o600;
 const VIEWPORT_RENDER_OVERSCAN = 16;
 // Keep scroll-region wins cheap when a few visible rows mutate during append streaming.
 const MAX_SCROLL_DIFF_ROWS = 4;
@@ -215,7 +216,8 @@ function logRenderErrorOnce(component: Component, error: unknown): void {
 function appendRenderErrorLogBestEffort(logPath: string, msg: string): void {
 	try {
 		fs.mkdirSync(path.dirname(logPath), { recursive: true });
-		fs.appendFileSync(logPath, msg, { encoding: "utf8", mode: 0o600 });
+		fs.appendFileSync(logPath, msg, { encoding: "utf8", mode: DIAGNOSTIC_LOG_MODE });
+		chmodDiagnosticLogBestEffort(logPath);
 	} catch (error) {
 		if (error instanceof Error) {
 			return;
@@ -227,11 +229,23 @@ function appendRenderErrorLogBestEffort(logPath: string, msg: string): void {
 function writeRenderDiagnosticBestEffort(logPath: string, data: string): boolean {
 	try {
 		fs.mkdirSync(path.dirname(logPath), { recursive: true });
-		fs.writeFileSync(logPath, data, { encoding: "utf8", mode: 0o600 });
+		fs.writeFileSync(logPath, data, { encoding: "utf8", mode: DIAGNOSTIC_LOG_MODE });
+		chmodDiagnosticLogBestEffort(logPath);
 		return true;
 	} catch (error) {
 		if (error instanceof Error) {
 			return false;
+		}
+		throw error;
+	}
+}
+
+function chmodDiagnosticLogBestEffort(logPath: string): void {
+	try {
+		fs.chmodSync(logPath, DIAGNOSTIC_LOG_MODE);
+	} catch (error) {
+		if (error instanceof Error) {
+			return;
 		}
 		throw error;
 	}
@@ -1853,7 +1867,8 @@ export class TUI extends Container {
 			if (!debugRedraw) return;
 			const logPath = path.join(os.homedir(), ".senpi", "agent", "senpi-debug.log");
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
-			fs.appendFileSync(logPath, msg, { encoding: "utf8", mode: 0o600 });
+			fs.appendFileSync(logPath, msg, { encoding: "utf8", mode: DIAGNOSTIC_LOG_MODE });
+			chmodDiagnosticLogBestEffort(logPath);
 		};
 
 		// First render - just output everything without clearing (assumes clean screen)
@@ -2232,7 +2247,8 @@ export class TUI extends Container {
 				"=== buffer ===",
 				JSON.stringify(buffer),
 			].join("\n");
-			fs.writeFileSync(debugPath, debugData, { encoding: "utf8", mode: 0o600 });
+			fs.writeFileSync(debugPath, debugData, { encoding: "utf8", mode: DIAGNOSTIC_LOG_MODE });
+			chmodDiagnosticLogBestEffort(debugPath);
 		}
 
 		// Write entire buffer at once
