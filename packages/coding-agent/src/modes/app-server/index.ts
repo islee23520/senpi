@@ -29,6 +29,7 @@ import {
 } from "./threads/turns.ts";
 import { buildWireThread } from "./threads/wire-thread.ts";
 import { type StdioTransport, startStdioTransport } from "./transports/stdio.ts";
+import { startAppServerUnixSocketListener, type UnixSocketListenerHandle } from "./transports/unix-socket.ts";
 import {
 	startAppServerWebSocketListener,
 	type WebSocketListenerAuth,
@@ -245,6 +246,7 @@ export async function runAppServerMode(options: AppServerModeOptions): Promise<v
 
 	const runtime = createAppServerRuntime(requestShutdown);
 	let stdio: StdioTransport | undefined;
+	let unix: UnixSocketListenerHandle | undefined;
 	let websocket: WebSocketListenerHandle | undefined;
 	try {
 		if (options.listen.kind === "stdio") {
@@ -266,12 +268,20 @@ export async function runAppServerMode(options: AppServerModeOptions): Promise<v
 				process.stderr.write(`token ${websocket.tokenFile}\n`);
 			}
 		} else {
-			throw new AppServerModeUsageError("unix app-server listen is not implemented yet.");
+			unix = await startAppServerUnixSocketListener({
+				core: runtime.core,
+				socketPath: options.listen.path,
+				auth: toWebSocketAuth(options.wsAuth),
+			});
+			process.stderr.write(`senpi app-server listening on unix://${unix.socketPath}\n`);
+			if (unix.tokenFile) {
+				process.stderr.write(`token ${unix.tokenFile}\n`);
+			}
 		}
 
 		const reason = await shutdownSignal;
 		await withShutdownDeadline(interruptActiveTurns(runtime), 5_000);
-		await withShutdownDeadline(shutdownTransports({ stdio, websocket, reason }), 5_000);
+		await withShutdownDeadline(shutdownTransports({ stdio, unix, websocket, reason }), 5_000);
 		process.exitCode = 0;
 	} finally {
 		process.off("SIGINT", handleSignal);
@@ -290,13 +300,6 @@ type AppServerRuntime = {
 	readonly turnLog: TurnLog;
 	readonly turns: TurnEngineApi;
 };
-
-class AppServerModeUsageError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "AppServerModeUsageError";
-	}
-}
 
 class RoutedServerCore extends ServerCore {
 	private readonly notifications: NotificationRouter;
@@ -657,11 +660,13 @@ function toWebSocketAuth(auth: AppServerWsAuth | undefined): WebSocketListenerAu
 
 async function shutdownTransports(options: {
 	readonly stdio: StdioTransport | undefined;
+	readonly unix: UnixSocketListenerHandle | undefined;
 	readonly websocket: WebSocketListenerHandle | undefined;
 	readonly reason: string;
 }): Promise<void> {
 	await options.stdio?.drain();
 	await options.stdio?.close(options.reason);
+	await options.unix?.close();
 	await options.websocket?.close();
 }
 
