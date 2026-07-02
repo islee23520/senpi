@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseAppServerCliArgs } from "../../src/modes/app-server/index.ts";
 
@@ -67,5 +69,16 @@ describe("app-server CLI subcommand parsing", () => {
 			verb: "start",
 			listen: { kind: "ws", url: "ws://127.0.0.1:18991", host: "127.0.0.1", port: 18991 },
 		});
+	});
+
+	it("does not embed the protected live daemon port literal in the QA runner", async () => {
+		// Given: the app-server QA aggregate runner source.
+		const source = await readFile(join(process.cwd(), "scripts/qa-app-server/run-all.mjs"), "utf8");
+
+		// When: the source is scanned for the protected private daemon port.
+		const containsProtectedPortLiteral = source.includes("18789");
+
+		// Then: the runner preserves safety without carrying the literal.
+		expect(containsProtectedPortLiteral).toBe(false);
 	});
 });

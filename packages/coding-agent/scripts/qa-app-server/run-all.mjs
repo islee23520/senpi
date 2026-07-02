@@ -11,6 +11,7 @@ const scripts = Object.freeze([
 	["approval", "approval-roundtrip.mjs"],
 	["real-client", "real-client.mjs"],
 ]);
+const protectedLiveDaemonPort = 18000 + 789;
 
 const outDir = mkdtempSync(join(tmpdir(), "senpi-qa-app-server-run-all-"));
 
@@ -85,6 +86,10 @@ async function assertNoAppServerListeners() {
 	if (result.status !== 0) throw new Error(`pgrep failed with ${result.status ?? "signal"}`);
 	const forbidden = result.stdout
 		.split("\n")
-		.filter((line) => line.includes("app-server --listen") && !line.includes("18789"));
+		.filter((line) => line.includes("app-server --listen") && !isProtectedLiveDaemon(line));
 	if (forbidden.length > 0) throw new Error(`leftover app-server listener process: ${forbidden.join("; ")}`);
+}
+
+function isProtectedLiveDaemon(line) {
+	return line.includes("app-server --listen") && line.includes(`:${protectedLiveDaemonPort}`);
 }

@@ -9,6 +9,16 @@ type ArchivedThreadRecord = {
 	readonly thread: WireThread;
 };
 
+class ThreadArchiveStateError extends Error {
+	readonly path: string;
+
+	constructor(path: string, message: string) {
+		super(`${message}: ${path}`);
+		this.name = "ThreadArchiveStateError";
+		this.path = path;
+	}
+}
+
 export class ThreadArchiveState {
 	private readonly sessionDir: string | undefined;
 
@@ -35,14 +45,15 @@ export class ThreadArchiveState {
 	}
 
 	async isArchived(thread: WireThread): Promise<boolean> {
+		const path = sidecarPathForThread(thread);
 		try {
-			await readFile(sidecarPathForThread(thread), "utf8");
+			await readFile(path, "utf8");
 			return true;
 		} catch (error) {
-			if (error instanceof Error) {
+			if (isNotFoundError(error)) {
 				return false;
 			}
-			throw error;
+			throw readError(path, error);
 		}
 	}
 
@@ -54,10 +65,10 @@ export class ThreadArchiveState {
 		try {
 			entries = await readdir(this.sessionDir);
 		} catch (error) {
-			if (error instanceof Error) {
+			if (isNotFoundError(error)) {
 				return [];
 			}
-			throw error;
+			throw readError(this.sessionDir, error);
 		}
 		const threads: WireThread[] = [];
 		for (const entry of entries) {
@@ -85,28 +96,32 @@ async function readArchivedThread(path: string): Promise<WireThread | null> {
 	try {
 		content = await readFile(path, "utf8");
 	} catch (error) {
-		if (error instanceof Error) {
+		if (isNotFoundError(error)) {
 			return null;
 		}
-		throw error;
+		throw readError(path, error);
 	}
-	return parseArchivedThread(content);
+	return parseArchivedThread(path, content);
 }
 
-function parseArchivedThread(content: string): WireThread | null {
+function parseArchivedThread(path: string, content: string): WireThread {
 	let value: unknown;
 	try {
 		value = JSON.parse(content);
 	} catch (error) {
 		if (error instanceof Error) {
-			return null;
+			throw new ThreadArchiveStateError(path, `Invalid archived thread sidecar JSON (${error.message})`);
 		}
 		throw error;
 	}
 	if (!isRecord(value) || !isRecord(value.thread)) {
-		return null;
+		throw new ThreadArchiveStateError(path, "Invalid archived thread sidecar record");
 	}
-	return parseWireThread(value.thread);
+	const thread = parseWireThread(value.thread);
+	if (!thread) {
+		throw new ThreadArchiveStateError(path, "Invalid archived thread record");
+	}
+	return thread;
 }
 
 function parseWireThread(value: Record<string, unknown>): WireThread | null {
@@ -146,4 +161,19 @@ function nullableString(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNotFoundError(error: unknown): boolean {
+	return isNodeFsError(error) && error.code === "ENOENT";
+}
+
+function isNodeFsError(error: unknown): error is Error & { readonly code?: string } {
+	return error instanceof Error && "code" in error;
+}
+
+function readError(path: string, error: unknown): ThreadArchiveStateError {
+	if (error instanceof Error) {
+		return new ThreadArchiveStateError(path, `Failed to read archived thread state (${error.message})`);
+	}
+	return new ThreadArchiveStateError(path, `Failed to read archived thread state (${String(error)})`);
 }

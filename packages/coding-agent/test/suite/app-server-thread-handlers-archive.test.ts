@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createRegistry } from "../../src/modes/app-server/rpc/registry.ts";
@@ -49,6 +50,31 @@ describe("app-server thread archive lifecycle handlers", () => {
 		// Then: persisted archive state, not handler memory, controls both filters.
 		expect(threadIdsFromList(defaultList)).not.toContain(threadId);
 		expect(threadIdsFromList(archivedList)).toEqual([threadId]);
+	});
+
+	it("surfaces corrupt archived sidecars as an internal error", async () => {
+		// Given: a persisted session with a malformed archive sidecar.
+		const { connection, registry, root } = await createHarness();
+		const threadId = "44444444-4444-4444-8444-444444444444";
+		await writePersistedSession(root, threadId);
+		const sessionPath = join(root, "sessions", `2026-07-02T00-00-00-000Z_${threadId}.jsonl`);
+		await writeFile(`${sessionPath}.archived`, "{not json", "utf8");
+
+		// When: archived threads are listed through the registry.
+		const response = await registry.dispatch(connection, {
+			id: 4,
+			method: "thread/list",
+			params: { archived: true },
+		});
+
+		// Then: corrupt state is surfaced instead of being treated as absent.
+		expect(response).toEqual({
+			id: 4,
+			error: {
+				code: -32603,
+				message: expect.stringContaining(`${sessionPath}.archived`),
+			},
+		});
 	});
 
 	it("archives a thread, unloads it, and filters archived listings", async () => {

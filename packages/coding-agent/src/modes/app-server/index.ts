@@ -1,26 +1,25 @@
-import { isIP } from "node:net";
-import { APP_NAME, ENV_SESSION_DIR, getAgentDir } from "../../config.ts";
-import type { AgentSession } from "../../core/agent-session.ts";
+import { ENV_SESSION_DIR, getAgentDir } from "../../config.ts";
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "../../core/sdk.ts";
-import type { TurnInterruptParams, TurnStartParams, TurnSteerParams, UserInput } from "./protocol/index.ts";
-import type { ClassifiedIncoming, RpcEnvelope, RpcResponse } from "./rpc/envelope.ts";
-import { createRegistry, type MethodRegistry, type RpcRequest } from "./rpc/registry.ts";
-import { ApprovalBridge, createAppServerUIContext } from "./server/approvals.ts";
-import type { Connection, ConnectionId, ConnectionInput, TransportKind } from "./server/connection.ts";
-import { type ConnectionTransport, NotificationRouter } from "./server/notifications.ts";
-import { ServerCore } from "./server/server-core.ts";
-import { decodeCursor, encodeCursor, objectValue, optionalNumber, optionalString } from "./threads/handler-params.ts";
-import { registerThreadLifecycleHandlers } from "./threads/handlers.ts";
-import { type ThreadEntry, ThreadNotFoundError, ThreadRegistry } from "./threads/registry.ts";
-import { TurnLog } from "./threads/turn-log.ts";
-import { TurnEngineError } from "./threads/turn-runtime.ts";
 import {
-	createTurnEngine,
-	type TurnEngineApi,
-	type TurnEngineSession,
-	type TurnEngineStore,
-	type TurnEngineThreadEntry,
-} from "./threads/turns.ts";
+	APP_SERVER_LISTEN_USAGE,
+	type AppServerCliArgs,
+	type AppServerDaemonCommandOptions,
+	type AppServerDaemonVerb,
+	type AppServerListen,
+	type AppServerModeOptions,
+	type AppServerUsageError,
+	type AppServerWsAuth,
+	formatAppServerUsage,
+	parseAppServerCliArgs,
+} from "./cli-args.ts";
+import { createRegistry, type MethodRegistry } from "./rpc/registry.ts";
+import { ApprovalBridge, createAppServerUIContext } from "./server/approvals.ts";
+import { NotificationRouter } from "./server/notifications.ts";
+import type { ServerCore } from "./server/server-core.ts";
+import { registerThreadLifecycleHandlers } from "./threads/handlers.ts";
+import { ThreadNotFoundError, ThreadRegistry } from "./threads/registry.ts";
+import { TurnLog } from "./threads/turn-log.ts";
+import { createTurnEngine, type TurnEngineApi } from "./threads/turns.ts";
 import { type StdioTransport, startStdioTransport } from "./transports/stdio.ts";
 import { startAppServerUnixSocketListener, type UnixSocketListenerHandle } from "./transports/unix-socket.ts";
 import {
@@ -28,189 +27,28 @@ import {
 	type WebSocketListenerAuth,
 	type WebSocketListenerHandle,
 } from "./transports/websocket.ts";
-
-export type AppServerDaemonVerb = "start" | "stop" | "status" | "restart";
+import {
+	createModeTurnStore,
+	createRoutedServerCore,
+	registerLoadedThreadObjectListHandler,
+	turnInterruptParams,
+	turnStartParams,
+	turnSteerParams,
+} from "./turn-adapter.ts";
 
 export { runAppServerDaemonCommand } from "./daemon.ts";
-
-export type AppServerListen =
-	| { readonly kind: "stdio"; readonly url: "stdio://" }
-	| { readonly kind: "unix"; readonly url: string; readonly path?: string }
-	| { readonly kind: "ws"; readonly url: string; readonly host: string; readonly port: number };
-
-export type AppServerWsAuth = { readonly kind: "off" } | { readonly kind: "token-file"; readonly path: string };
-
-export interface AppServerModeOptions {
-	readonly kind: "server";
-	readonly listen: AppServerListen;
-	readonly wsAuth?: AppServerWsAuth;
-	readonly jsonLogs: boolean;
-}
-
-export interface AppServerDaemonCommandOptions {
-	readonly kind: "daemon";
-	readonly verb: AppServerDaemonVerb;
-	readonly listen: AppServerListen;
-}
-
-export interface AppServerUsageError {
-	readonly kind: "usage-error";
-	readonly message: string;
-}
-
-export type AppServerCliArgs = AppServerModeOptions | AppServerDaemonCommandOptions | AppServerUsageError;
-
-export const APP_SERVER_LISTEN_USAGE =
-	"Invalid --listen value. Use stdio://, unix://, unix:///abs/path, or ws://IP:PORT.";
-
-export function formatAppServerUsage(): string {
-	const listenForms = "stdio://|unix://|unix:///abs/path|ws://IP:PORT";
-	return [
-		`Usage: ${APP_NAME} app-server [--listen <${listenForms}>] [--ws-auth <token-file|off>] [--json-logs]`,
-		`       ${APP_NAME} app-server daemon <start|stop|status|restart> [--listen <${listenForms}>]`,
-	].join("\n");
-}
-
-function parseListen(value: string): AppServerListen | undefined {
-	if (value === "stdio://") {
-		return { kind: "stdio", url: "stdio://" };
-	}
-
-	if (value === "unix://") {
-		return { kind: "unix", url: "unix://" };
-	}
-
-	if (value.startsWith("unix:///")) {
-		const path = value.slice("unix://".length);
-		if (path.startsWith("/")) {
-			return { kind: "unix", url: value, path };
-		}
-		return undefined;
-	}
-
-	if (!value.startsWith("ws://")) {
-		return undefined;
-	}
-
-	let parsed: URL;
-	try {
-		parsed = new URL(value);
-	} catch (error: unknown) {
-		if (error instanceof TypeError) {
-			return undefined;
-		}
-		throw error;
-	}
-
-	const port = Number(parsed.port);
-	if (
-		parsed.protocol !== "ws:" ||
-		parsed.username !== "" ||
-		parsed.password !== "" ||
-		parsed.pathname !== "/" ||
-		parsed.search !== "" ||
-		parsed.hash !== "" ||
-		parsed.port === "" ||
-		!Number.isInteger(port) ||
-		port < 1 ||
-		port > 65535 ||
-		isIP(parsed.hostname) === 0
-	) {
-		return undefined;
-	}
-
-	return { kind: "ws", url: value, host: parsed.hostname, port };
-}
-
-function parseDaemonVerb(value: string | undefined): AppServerDaemonVerb | undefined {
-	switch (value) {
-		case "start":
-		case "stop":
-		case "status":
-		case "restart":
-			return value;
-		default:
-			return undefined;
-	}
-}
-
-function parseWsAuth(value: string): AppServerWsAuth {
-	return value === "off" ? { kind: "off" } : { kind: "token-file", path: value };
-}
-
-function parseServerArgs(args: readonly string[]): AppServerModeOptions | AppServerUsageError {
-	let listen: AppServerListen = { kind: "stdio", url: "stdio://" };
-	let wsAuth: AppServerWsAuth | undefined;
-	let jsonLogs = false;
-
-	for (let index = 0; index < args.length; index++) {
-		const arg = args[index];
-		if (arg === "--listen") {
-			const value = args[index + 1];
-			if (value === undefined) {
-				return { kind: "usage-error", message: APP_SERVER_LISTEN_USAGE };
-			}
-			const parsed = parseListen(value);
-			if (parsed === undefined) {
-				return { kind: "usage-error", message: APP_SERVER_LISTEN_USAGE };
-			}
-			listen = parsed;
-			index++;
-			continue;
-		}
-		if (arg === "--ws-auth") {
-			const value = args[index + 1];
-			if (value === undefined) {
-				return { kind: "usage-error", message: "--ws-auth requires <token-file|off>." };
-			}
-			wsAuth = parseWsAuth(value);
-			index++;
-			continue;
-		}
-		if (arg === "--json-logs") {
-			jsonLogs = true;
-			continue;
-		}
-		return { kind: "usage-error", message: `Unexpected app-server argument: ${arg}` };
-	}
-
-	return { kind: "server", listen, wsAuth, jsonLogs };
-}
-
-function parseDaemonArgs(args: readonly string[]): AppServerDaemonCommandOptions | AppServerUsageError {
-	const verb = parseDaemonVerb(args[0]);
-	if (verb === undefined) {
-		return { kind: "usage-error", message: "Usage: app-server daemon <start|stop|status|restart>." };
-	}
-
-	let listen: AppServerListen = { kind: "ws", url: "ws://127.0.0.1:18800", host: "127.0.0.1", port: 18800 };
-	for (let index = 1; index < args.length; index++) {
-		const arg = args[index];
-		if (arg === "--listen") {
-			const value = args[index + 1];
-			if (value === undefined) {
-				return { kind: "usage-error", message: APP_SERVER_LISTEN_USAGE };
-			}
-			const parsed = parseListen(value);
-			if (parsed === undefined) {
-				return { kind: "usage-error", message: APP_SERVER_LISTEN_USAGE };
-			}
-			listen = parsed;
-			index++;
-			continue;
-		}
-		return { kind: "usage-error", message: `Unexpected app-server daemon argument: ${arg}` };
-	}
-
-	return { kind: "daemon", verb, listen };
-}
-
-export function parseAppServerCliArgs(args: readonly string[]): AppServerCliArgs {
-	if (args[0] === "daemon") {
-		return parseDaemonArgs(args.slice(1));
-	}
-	return parseServerArgs(args);
-}
+export {
+	APP_SERVER_LISTEN_USAGE,
+	type AppServerCliArgs,
+	type AppServerDaemonCommandOptions,
+	type AppServerDaemonVerb,
+	type AppServerListen,
+	type AppServerModeOptions,
+	type AppServerUsageError,
+	type AppServerWsAuth,
+	formatAppServerUsage,
+	parseAppServerCliArgs,
+};
 
 export async function runAppServerMode(options: AppServerModeOptions): Promise<void> {
 	let shutdownRequested = false;
@@ -291,64 +129,6 @@ type AppServerRuntime = {
 	readonly turns: TurnEngineApi;
 };
 
-class RoutedServerCore extends ServerCore {
-	private readonly notifications: NotificationRouter;
-	private readonly approvals: ApprovalBridge;
-
-	constructor(registry: MethodRegistry, notifications: NotificationRouter, approvals: ApprovalBridge) {
-		super({ registry });
-		this.notifications = notifications;
-		this.approvals = approvals;
-	}
-
-	override addConnection(input: ConnectionInput): Connection {
-		const connection = super.addConnection(input);
-		this.notifications.addConnection({
-			id: connection.id,
-			get initialized() {
-				return connection.initialized;
-			},
-			get transport() {
-				return routerTransport(connection.transportKind);
-			},
-			get capabilities() {
-				return connection.capabilities;
-			},
-			get optOutNotificationMethods() {
-				return [...connection.optOutNotificationMethods];
-			},
-			send: (notification) => connection.send(notification as RpcEnvelope),
-			close: () => {
-				void connection.close("slow-client");
-			},
-		});
-		return connection;
-	}
-
-	override removeConnection(id: ConnectionId): void {
-		this.notifications.removeConnection(id);
-		super.removeConnection(id);
-	}
-
-	override async receive(connectionId: ConnectionId, envelope: ClassifiedIncoming): Promise<void> {
-		if (envelope.kind === "response" && this.resolveApproval(envelope.message)) {
-			return;
-		}
-		await super.receive(connectionId, envelope);
-	}
-
-	private resolveApproval(response: RpcResponse): boolean {
-		const id = response.id;
-		if (id === null) {
-			return false;
-		}
-		if ("result" in response) {
-			return this.approvals.resolveResponse({ id, result: response.result });
-		}
-		return this.approvals.resolveResponse({ id, error: response.error });
-	}
-}
-
 function createAppServerRuntime(requestShutdown: (reason: string) => void): AppServerRuntime {
 	const notifications = new NotificationRouter();
 	const registry = createRegistry();
@@ -366,7 +146,7 @@ function createAppServerRuntime(requestShutdown: (reason: string) => void): AppS
 		notifications.toThread(threadId, message);
 		return subscriberCount;
 	});
-	const core = new RoutedServerCore(registry, notifications, approvals);
+	const core = createRoutedServerCore(registry, notifications, approvals);
 	threads = new ThreadRegistry({
 		agentDir: getAgentDir(),
 		sessionDir: process.env[ENV_SESSION_DIR],
@@ -374,7 +154,7 @@ function createAppServerRuntime(requestShutdown: (reason: string) => void): AppS
 	});
 	const turnLog = new TurnLog();
 	const turns = createTurnEngine({
-		store: new ModeTurnStore(threads),
+		store: createModeTurnStore(threads),
 		turnLog,
 		emitToThread: (threadId, notification) => notifications.toThread(threadId, notification),
 		broadcast: (notification) => notifications.broadcast(notification),
@@ -429,209 +209,6 @@ function registerTurnHandlers(registry: MethodRegistry, turns: TurnEngineApi): v
 		scope: "thread",
 		handler: (context) => turns.interruptTurn(turnInterruptParams(context.request)),
 	});
-}
-
-function registerLoadedThreadObjectListHandler(registry: MethodRegistry, threads: ThreadRegistry): void {
-	registry.register("thread/loaded/list", {
-		scope: "thread",
-		handler: (context) => {
-			const params = objectValue(context.request.params);
-			const cursor = decodeCursor(optionalString(params.cursor) ?? null);
-			const limit = optionalNumber(params.limit) ?? Number.POSITIVE_INFINITY;
-			const loaded = threads.listLoaded().map((thread) => thread.id);
-			const data = loaded.slice(cursor, cursor + limit);
-			const nextOffset = cursor + data.length;
-			return {
-				data,
-				nextCursor: nextOffset < loaded.length ? encodeCursor(nextOffset) : null,
-			};
-		},
-	});
-}
-
-class ModeTurnStore implements TurnEngineStore<ModeTurnEntry> {
-	private readonly threads: ThreadRegistry;
-
-	constructor(threads: ThreadRegistry) {
-		this.threads = threads;
-	}
-
-	getLoadedThread(threadId: string): ModeTurnEntry {
-		return new ModeTurnEntry(this.threads.getLoadedThread(threadId));
-	}
-
-	runThreadTask<T>(threadId: string, task: () => Promise<T> | T): Promise<T> {
-		return this.threads.runThreadTask(threadId, task);
-	}
-}
-
-class ModeTurnEntry implements TurnEngineThreadEntry {
-	private readonly entry: ThreadEntry;
-	private readonly sessionAdapter: TurnEngineSession;
-
-	constructor(entry: ThreadEntry) {
-		this.entry = entry;
-		this.sessionAdapter = new ModeTurnSession(entry.session);
-	}
-
-	get id(): string {
-		return this.entry.id;
-	}
-
-	get session(): TurnEngineSession {
-		return this.sessionAdapter;
-	}
-
-	get activeTurn() {
-		return this.entry.activeTurn;
-	}
-
-	set activeTurn(value) {
-		this.entry.activeTurn = value;
-	}
-
-	get status() {
-		return this.entry.status;
-	}
-
-	set status(value) {
-		this.entry.status = value;
-	}
-
-	get updatedAt(): string {
-		return this.entry.updatedAt;
-	}
-
-	set updatedAt(value: string) {
-		this.entry.updatedAt = value;
-	}
-}
-
-class ModeTurnSession implements TurnEngineSession {
-	private readonly session: AgentSession;
-
-	constructor(session: AgentSession) {
-		this.session = session;
-	}
-
-	prompt(
-		text: string,
-		options?: { readonly source?: "rpc"; readonly preflightResult?: (success: boolean) => void },
-	): Promise<void> {
-		return this.session.prompt(text, options);
-	}
-
-	steer(text: string): Promise<void> {
-		return this.session.steer(text);
-	}
-
-	abort(): Promise<void> {
-		return this.session.abort();
-	}
-
-	subscribe(listener: (event: { readonly type: string }) => void): () => void {
-		return this.session.subscribe((event) => {
-			listener({ type: event.type });
-		});
-	}
-}
-
-function objectParams(request: RpcRequest): Readonly<Record<string, unknown>> {
-	if (typeof request.params === "object" && request.params !== null && !Array.isArray(request.params)) {
-		return Object.fromEntries(Object.entries(request.params));
-	}
-	throw new TurnEngineError({ code: -32602, message: "Invalid params" });
-}
-
-function turnStartParams(request: RpcRequest): TurnStartParams {
-	const params = objectParams(request);
-	return {
-		threadId: requiredStringParam(params.threadId, "threadId"),
-		clientUserMessageId: optionalNullableStringParam(params.clientUserMessageId, "clientUserMessageId"),
-		input: userInputArrayParam(params.input),
-	};
-}
-
-function turnSteerParams(request: RpcRequest): TurnSteerParams {
-	const params = objectParams(request);
-	return {
-		threadId: requiredStringParam(params.threadId, "threadId"),
-		expectedTurnId: requiredStringParam(params.expectedTurnId, "expectedTurnId"),
-		clientUserMessageId: optionalNullableStringParam(params.clientUserMessageId, "clientUserMessageId"),
-		input: userInputArrayParam(params.input),
-	};
-}
-
-function turnInterruptParams(request: RpcRequest): TurnInterruptParams {
-	const params = objectParams(request);
-	return {
-		threadId: requiredStringParam(params.threadId, "threadId"),
-		turnId: requiredStringParam(params.turnId, "turnId"),
-	};
-}
-
-function requiredStringParam(value: unknown, name: string): string {
-	if (typeof value !== "string" || value.length === 0) {
-		throw new TurnEngineError({ code: -32602, message: `Invalid params: ${name} is required` });
-	}
-	return value;
-}
-
-function optionalNullableStringParam(value: unknown, name: string): string | null | undefined {
-	if (value === undefined || value === null) {
-		return value;
-	}
-	if (typeof value !== "string") {
-		throw new TurnEngineError({ code: -32602, message: `Invalid params: ${name} must be a string` });
-	}
-	return value;
-}
-
-function userInputArrayParam(value: unknown): readonly UserInput[] {
-	if (!Array.isArray(value)) {
-		throw new TurnEngineError({ code: -32602, message: "Invalid params: input must be an array" });
-	}
-	return value.map(userInputParam);
-}
-
-function userInputParam(value: unknown): UserInput {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		throw new TurnEngineError({ code: -32602, message: "Invalid params: input item must be an object" });
-	}
-	const item = Object.fromEntries(Object.entries(value));
-	const type = item.type;
-	switch (type) {
-		case "text":
-			return {
-				type,
-				text: requiredStringParam(item.text, "input.text"),
-				text_elements: Array.isArray(item.text_elements) ? item.text_elements : [],
-			};
-		case "image":
-			return { type, url: requiredStringParam(item.url, "input.url") };
-		case "localImage":
-			return { type, path: requiredStringParam(item.path, "input.path") };
-		case "skill":
-		case "mention":
-			return {
-				type,
-				name: requiredStringParam(item.name, "input.name"),
-				path: requiredStringParam(item.path, "input.path"),
-			};
-		default:
-			throw new TurnEngineError({ code: -32602, message: "Invalid params: unsupported input item type" });
-	}
-}
-
-function routerTransport(transport: TransportKind): ConnectionTransport {
-	switch (transport) {
-		case "stdio":
-			return "stdio";
-		case "websocket":
-			return "ws";
-		case "unix":
-			return "unix";
-	}
 }
 
 function toWebSocketAuth(auth: AppServerWsAuth | undefined): WebSocketListenerAuth | undefined {
