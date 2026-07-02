@@ -1,0 +1,105 @@
+import { VERSION } from "../../../config.ts";
+import type { Thread, ThreadItem, ThreadStatus, Turn } from "../protocol/generated/v2/index.ts";
+import type { ThreadEntry, WireThread } from "./registry.ts";
+import type { LoggedTurn, TurnLog, WireItem } from "./turn-log.ts";
+
+const ACTIVE_STATUS: ThreadStatus = { type: "active", activeFlags: [] };
+const IDLE_STATUS: ThreadStatus = { type: "idle" };
+export const NOT_LOADED_STATUS: ThreadStatus = { type: "notLoaded" };
+
+export function buildWireThread(entry: ThreadEntry | WireThread, turnLog: TurnLog, includeTurns: boolean): Thread {
+	const model = "session" in entry ? entry.session.model : undefined;
+	const wire = "session" in entry ? entryToWire(entry) : entry;
+	const createdAt = isoSeconds(wire.createdAt);
+	const updatedAt = isoSeconds(wire.updatedAt);
+	return {
+		id: wire.id,
+		sessionId: wire.sessionId,
+		forkedFromId: null,
+		parentThreadId: null,
+		preview: wire.preview ?? "",
+		ephemeral: false,
+		modelProvider: model?.provider ?? "unknown",
+		createdAt,
+		updatedAt,
+		recencyAt: updatedAt,
+		status: toGeneratedStatus(wire.status.type),
+		path: "session" in entry ? (entry.session.sessionFile ?? null) : null,
+		cwd: wire.cwd,
+		cliVersion: VERSION,
+		source: "appServer",
+		threadSource: null,
+		agentNickname: null,
+		agentRole: null,
+		gitInfo: null,
+		name: wire.name,
+		turns: includeTurns ? turnLog.readTurns(wire.id).map(loggedTurnToWireTurn) : [],
+	};
+}
+
+function entryToWire(entry: ThreadEntry): WireThread {
+	return {
+		id: entry.id,
+		sessionId: entry.session.sessionId,
+		cwd: entry.cwd,
+		createdAt: entry.createdAt,
+		updatedAt: entry.updatedAt,
+		status: { type: entry.status },
+		preview: entry.session.getUserMessagesForForking()[0]?.text ?? null,
+		name: entry.session.sessionName ?? null,
+	};
+}
+
+function loggedTurnToWireTurn(turn: LoggedTurn): Turn {
+	return {
+		id: turn.turnId,
+		items: turn.items.map(wireItemToThreadItem),
+		itemsView: "full",
+		status: turn.status === "running" ? "inProgress" : turn.status,
+		error: null,
+		startedAt: isoSeconds(turn.startedAt),
+		completedAt: null,
+		durationMs: null,
+	};
+}
+
+function wireItemToThreadItem(item: WireItem): ThreadItem {
+	const type = item.type;
+	const id = typeof item.id === "string" && item.id.length > 0 ? item.id : "item";
+	if (type === "userMessage") {
+		return {
+			type: "userMessage",
+			id,
+			clientId: typeof item.clientId === "string" ? item.clientId : null,
+			content: [],
+		};
+	}
+	if (type === "reasoning") {
+		return { type: "reasoning", id, summary: [], content: [stringField(item, "text")] };
+	}
+	if (type === "plan") {
+		return { type: "plan", id, text: stringField(item, "text") };
+	}
+	return { type: "agentMessage", id, text: stringField(item, "text"), phase: null, memoryCitation: null };
+}
+
+function stringField(item: WireItem, key: string): string {
+	const value = item[key];
+	return typeof value === "string" ? value : "";
+}
+
+function toGeneratedStatus(status: WireThread["status"]["type"]): ThreadStatus {
+	switch (status) {
+		case "active":
+			return ACTIVE_STATUS;
+		case "idle":
+			return IDLE_STATUS;
+		case "notLoaded":
+			return NOT_LOADED_STATUS;
+	}
+}
+
+function isoSeconds(value: string): number {
+	const parsed = Date.parse(value);
+	return Number.isFinite(parsed) ? parsed / 1000 : 0;
+}
