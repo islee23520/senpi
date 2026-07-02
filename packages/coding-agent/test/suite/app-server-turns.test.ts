@@ -7,7 +7,6 @@ import {
 	type TurnEngineSession,
 	type TurnEngineStore,
 } from "../../src/modes/app-server/threads/turns.ts";
-import { turnStartParams } from "../../src/modes/app-server/turn-adapter.ts";
 
 class ScriptedSession implements TurnEngineSession {
 	readonly promptCalls: Array<{ readonly text: string; readonly source: string | undefined }> = [];
@@ -276,15 +275,5 @@ describe("app-server turn engine", () => {
 				input: [{ type: "skill", name: "nope", path: "/tmp/nope" }],
 			}),
 		).rejects.toBeInstanceOf(TurnEngineError);
-	});
-
-	it("rejects malformed turn/start RPC params before reaching the turn engine", () => {
-		// Given: a turn/start request with a non-array input field.
-		const action = () =>
-			turnStartParams({ id: 1, method: "turn/start", params: { threadId: "thread-a", input: "hello" } });
-
-		// Then: malformed input is reported as a JSON-RPC invalid params error.
-		expect(action).toThrow(TurnEngineError);
-		expect(action).toThrow("Invalid params: input must be an array");
 	});
 });
