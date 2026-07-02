@@ -1,6 +1,5 @@
 import { execFile, spawn } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +9,7 @@ import {
 	stopValidatedPid,
 } from "../../src/modes/app-server/daemon/process.ts";
 import { createDaemonPaths, withDaemonStateLock } from "../../src/modes/app-server/daemon.ts";
+import { type QaPort, qaPortsFrom } from "../helpers/qa-port.ts";
 
 const roots: string[] = [];
 const packageRoot = resolve(import.meta.dirname, "../..");
@@ -95,12 +95,11 @@ describe.sequential("app-server daemon CLI", () => {
 		// Given: a scratch agent directory and a non-default loopback port.
 		const root = await scratchRoot("senpi-daemon-cli-");
 		const agentDir = join(root, "agent");
-		const port = await freePort();
-		const listen = `ws://127.0.0.1:${port}`;
+		const startedDaemon = await startDaemonOnQaPort(agentDir);
+		const { listen, port, started } = startedDaemon;
 
 		try {
 			// When: daemon commands are driven through the real CLI surface.
-			const started = await runDaemonCli(agentDir, ["start", "--listen", listen]);
 			const pidFile = parseDaemonPidFile(
 				await readFile(join(agentDir, "app-server-daemon", "app-server.pid"), "utf8"),
 			);
@@ -149,27 +148,25 @@ async function scratchRoot(prefix: string): Promise<string> {
 	return root;
 }
 
-function freePort(): Promise<number> {
-	return new Promise((resolvePort, reject) => {
-		const server = createServer();
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-			if (!address || typeof address === "string") {
-				server.close();
-				reject(new Error("expected TCP address"));
-				return;
+async function startDaemonOnQaPort(
+	agentDir: string,
+): Promise<{ readonly listen: string; readonly port: QaPort; readonly started: DaemonCliResult }> {
+	const failures: string[] = [];
+	for (const port of qaPortsFrom(18999)) {
+		const listen = `ws://127.0.0.1:${port}`;
+		try {
+			const started = await runDaemonCli(agentDir, ["start", "--listen", listen]);
+			return { listen, port, started };
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message.includes("EADDRINUSE") || message.includes("address already in use")) {
+				failures.push(`${port}:${message}`);
+				continue;
 			}
-			const port = address.port;
-			server.close((error) => {
-				if (error) {
-					reject(error);
-					return;
-				}
-				resolvePort(port);
-			});
-		});
-	});
+			throw error;
+		}
+	}
+	throw new Error(`No free QA daemon port in ${qaPortsFrom().join(", ")} (${failures.join("; ")})`);
 }
 
 function runDaemonCli(agentDir: string, daemonArgs: readonly string[]): Promise<DaemonCliResult> {

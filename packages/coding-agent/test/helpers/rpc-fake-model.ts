@@ -1,5 +1,5 @@
 import { createServer, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { listenOnQaPort } from "./qa-port.ts";
 
 export const MOCK_PROVIDER = "anthropic";
 export const MOCK_MODEL = "mock-claude-rpc";
@@ -25,10 +25,6 @@ interface TextContentBlock {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
-}
-
-function isAddressInfo(value: string | AddressInfo | null): value is AddressInfo {
-	return isRecord(value) && typeof value.port === "number";
 }
 
 function isTextContentBlock(value: unknown): value is TextContentBlock {
@@ -120,29 +116,19 @@ export async function startFakeModelServer(): Promise<FakeModelServer> {
 		});
 	});
 
-	return new Promise((resolve, reject) => {
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", () => {
-			server.off("error", reject);
-			const address = server.address();
-			if (!isAddressInfo(address)) {
-				reject(new Error("Fake model server did not bind to a TCP port"));
-				return;
-			}
-			resolve({
-				origin: `http://127.0.0.1:${address.port}`,
-				requests,
-				close: () =>
-					new Promise<void>((resolveClose, rejectClose) => {
-						server.close((error) => {
-							if (error) {
-								rejectClose(error);
-								return;
-							}
-							resolveClose();
-						});
-					}),
-			});
-		});
-	});
+	const port = await listenOnQaPort(server, 18998);
+	return {
+		origin: `http://127.0.0.1:${port}`,
+		requests,
+		close: () =>
+			new Promise<void>((resolveClose, rejectClose) => {
+				server.close((error) => {
+					if (error) {
+						rejectClose(error);
+						return;
+					}
+					resolveClose();
+				});
+			}),
+	};
 }

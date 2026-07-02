@@ -1,6 +1,8 @@
 import { createServer } from "node:http";
 import { trackCloser, untrackCloser } from "./cleanup.mjs";
 
+const qaPorts = Object.freeze([18990, 18991, 18992, 18993, 18994, 18995, 18996, 18997, 18998, 18999]);
+
 export async function startFakeModelServer(turns) {
 	const requests = [];
 	let callIndex = 0;
@@ -29,14 +31,7 @@ export async function startFakeModelServer(turns) {
 			writeCompletionsSse(res, turn, body.model ?? "mock-model");
 		});
 	});
-	await new Promise((resolveListen, rejectListen) => {
-		server.once("error", rejectListen);
-		server.listen(0, "127.0.0.1", () => {
-			server.off("error", rejectListen);
-			resolveListen();
-		});
-	});
-	const port = server.address().port;
+	const port = await listenOnQaPort(server);
 	const close = () => server.close();
 	trackCloser(close);
 	return {
@@ -48,6 +43,32 @@ export async function startFakeModelServer(turns) {
 				server.close(() => resolveStop());
 			}),
 	};
+}
+
+async function listenOnQaPort(server) {
+	const failures = [];
+	for (const port of qaPorts) {
+		const result = await tryListen(server, port);
+		if (result.ok) return port;
+		failures.push(`${port}:${result.message}`);
+	}
+	throw new Error(`No free QA port in ${qaPorts.join(", ")} (${failures.join("; ")})`);
+}
+
+function tryListen(server, port) {
+	return new Promise((resolve) => {
+		const onError = (error) => {
+			server.off("listening", onListening);
+			resolve({ ok: false, message: error.message });
+		};
+		const onListening = () => {
+			server.off("error", onError);
+			resolve({ ok: true });
+		};
+		server.once("error", onError);
+		server.once("listening", onListening);
+		server.listen(port, "127.0.0.1");
+	});
 }
 
 function parseJson(raw) {

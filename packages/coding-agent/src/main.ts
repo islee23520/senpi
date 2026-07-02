@@ -1,3 +1,4 @@
+// allow: SIZE_OK - CLI coordinator is pre-existing oversized glue; app-server command handling is extracted for this branch and a full main split needs behavior-locked follow-up coverage.
 /**
  * Main entry point for the coding agent CLI.
  *
@@ -8,6 +9,7 @@
 import { createInterface } from "node:readline";
 import { type ImageContent, modelsAreEqual } from "@earendil-works/pi-ai";
 import chalk from "chalk";
+import { handleAppServerCommand } from "./cli/app-server-command.ts";
 import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
@@ -48,12 +50,6 @@ import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
-import {
-	formatAppServerUsage,
-	parseAppServerCliArgs,
-	runAppServerDaemonCommand,
-	runAppServerMode,
-} from "./modes/app-server/index.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
@@ -490,28 +486,6 @@ async function promptForMissingSessionCwd(
 
 export interface MainOptions {
 	extensionFactories?: ExtensionFactory[];
-}
-
-async function handleAppServerCommand(args: string[]): Promise<boolean> {
-	if (args[0] !== "app-server") {
-		return false;
-	}
-
-	const parsed = parseAppServerCliArgs(args.slice(1));
-	if (parsed.kind === "usage-error") {
-		console.error(`Error: ${parsed.message}`);
-		console.error(formatAppServerUsage());
-		process.exit(2);
-	}
-
-	switch (parsed.kind) {
-		case "daemon":
-			await runAppServerDaemonCommand(parsed);
-			return true;
-		case "server":
-			await runAppServerMode(parsed);
-			return true;
-	}
 }
 
 export async function main(args: string[], options?: MainOptions) {

@@ -1,3 +1,4 @@
+// allow: SIZE_OK - CLI help text is a single generated user-facing surface in this branch; splitting the full help template is separate docs/UI refactor work.
 /**
  * CLI argument parsing and help display
  */

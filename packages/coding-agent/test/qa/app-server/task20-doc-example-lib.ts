@@ -127,7 +127,11 @@ function compareNestedResultKeys(method: string, documented: JsonRecord, live: J
 	const documentedResult = recordValue(documented.result, `${method} documented result`);
 	const liveResult = recordValue(live.result, `${method} live result`);
 	compareOptionalRecordKeys(`${method} result.thread`, documentedResult.thread, liveResult.thread);
-	compareOptionalArrayItemKeys(`${method} result.data[0]`, documentedResult.data, liveResult.data);
+	if (method === "thread/loaded/list") {
+		compareOptionalArrayItemValues(`${method} result.data[0]`, documentedResult.data, liveResult.data);
+	} else {
+		compareOptionalArrayItemKeys(`${method} result.data[0]`, documentedResult.data, liveResult.data);
+	}
 	compareOptionalRecordKeys(`${method} result.turn`, documentedResult.turn, liveResult.turn);
 }
 
@@ -141,6 +145,16 @@ function compareOptionalArrayItemKeys(label: string, documented: unknown, live: 
 	const documentedFirst = arrayFirstRecord(documented, `${label} documented`);
 	const liveFirst = arrayFirstRecord(live, `${label} live`);
 	compareKeys(label, documentedFirst, liveFirst);
+}
+
+function compareOptionalArrayItemValues(label: string, documented: unknown, live: unknown): void {
+	if (!Array.isArray(documented) && !Array.isArray(live)) return;
+	if (!Array.isArray(documented) || !Array.isArray(live) || documented.length === 0 || live.length === 0) {
+		throw new Error(`${label} is not present in both arrays`);
+	}
+	if (typeof documented[0] !== "string" || typeof live[0] !== "string") {
+		throw new Error(`${label} is not a string in both arrays`);
+	}
 }
 
 function compareKeys(label: string, documented: JsonRecord, live: JsonRecord): void {

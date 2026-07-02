@@ -160,7 +160,7 @@ Response:
 
 ### thread/loaded/list
 
-List loaded threads in the current app-server process.
+List loaded thread IDs in the current app-server process. The `data` array contains only `string` thread IDs.
 
 Request:
 
@@ -171,7 +171,7 @@ Request:
 Response:
 
 ```json
-{"id":7,"result":{"data":[{"id":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","sessionId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"unknown","createdAt":1783017975.555,"updatedAt":1783017975.555,"recencyAt":1783017975.555,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-501Z_019f2427-2ecd-743b-bfec-f7381ee0ccd2.jsonl","cwd":"/tmp/senpi-task20-docs/cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}],"nextCursor":null}}
+{"id":7,"result":{"data":["019f2427-2ecd-743b-bfec-f7381ee0ccd2"],"nextCursor":null}}
 ```
 
 ### thread/read

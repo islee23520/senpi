@@ -1,3 +1,4 @@
+// allow: SIZE_OK - extension loading, bundled aliases, and discovery are pre-existing cohesive runtime glue; this branch only scopes the extension cache by cwd.
 /**
  * Extension loader - loads TypeScript extension modules using jiti.
  *
