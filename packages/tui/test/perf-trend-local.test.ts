@@ -1,13 +1,14 @@
 import assert from "node:assert";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const scriptPath = join(repoRoot, "scripts/perf-trend-local.sh");
+const tempDirs: string[] = [];
 
 type TrendEntry = {
 	readonly suite: string;
@@ -74,9 +75,21 @@ function parseTrend(path: string): readonly TrendEntry[] {
 		});
 }
 
+function createTrendOutputPath(prefix: string): string {
+	const dir = mkdtempSync(join(tmpdir(), prefix));
+	tempDirs.push(dir);
+	return join(dir, "perf-trend.json");
+}
+
+after(() => {
+	for (const dir of tempDirs.splice(0)) {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 describe("perf trend local mirror", () => {
 	it("writes parseable JSONL entries for the headless bench list", () => {
-		const givenOutputPath = join(mkdtempSync(join(tmpdir(), "senpi-perf-trend-")), "perf-trend.json");
+		const givenOutputPath = createTrendOutputPath("senpi-perf-trend-");
 
 		const whenResult = runTrend({ PERF_TREND_OUTPUT: givenOutputPath });
 
@@ -89,7 +102,7 @@ describe("perf trend local mirror", () => {
 	});
 
 	it("keeps advisory failure injection non-blocking", () => {
-		const givenOutputPath = join(mkdtempSync(join(tmpdir(), "senpi-perf-trend-edge-")), "perf-trend.json");
+		const givenOutputPath = createTrendOutputPath("senpi-perf-trend-edge-");
 
 		const whenResult = runTrend({ PERF_TREND_INJECT_FAIL: "1", PERF_TREND_OUTPUT: givenOutputPath });
 

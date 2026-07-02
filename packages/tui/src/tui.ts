@@ -215,7 +215,7 @@ function logRenderErrorOnce(component: Component, error: unknown): void {
 function appendRenderErrorLogBestEffort(logPath: string, msg: string): void {
 	try {
 		fs.mkdirSync(path.dirname(logPath), { recursive: true });
-		fs.appendFileSync(logPath, msg);
+		fs.appendFileSync(logPath, msg, { encoding: "utf8", mode: 0o600 });
 	} catch (error) {
 		if (error instanceof Error) {
 			return;
@@ -227,7 +227,7 @@ function appendRenderErrorLogBestEffort(logPath: string, msg: string): void {
 function writeRenderDiagnosticBestEffort(logPath: string, data: string): boolean {
 	try {
 		fs.mkdirSync(path.dirname(logPath), { recursive: true });
-		fs.writeFileSync(logPath, data);
+		fs.writeFileSync(logPath, data, { encoding: "utf8", mode: 0o600 });
 		return true;
 	} catch (error) {
 		if (error instanceof Error) {
@@ -1853,7 +1853,7 @@ export class TUI extends Container {
 			if (!debugRedraw) return;
 			const logPath = path.join(os.homedir(), ".senpi", "agent", "senpi-debug.log");
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
-			fs.appendFileSync(logPath, msg);
+			fs.appendFileSync(logPath, msg, { encoding: "utf8", mode: 0o600 });
 		};
 
 		// First render - just output everything without clearing (assumes clean screen)
@@ -2232,7 +2232,7 @@ export class TUI extends Container {
 				"=== buffer ===",
 				JSON.stringify(buffer),
 			].join("\n");
-			fs.writeFileSync(debugPath, debugData);
+			fs.writeFileSync(debugPath, debugData, { encoding: "utf8", mode: 0o600 });
 		}
 
 		// Write entire buffer at once

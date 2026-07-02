@@ -179,6 +179,6 @@ async function main(): Promise<void> {
 	console.log(JSON.stringify(result));
 }
 
-if ((process.argv[1] ?? "").endsWith("/frame-cost.ts")) {
+if (/(^|[/\\])frame-cost\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
 	await main();
 }
