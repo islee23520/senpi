@@ -108,8 +108,15 @@ export class ServerCore {
 			return { id: request.id, error: invalidParamsError() };
 		}
 
-		connection.initialize(params, this.version);
-		return { id: request.id, result: buildInitializeResponse(connection, this.codexHome) };
+		const initialized = connection.initialize(params, this.version);
+		switch (initialized.kind) {
+			case "initialized":
+				return { id: request.id, result: buildInitializeResponse(connection, this.codexHome) };
+			case "already-initialized":
+				return { id: request.id, error: alreadyInitializedError() };
+			default:
+				return assertNever(initialized);
+		}
 	}
 
 	private handleNotification(notification: RpcNotification): void {

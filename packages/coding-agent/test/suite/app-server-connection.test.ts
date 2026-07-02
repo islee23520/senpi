@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClassifiedIncoming, RpcEnvelope } from "../../src/modes/app-server/rpc/envelope.ts";
+import { createConnection } from "../../src/modes/app-server/server/connection.ts";
 import { ServerCore } from "../../src/modes/app-server/server/server-core.ts";
 
 type SentMessage = RpcEnvelope;
@@ -66,6 +67,33 @@ describe("app-server connection initialize gate", () => {
 		expect(core.getConnection(id)?.capabilities.experimentalApi).toBe(true);
 		expect(core.getConnection(id)?.optOutNotificationMethods.has("thread/started")).toBe(true);
 		expect(sent[1]).toEqual({ id: 2, error: { code: -32000, message: "Already initialized" } });
+	});
+
+	it("keeps direct connection initialization single-use and response-free", () => {
+		// Given: a fresh connection owned by ServerCore's transport layer.
+		const connection = createConnection({
+			id: "conn-direct",
+			transportKind: "stdio",
+			send: () => undefined,
+			close: () => undefined,
+		});
+
+		// When: a caller initializes it directly and then attempts to initialize it again.
+		const firstResult = connection.initialize(
+			{ clientInfo: { name: "qa", title: "QA", version: "0.0.1" }, capabilities: null },
+			"2026.7.2",
+		);
+		const initializedState = connection.initializedState;
+		const secondResult = connection.initialize(
+			{ clientInfo: { name: "other", title: null, version: "1.0.0" }, capabilities: null },
+			"0.0.0",
+		);
+
+		// Then: Connection reports only state transition status and preserves the original initialized state.
+		expect(firstResult).toEqual({ kind: "initialized" });
+		expect(secondResult).toEqual({ kind: "already-initialized" });
+		expect(connection.initializedState).toBe(initializedState);
+		expect(connection.initializedState?.clientInfo.name).toBe("qa");
 	});
 
 	it("returns invalid params when clientInfo is missing", async () => {

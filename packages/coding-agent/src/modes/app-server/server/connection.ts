@@ -15,13 +15,15 @@ export interface InitializedState {
 	readonly userAgent: string;
 }
 
+export type InitializeStateChange = { readonly kind: "initialized" } | { readonly kind: "already-initialized" };
+
 export interface Connection extends RegistryConnection {
 	readonly id: ConnectionId;
 	readonly transportKind: TransportKind;
 	readonly initializedState: InitializedState | undefined;
 	readonly capabilities: ConnectionCapabilities;
 	readonly optOutNotificationMethods: Set<string>;
-	initialize(params: InitializeParams, serverVersion: string): InitializeResponse;
+	initialize(params: InitializeParams, serverVersion: string): InitializeStateChange;
 	send(message: RpcEnvelope): Promise<void>;
 	close(reason: string): Promise<void>;
 }
@@ -77,7 +79,11 @@ export class ManagedConnection implements Connection {
 		return this.state.initialized ? this.state.capabilities : DEFAULT_CAPABILITIES;
 	}
 
-	initialize(params: InitializeParams, serverVersion: string): InitializeResponse {
+	initialize(params: InitializeParams, serverVersion: string): InitializeStateChange {
+		if (this.state.initialized) {
+			return { kind: "already-initialized" };
+		}
+
 		const capabilities = normalizeCapabilities(params.capabilities);
 		this.optOutNotificationMethods.clear();
 		for (const method of capabilities.optOutNotificationMethods ?? []) {
@@ -91,12 +97,7 @@ export class ManagedConnection implements Connection {
 			capabilities,
 			userAgent,
 		};
-		return {
-			userAgent,
-			codexHome: "",
-			platformFamily: platformFamily(),
-			platformOs: platformOs(),
-		};
+		return { kind: "initialized" };
 	}
 
 	async send(message: RpcEnvelope): Promise<void> {
