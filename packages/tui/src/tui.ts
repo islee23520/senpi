@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
+import { isMultiplexerSession, useLegacyMuxRender } from "./mux.ts";
 import type { Terminal } from "./terminal.ts";
 import {
 	isOsc11BackgroundColorResponse,
@@ -257,6 +258,10 @@ type BlockedOverlayFocusRestoreState = {
 type ActiveOverlayFocusRestoreState = EligibleOverlayFocusRestoreState | BlockedOverlayFocusRestoreState;
 type OverlayFocusRestoreState = { status: "inactive" } | ActiveOverlayFocusRestoreState;
 type OverlayFocusRestorePolicy = "clear" | "preserve";
+type TuiConstructorOptions = {
+	showHardwareCursor?: boolean;
+	muxDetector?: () => boolean;
+};
 
 /**
  * Container - a component that contains other components
@@ -347,6 +352,7 @@ export class TUI extends Container {
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
+	private muxViewportRepaintCount = 0;
 	private stopped = false;
 	private pendingOsc11BackgroundReplies = 0;
 	private pendingOsc11BackgroundQueries: PendingOsc11BackgroundQuery[] = [];
@@ -358,17 +364,25 @@ export class TUI extends Container {
 	private focusOrderCounter = 0;
 	private overlayStack: OverlayStackEntry[] = [];
 	private overlayFocusRestore: OverlayFocusRestoreState = { status: "inactive" };
+	#muxDetector: () => boolean;
 
-	constructor(terminal: Terminal, showHardwareCursor?: boolean) {
+	constructor(terminal: Terminal, options?: boolean | TuiConstructorOptions) {
 		super();
 		this.terminal = terminal;
-		if (showHardwareCursor !== undefined) {
-			this.showHardwareCursor = showHardwareCursor;
+		// Preserve existing positional boolean callers while allowing explicit render-policy overrides.
+		const normalizedOptions = typeof options === "boolean" ? { showHardwareCursor: options } : (options ?? {});
+		this.#muxDetector = normalizedOptions.muxDetector ?? isMultiplexerSession;
+		if (normalizedOptions.showHardwareCursor !== undefined) {
+			this.showHardwareCursor = normalizedOptions.showHardwareCursor;
 		}
 	}
 
 	get fullRedraws(): number {
 		return this.fullRedrawCount;
+	}
+
+	get muxViewportRepaints(): number {
+		return this.muxViewportRepaintCount;
 	}
 
 	getShowHardwareCursor(): boolean {
@@ -1269,6 +1283,10 @@ export class TUI extends Container {
 		return Array.from({ length: height }, (_, row) => lines[viewportTop + row] ?? "");
 	}
 
+	private shouldPreserveMuxScrollback(): boolean {
+		return this.#muxDetector() && !useLegacyMuxRender();
+	}
+
 	private createViewportInsertScrollPlan(
 		newLines: string[],
 		prevViewportTop: number,
@@ -1363,7 +1381,9 @@ export class TUI extends Container {
 	): void {
 		let buffer = TUI.FRAME_BEGIN;
 		buffer += this.deleteKittyImages(this.previousKittyImageIds);
-		buffer += "\x1b[3J";
+		if (!this.shouldPreserveMuxScrollback()) {
+			buffer += "\x1b[3J";
+		}
 
 		const currentScreenRow = Math.max(0, Math.min(height - 1, hardwareCursorRow - prevViewportTop));
 		if (currentScreenRow > 0) {
@@ -1389,6 +1409,47 @@ export class TUI extends Container {
 		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 		this.previousWidth = width;
 		this.previousHeight = height;
+	}
+
+	private renderMuxViewportRepaint(
+		newLines: string[],
+		cursorPos: { row: number; col: number } | null,
+		width: number,
+		height: number,
+		viewportTop = Math.max(0, newLines.length - height),
+	): boolean {
+		const previousVisible = this.getViewportRows(this.previousLines, this.previousViewportTop, height);
+		const nextVisible = this.getViewportRows(newLines, viewportTop, height);
+		if (previousVisible.some(isImageLine) || nextVisible.some(isImageLine)) {
+			return false;
+		}
+
+		let buffer = TUI.FRAME_BEGIN;
+		const currentScreenRow = Math.max(0, Math.min(height - 1, this.hardwareCursorRow - this.previousViewportTop));
+		if (currentScreenRow > 0) {
+			buffer += `\x1b[${currentScreenRow}A`;
+		}
+
+		for (let row = 0; row < height; row++) {
+			if (row > 0) buffer += "\r\n";
+			buffer += `\r\x1b[2K${TUI.SEGMENT_RESET}`;
+			buffer += newLines[viewportTop + row] ?? "";
+		}
+
+		buffer += TUI.FRAME_END;
+		this.terminal.write(buffer);
+
+		this.muxViewportRepaintCount += 1;
+		this.cursorRow = Math.max(0, newLines.length - 1);
+		this.hardwareCursorRow = viewportTop + Math.max(0, height - 1);
+		this.maxLinesRendered = newLines.length;
+		this.previousViewportTop = viewportTop;
+		this.positionHardwareCursor(cursorPos, newLines.length);
+		this.previousLines = newLines;
+		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+		this.previousWidth = width;
+		this.previousHeight = height;
+		return true;
 	}
 
 	/** Splice overlay content into a base line at a specific column. Single-pass optimized. */
@@ -1498,14 +1559,18 @@ export class TUI extends Container {
 		const cursorPos = this.extractCursorPosition(newLines, height);
 
 		newLines = this.applyLineResets(newLines);
+		const preserveMuxScrollback = this.shouldPreserveMuxScrollback();
 
 		// Helper to clear scrollback and viewport and render all new lines
-		const fullRender = (clear: boolean): void => {
+		const fullRender = (clear: boolean, clearScrollback = clear): void => {
 			this.fullRedrawCount += 1;
 			let buffer = TUI.FRAME_BEGIN;
 			if (clear) {
 				buffer += this.deleteKittyImages(this.previousKittyImageIds);
-				buffer += "\x1b[2J\x1b[H\x1b[3J"; // Clear screen, home, then clear scrollback
+				buffer += "\x1b[2J\x1b[H";
+				if (clearScrollback && !preserveMuxScrollback) {
+					buffer += "\x1b[3J";
+				}
 			} else {
 				buffer += `\r\x1b[2K${TUI.SEGMENT_RESET}`;
 			}
@@ -1563,7 +1628,8 @@ export class TUI extends Container {
 		// Width changes always need a full re-render because wrapping changes.
 		if (widthChanged) {
 			logRedraw(`terminal width changed (${this.previousWidth} -> ${width})`);
-			fullRender(true);
+			// In multiplexers, re-emit the viewport without 3J so pane history survives; an older copy may remain above.
+			fullRender(true, !preserveMuxScrollback);
 			return;
 		}
 
@@ -1572,7 +1638,13 @@ export class TUI extends Container {
 		// In that environment, a full redraw causes the entire history to replay on every toggle.
 		if (heightChanged && !isTermuxSession()) {
 			logRedraw(`terminal height changed (${this.previousHeight} -> ${height})`);
-			fullRender(true);
+			if (preserveMuxScrollback) {
+				if (!this.renderMuxViewportRepaint(newLines, cursorPos, width, height)) {
+					fullRender(true, false);
+				}
+			} else {
+				fullRender(true);
+			}
 			return;
 		}
 
@@ -1581,7 +1653,7 @@ export class TUI extends Container {
 		// Configurable via setClearOnShrink() or PI_CLEAR_ON_SHRINK=0 env var
 		if (this.clearOnShrink && newLines.length < this.maxLinesRendered && this.overlayStack.length === 0) {
 			logRedraw(`clearOnShrink (maxLinesRendered=${this.maxLinesRendered})`);
-			fullRender(true);
+			fullRender(true, !preserveMuxScrollback);
 			return;
 		}
 
@@ -1638,7 +1710,7 @@ export class TUI extends Container {
 				const targetRow = Math.max(0, newLines.length - 1);
 				if (targetRow < prevViewportTop) {
 					logRedraw(`deleted lines moved viewport up (${targetRow} < ${prevViewportTop})`);
-					fullRender(true);
+					fullRender(true, !preserveMuxScrollback);
 					return;
 				}
 				const lineDiff = computeLineDiff(targetRow);
@@ -1649,7 +1721,7 @@ export class TUI extends Container {
 				const extraLines = this.previousLines.length - newLines.length;
 				if (extraLines > height) {
 					logRedraw(`extraLines > height (${extraLines} > ${height})`);
-					fullRender(true);
+					fullRender(true, !preserveMuxScrollback);
 					return;
 				}
 				const clearStartOffset = newLines.length === 0 ? 0 : 1;
@@ -1704,7 +1776,14 @@ export class TUI extends Container {
 
 			if (firstVisibleChanged === -1) {
 				if (lineCountDelta !== 0) {
-					this.renderScrollbackReplay(newLines, cursorPos, width, height, prevViewportTop, hardwareCursorRow);
+					if (preserveMuxScrollback) {
+						// Above-viewport scrollback may stay stale in mux panes; only the visible viewport is repainted.
+						if (!this.renderMuxViewportRepaint(newLines, cursorPos, width, height, viewportTop)) {
+							fullRender(true, false);
+						}
+					} else {
+						this.renderScrollbackReplay(newLines, cursorPos, width, height, prevViewportTop, hardwareCursorRow);
+					}
 					return;
 				}
 
@@ -1795,7 +1874,7 @@ export class TUI extends Container {
 					logRedraw(
 						`kitty image pre-clear would scroll (${imageStartScreenRow} + ${imageReservedRows} > ${height})`,
 					);
-					fullRender(true);
+					fullRender(true, !preserveMuxScrollback);
 					return;
 				}
 
