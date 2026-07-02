@@ -6,6 +6,8 @@
 
 ### Changed
 
+- Tightened the default dynamic system prompt: merged overlapping intent-gate rules, collapsed the redundant execution-stance bullets, removed the no-op "no trigger tools" line and decorative freedom rhetoric, and de-duplicated directives already covered by Policies. Same behavioral contract at about a third fewer tokens in the shared sections, across every model preset and the fallback prompt.
+
 ### Fixed
 
 ## [2026.7.2] - 2026-07-02

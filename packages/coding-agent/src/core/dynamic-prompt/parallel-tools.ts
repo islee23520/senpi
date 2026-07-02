@@ -1,9 +1,7 @@
 export function buildParallelToolsSection(): string {
 	return `## Parallel Tool Calls
 
-When multiple tool calls are independent, fire them in the same response. Independent reads, searches, listings, and diagnostics belong in one wave, not a sequential chain.
+When tool calls are independent, fire them in one wave in the same response - reads, searches, listings, diagnostics. Bias hard toward parallel exploration when context is thin: pull in anything even loosely relevant now instead of serially later. Wasted reads cost almost nothing; acting on stale assumptions costs the whole turn.
 
-Bias hard toward parallel exploration when context is thin. If a directory, file, symbol, or pattern is even loosely relevant to the request, run \`grep\`, \`ls\`, and \`read\` in parallel before deciding what matters. Wasted reads cost almost nothing. Acting on stale assumptions costs the whole turn.
-
-Sequence calls only when the next call needs a value the previous one produced. Never use placeholders for missing parameters.`;
+Sequence calls only when one needs a value another produced. Never fill missing parameters with placeholders.`;
 }
