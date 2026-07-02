@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Disabled terminal autowrap (DECAWM) while frames are painted so rows the terminal draws wider than measured (East-Asian-ambiguous glyphs, newer emoji, decomposed jamo) clip at the last column instead of wrapping, desyncing the cursor by one row, and leaving stale ghost lines (e.g. a duplicated `Working (0s • esc to interrupt)` loader) behind.
+
 ## [2026.6.30-2] - 2026-06-30
 
 ## [0.80.3] - 2026-06-30

@@ -1,5 +1,20 @@
 # TUI delta rendering fork changes
 
+## 2026-07-02: autowrap disabled during frame writes (ghost-line fix)
+
+### What changed
+
+- In `packages/tui/src/tui.ts`, every frame write is bracketed by `TUI.FRAME_BEGIN` (`DECSET 2026` + `DECRST 7`) and `TUI.FRAME_END` (`DECSET 7` + `DECRST 2026`) instead of bare synchronized-output markers.
+- New regression: `packages/tui/test/regression-wrap-desync-ghost-line.test.ts`.
+
+### Why
+
+- Differential rendering tracks the cursor with relative moves only. When the terminal draws a row wider than `visibleWidth()` measured (East-Asian-ambiguous glyphs, emoji newer than the terminal's Unicode tables, decomposed Hangul jamo), the row physically wraps, the cursor drifts one row down, and every later single-row diff (e.g. the loader seconds tick) paints one row too low — leaving a stale, partially overwritten ghost line such as `Working (0s • esc to interrupt)` above the fresh one. With autowrap off during the frame, over-wide rows clip at the last column and the drift cannot happen. Autowrap is restored at frame end so the shell never observes the disabled state, even after a crash between frames.
+
+### Expected upstream conflict zone
+
+- MEDIUM: every `let buffer = "\x1b[?2026h"` / `buffer += "\x1b[?2026l"` site in `TUI.doRender()`, `fullRender()`, `renderViewportInsertScroll()`, and `renderScrollbackReplay()` — upstream edits to those literals will conflict with the `FRAME_BEGIN`/`FRAME_END` constants.
+
 ## 2026-05-20: Loader message animation is part of the shipped normal TUI
 
 ### What changed

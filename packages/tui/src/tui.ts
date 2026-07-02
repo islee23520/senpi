@@ -1157,6 +1157,20 @@ export class TUI extends Container {
 
 	private static readonly SEGMENT_RESET = "\x1b[0m\x1b]8;;\x07";
 
+	/**
+	 * Every frame write is bracketed by synchronized output (DECSET 2026) and
+	 * disables autowrap (DECAWM, DECRST 7) while rows are painted. Differential
+	 * rendering tracks the cursor with relative moves only, so a row the
+	 * terminal draws wider than visibleWidth() measured (East-Asian-ambiguous
+	 * glyphs, emoji newer than the terminal's Unicode tables, decomposed jamo)
+	 * would wrap, silently shift the cursor one row down, and leave stale ghost
+	 * rows behind on every following diff. With autowrap off such rows clip at
+	 * the last column instead. Autowrap is restored at frame end so the shell
+	 * never observes the disabled state.
+	 */
+	private static readonly FRAME_BEGIN = "\x1b[?2026h\x1b[?7l";
+	private static readonly FRAME_END = "\x1b[?7h\x1b[?2026l";
+
 	private applyLineResets(lines: string[]): string[] {
 		const reset = TUI.SEGMENT_RESET;
 		for (let i = 0; i < lines.length; i++) {
@@ -1296,7 +1310,7 @@ export class TUI extends Container {
 		width: number,
 		height: number,
 	): void {
-		let buffer = "\x1b[?2026h";
+		let buffer = TUI.FRAME_BEGIN;
 		const regionTop = 0;
 		const regionBottom = plan.regionBottom;
 		buffer += `\x1b[${regionTop + 1};${regionBottom + 1}r`;
@@ -1311,7 +1325,7 @@ export class TUI extends Container {
 			buffer += plan.insertedRows[index] ?? "";
 		}
 
-		buffer += "\x1b[?2026l";
+		buffer += TUI.FRAME_END;
 		this.terminal.write(buffer);
 
 		this.cursorRow = Math.max(0, newLines.length - 1);
@@ -1333,7 +1347,7 @@ export class TUI extends Container {
 		prevViewportTop: number,
 		hardwareCursorRow: number,
 	): void {
-		let buffer = "\x1b[?2026h";
+		let buffer = TUI.FRAME_BEGIN;
 		buffer += this.deleteKittyImages(this.previousKittyImageIds);
 		buffer += "\x1b[3J";
 
@@ -1349,7 +1363,7 @@ export class TUI extends Container {
 			buffer += newLines[row] ?? "";
 		}
 
-		buffer += "\x1b[?2026l";
+		buffer += TUI.FRAME_END;
 		this.terminal.write(buffer);
 
 		this.cursorRow = Math.max(0, newLines.length - 1);
@@ -1474,7 +1488,7 @@ export class TUI extends Container {
 		// Helper to clear scrollback and viewport and render all new lines
 		const fullRender = (clear: boolean): void => {
 			this.fullRedrawCount += 1;
-			let buffer = "\x1b[?2026h"; // Begin synchronized output
+			let buffer = TUI.FRAME_BEGIN;
 			if (clear) {
 				buffer += this.deleteKittyImages(this.previousKittyImageIds);
 				buffer += "\x1b[2J\x1b[H\x1b[3J"; // Clear screen, home, then clear scrollback
@@ -1498,7 +1512,7 @@ export class TUI extends Container {
 				}
 				buffer += line;
 			}
-			buffer += "\x1b[?2026l"; // End synchronized output
+			buffer += TUI.FRAME_END;
 			this.terminal.write(buffer);
 			this.cursorRow = Math.max(0, newLines.length - 1);
 			this.hardwareCursorRow = this.cursorRow;
@@ -1604,7 +1618,7 @@ export class TUI extends Container {
 		// All changes are in deleted lines (nothing to render, just clear)
 		if (firstChanged >= newLines.length) {
 			if (this.previousLines.length > newLines.length) {
-				let buffer = "\x1b[?2026h";
+				let buffer = TUI.FRAME_BEGIN;
 				buffer += this.deleteChangedKittyImages(firstChanged, lastChanged);
 				// Move to end of new content (clamp to 0 for empty content)
 				const targetRow = Math.max(0, newLines.length - 1);
@@ -1636,7 +1650,7 @@ export class TUI extends Container {
 				if (moveBack > 0) {
 					buffer += `\x1b[${moveBack}A`;
 				}
-				buffer += "\x1b[?2026l";
+				buffer += TUI.FRAME_END;
 				this.terminal.write(buffer);
 				this.cursorRow = targetRow;
 				this.hardwareCursorRow = targetRow;
@@ -1691,7 +1705,7 @@ export class TUI extends Container {
 
 			if (viewportTop !== prevViewportTop) {
 				const previousViewportBottom = Math.min(this.previousLines.length - 1, prevViewportTop + height - 1);
-				let buffer = "\x1b[?2026h";
+				let buffer = TUI.FRAME_BEGIN;
 				buffer += this.deleteChangedKittyImages(prevViewportTop, previousViewportBottom);
 
 				const currentScreenRow = Math.max(0, Math.min(height - 1, hardwareCursorRow - prevViewportTop));
@@ -1705,7 +1719,7 @@ export class TUI extends Container {
 					buffer += newLines[viewportTop + row] ?? "";
 				}
 
-				buffer += "\x1b[?2026l";
+				buffer += TUI.FRAME_END;
 				this.terminal.write(buffer);
 
 				this.cursorRow = Math.max(0, newLines.length - 1);
@@ -1726,7 +1740,7 @@ export class TUI extends Container {
 
 		// Render from first changed line to end
 		// Build buffer with all updates wrapped in synchronized output
-		let buffer = "\x1b[?2026h"; // Begin synchronized output
+		let buffer = TUI.FRAME_BEGIN;
 		buffer += this.deleteChangedKittyImages(firstChanged, lastChanged);
 		const prevViewportBottom = prevViewportTop + height - 1;
 		const moveTargetRow = appendStart ? firstChanged - 1 : firstChanged;
@@ -1833,7 +1847,7 @@ export class TUI extends Container {
 			buffer += `\x1b[${extraLines}A`;
 		}
 
-		buffer += "\x1b[?2026l"; // End synchronized output
+		buffer += TUI.FRAME_END;
 
 		if (process.env.PI_TUI_DEBUG === "1") {
 			const debugDir = "/tmp/tui";
