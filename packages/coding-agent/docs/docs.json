@@ -99,6 +99,10 @@
           "path": "rpc.md"
         },
         {
+          "title": "App Server Mode",
+          "path": "app-server.md"
+        },
+        {
           "title": "JSON Event Stream Mode",
           "path": "json.md"
         },

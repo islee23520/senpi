@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added `senpi app-server` mode for Codex-compatible app-server integrations.
+
 ### Changed
 
 - Tightened the default dynamic system prompt: merged overlapping intent-gate rules, collapsed the redundant execution-stance bullets, removed the no-op "no trigger tools" line and decorative freedom rhetoric, and de-duplicated directives already covered by Policies. Same behavioral contract at about a third fewer tokens in the shared sections, across every model preset and the fallback prompt.
@@ -11,6 +13,10 @@
 - Rewrote the GPT-5.5 system prompt preset as a full outcome-first core (per the GPT-5.5 prompting guide) via a new `corePrompt` override on the dynamic prompt builder; behavior contracts (routing line, todo discipline, verification tiers, hard limits, file-operations routing) are preserved at roughly half the static prompt tokens. Other model presets are unchanged.
 
 ### Fixed
+
+### Removed
+
+- Removed the never-functional `pi-codex-app-server` extension and flags.
 
 ## [2026.7.2] - 2026-07-02
 
