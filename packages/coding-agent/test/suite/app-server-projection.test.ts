@@ -226,4 +226,50 @@ describe("app-server AgentEvent projector", () => {
 		]);
 		expect(turns[0]?.items).toEqual([commandCompleted]);
 	});
+
+	it("caps oversized bash output deltas and completed items on a UTF-8 boundary", () => {
+		// Given: bash streams output whose next character would cross the 256 KiB projection cap.
+		const cappedDelta = "d".repeat(256 * 1024 - 1),
+			cappedCompletedOutput = "c".repeat(256 * 1024 - 1);
+		const oversizedDelta = `${cappedDelta}한suffix`;
+		const oversizedCompletedOutput = `${cappedCompletedOutput}한suffix`;
+		const events: AgentSessionEvent[] = [
+			{
+				type: "tool_execution_start",
+				toolCallId: "tool-1",
+				toolName: "bash",
+				args: { command: "printf ok" },
+			},
+			{
+				type: "tool_execution_update",
+				toolCallId: "tool-1",
+				toolName: "bash",
+				args: { command: "printf ok" },
+				partialResult: { content: [{ type: "text", text: oversizedDelta }] },
+			},
+			{
+				type: "tool_execution_end",
+				toolCallId: "tool-1",
+				toolName: "bash",
+				result: { content: [{ type: "text", text: oversizedCompletedOutput }], details: { exitCode: 0 } },
+				isError: false,
+			},
+		];
+
+		// When: the events are projected.
+		const { outputs, turns } = collect(events);
+
+		// Then: both the stream delta and completed turn item stop before the multibyte character.
+		const commandCompleted = commandItem("completed", cappedCompletedOutput, 0);
+		expect(new TextEncoder().encode(cappedDelta).byteLength).toBe(256 * 1024 - 1);
+		expect(new TextEncoder().encode(cappedCompletedOutput).byteLength).toBe(256 * 1024 - 1);
+		expect(outputs).toEqual([
+			{
+				method: "item/commandExecution/outputDelta",
+				params: { ...itemScope, itemId: "tool-1", delta: cappedDelta },
+			},
+			completed(commandCompleted),
+		]);
+		expect(turns[0]?.items).toEqual([commandCompleted]);
+	});
 });
