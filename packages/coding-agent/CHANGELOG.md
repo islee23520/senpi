@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added `senpi app-server` mode for Codex-compatible app-server integrations.
+- Added `senpi app-server` mode for Codex-compatible app-server integrations, including stdio, websocket, and websocket-over-UDS transports, multi-session serving, wire approval requests, daemon subcommands, and protocol documentation.
 
 ### Changed
 
@@ -16,7 +16,7 @@
 
 ### Removed
 
-- Removed the never-functional `pi-codex-app-server` extension and flags.
+- Removed the never-functional `pi-codex-app-server` extension and flags; earlier Unreleased entries described unwired scaffolding rather than a usable integration surface.
 
 ## [2026.7.2] - 2026-07-02
 

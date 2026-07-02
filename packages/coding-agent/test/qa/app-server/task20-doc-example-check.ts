@@ -1,143 +1,164 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import {
+	type Exchange,
+	parseRecord,
+	type RpcRequest,
+	requiredMethods,
+	stringAt,
+	validateDocs,
+	withNumberId,
+} from "./task20-doc-example-lib.ts";
 
-type JsonRecord = Readonly<Record<string, unknown>>;
+class LineReader {
+	private buffer = "";
+	private stderr = "";
+	private readonly lines: string[] = [];
+	private readonly waiters: Array<(line: string) => void> = [];
 
-const request = {
-	id: 1,
-	method: "initialize",
-	params: {
-		clientInfo: { name: "task20-docs", title: "Task 20 Docs", version: "0.0.1" },
-		capabilities: { experimentalApi: false, requestAttestation: false },
-	},
-};
+	constructor(childProcess: ChildProcessWithoutNullStreams) {
+		childProcess.stdout.setEncoding("utf8");
+		childProcess.stderr.setEncoding("utf8");
+		childProcess.stdout.on("data", (chunk: string) => this.pushStdout(chunk));
+		childProcess.stderr.on("data", (chunk: string) => {
+			this.stderr += chunk;
+		});
+	}
+
+	nextLine(timeoutMs: number): Promise<string> {
+		const line = this.lines.shift();
+		if (line !== undefined) return Promise.resolve(line);
+		return new Promise((resolveLine, rejectLine) => {
+			const timeout = setTimeout(
+				() => rejectLine(new Error(`stdout line not observed within ${timeoutMs}ms`)),
+				timeoutMs,
+			);
+			this.waiters.push((value) => {
+				clearTimeout(timeout);
+				resolveLine(value);
+			});
+		});
+	}
+
+	stderrText(): string {
+		return this.stderr;
+	}
+
+	private pushStdout(chunk: string): void {
+		this.buffer += chunk;
+		for (;;) {
+			const newline = this.buffer.indexOf("\n");
+			if (newline === -1) return;
+			const line = this.buffer.slice(0, newline);
+			this.buffer = this.buffer.slice(newline + 1);
+			const waiter = this.waiters.shift();
+			if (waiter) {
+				waiter(line);
+			} else {
+				this.lines.push(line);
+			}
+		}
+	}
+}
 
 const codingAgentDir = process.cwd();
 const repoRoot = resolve(codingAgentDir, "../..");
 const evidencePath = join(repoRoot, ".omo/evidence/task-20-live-examples.txt");
 
+const scratchRoot = await mkdtemp(join(tmpdir(), "senpi-task20-docs-"));
 const child = spawn("npx", ["tsx", "src/cli.ts", "app-server"], {
 	cwd: codingAgentDir,
 	env: {
 		...process.env,
 		PI_OFFLINE: "1",
-		SENPI_CODING_AGENT_DIR: join(repoRoot, ".omo/evidence/task-20-agent"),
-		SENPI_CODING_AGENT_SESSION_DIR: join(repoRoot, ".omo/evidence/task-20-sessions"),
+		SENPI_CODING_AGENT_DIR: join(scratchRoot, "agent"),
+		SENPI_CODING_AGENT_SESSION_DIR: join(scratchRoot, "sessions"),
 	},
 	stdio: ["pipe", "pipe", "pipe"],
 });
+const reader = new LineReader(child);
+const exchanges: Exchange[] = [];
 
 try {
-	const liveLinePromise = readFirstStdoutLine(child, 30_000);
-	child.stdin.write(`${JSON.stringify(request)}\n`);
-	const liveLine = await liveLinePromise;
-	const liveResponse = parseRecord(liveLine, "live initialize response");
-	await writeEvidence(liveLine);
+	const initialize = await send({
+		id: 1,
+		method: "initialize",
+		params: {
+			clientInfo: { name: "task20-docs", title: "Task 20 Docs", version: "0.0.1" },
+			capabilities: { experimentalApi: true, requestAttestation: false },
+		},
+	});
+	await send({ id: 2, method: "model/list", params: { includeHidden: false } });
+	await send({ id: 3, method: "remoteControl/status/read" });
+	const started = await send({ id: 4, method: "thread/start", params: { cwd: join(scratchRoot, "cwd") } });
+	const threadId = stringAt(started.response, ["result", "thread", "id"]);
+	await send({ id: 5, method: "thread/resume", params: { threadId } });
+	await send({ id: 6, method: "thread/list", params: { limit: 1 } });
+	await send({ id: 7, method: "thread/loaded/list", params: { limit: 1 } });
+	await send({ id: 8, method: "thread/read", params: { threadId, includeTurns: false } });
+	await send({ id: 9, method: "thread/name/set", params: { threadId, name: "Docs example" } });
+	await send({ id: 10, method: "turn/interrupt", params: { threadId, turnId: "not-active" } });
+	await send({
+		id: 11,
+		method: "turn/steer",
+		params: { threadId, expectedTurnId: "not-active", input: [{ type: "text", text: "Prefer brevity." }] },
+	});
+	await send({
+		id: 12,
+		method: "turn/start",
+		params: { threadId: "missing-thread", input: [{ type: "text", text: "Say ok." }] },
+	});
+	const forked = await send({ id: 13, method: "thread/fork", params: { threadId, cwd: join(scratchRoot, "fork") } });
+	const forkId = stringAt(forked.response, ["result", "thread", "id"]);
+	await send({ id: 14, method: "thread/archive", params: { threadId } });
+	await send({ id: 15, method: "thread/delete", params: { threadId: forkId } });
+	await send({ id: 16, method: "thread/unsubscribe", params: { threadId } });
+	await send({ id: 17, method: "thread/search", params: { query: "docs" } });
 
-	child.stdin.end();
-	await waitForExit(child, 30_000);
-
-	const docs = await readFile("docs/app-server.md", "utf8");
-	const docResponse = parseRecord(extractInitializeResponseExample(docs), "documented initialize response");
-	const liveKeys = sortedKeys(resultRecord(liveResponse, "live initialize response"));
-	const docKeys = sortedKeys(resultRecord(docResponse, "documented initialize response"));
-	const keysMatch = arraysEqual(liveKeys, docKeys);
-	console.log(`LIVE_RESULT_KEYS=${liveKeys.join(",")}`);
-	console.log(`DOC_RESULT_KEYS=${docKeys.join(",")}`);
-	console.log(`KEYS_MATCH=${keysMatch}`);
-	if (!keysMatch) {
-		throw new Error("initialize response key sets differ");
+	if (!("result" in initialize.response)) {
+		throw new Error("initialize did not return a result");
 	}
+	await writeEvidence(exchanges, reader.stderrText());
+	validateDocs(await readFile("docs/app-server.md", "utf8"), exchanges);
+	console.log(`LIVE_EXCHANGE_COUNT=${exchanges.length}`);
+	console.log(`DOCUMENTED_METHODS_VALIDATED=${requiredMethods.length}`);
+	console.log("PASS_DOC_EXAMPLES_MATCH_LIVE_STATUS_AND_KEYS=true");
+	console.log(`EVIDENCE_PATH=${evidencePath}`);
 } finally {
+	child.stdin.end();
 	child.kill("SIGTERM");
 	await delay(100);
 	child.kill("SIGKILL");
+	await rm(scratchRoot, { recursive: true, force: true });
 }
 
-function readFirstStdoutLine(childProcess: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<string> {
-	return new Promise((resolveLine, rejectLine) => {
-		let buffer = "";
-		const timeout = setTimeout(() => {
-			rejectLine(new Error(`stdout line not observed within ${timeoutMs}ms`));
-		}, timeoutMs);
-		childProcess.stdout.setEncoding("utf8");
-		childProcess.stderr.setEncoding("utf8");
-		childProcess.stdout.on("data", (chunk: string) => {
-			buffer += chunk;
-			const newline = buffer.indexOf("\n");
-			if (newline === -1) {
-				return;
-			}
-			clearTimeout(timeout);
-			resolveLine(buffer.slice(0, newline));
-		});
-		childProcess.once("exit", (code: number | null) => {
-			clearTimeout(timeout);
-			rejectLine(new Error(`app-server exited before initialize response: ${String(code)}`));
-		});
-	});
+async function send(request: RpcRequest): Promise<Exchange> {
+	child.stdin.write(`${JSON.stringify(request)}\n`);
+	for (;;) {
+		const line = await reader.nextLine(30_000);
+		const message = parseRecord(line, "app-server stdout line");
+		if (message.id === request.id) {
+			const response = withNumberId(message, `response for ${request.method}`);
+			const exchange = { method: request.method, request, response };
+			exchanges.push(exchange);
+			return exchange;
+		}
+	}
 }
 
-function waitForExit(childProcess: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<void> {
-	return new Promise((resolveExit, rejectExit) => {
-		const timeout = setTimeout(() => {
-			rejectExit(new Error(`app-server exit not observed within ${timeoutMs}ms`));
-		}, timeoutMs);
-		childProcess.once("exit", () => {
-			clearTimeout(timeout);
-			resolveExit();
-		});
-	});
-}
-
-async function writeEvidence(liveLine: string): Promise<void> {
+async function writeEvidence(liveExchanges: readonly Exchange[], stderr: string): Promise<void> {
 	await mkdir(resolve(evidencePath, ".."), { recursive: true });
-	await writeFile(evidencePath, `${JSON.stringify(request)}\n${liveLine}\n`);
-}
-
-function extractInitializeResponseExample(markdown: string): string {
-	const heading = markdown.search(/^#{2,6} .*initialize\b/im);
-	if (heading === -1) {
-		throw new Error("initialize heading not found in docs/app-server.md");
-	}
-	const afterHeading = markdown.slice(heading);
-	const block = afterHeading.match(/```json\s*([\s\S]*?)```/);
-	if (!block) {
-		throw new Error("initialize JSON example block not found in docs/app-server.md");
-	}
-	const [, json] = block;
-	if (json === undefined) {
-		throw new Error("initialize JSON example block was empty");
-	}
-	return json.trim();
-}
-
-function parseRecord(text: string, label: string): JsonRecord {
-	const parsed: unknown = JSON.parse(text);
-	if (!isRecord(parsed)) {
-		throw new Error(`${label} is not a JSON object`);
-	}
-	return parsed;
-}
-
-function resultRecord(response: JsonRecord, label: string): JsonRecord {
-	const result = response.result;
-	if (!isRecord(result)) {
-		throw new Error(`${label} result is not a JSON object`);
-	}
-	return result;
-}
-
-function sortedKeys(record: JsonRecord): readonly string[] {
-	return Object.keys(record).sort();
-}
-
-function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
-	return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	const lines = [
+		"# task20-doc-example-check fresh app-server transcript",
+		`cwd=${codingAgentDir}`,
+		`exchangeCount=${liveExchanges.length}`,
+		...liveExchanges.flatMap((exchange) => [JSON.stringify(exchange.request), JSON.stringify(exchange.response)]),
+		"# stderr",
+		stderr.trim(),
+		"",
+	];
+	await writeFile(evidencePath, lines.join("\n"));
 }

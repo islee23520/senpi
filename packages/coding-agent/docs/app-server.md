@@ -54,16 +54,18 @@ For `ws://`, each websocket text frame is one JSON object. Binary frames are ign
 
 ### initialize
 
-Initialize the connection and declare client capabilities. This live response was captured from a fresh stdio run during the docs update:
-
-```json
-{"id":1,"result":{"userAgent":"task20-docs/2026.7.2 (Darwin 25.4.0; arm64) senpi_app_server","codexHome":"/tmp/senpi-task20-doc-agent","platformFamily":"unix","platformOs":"macos"}}
-```
+Initialize the connection and declare client capabilities. The response shape below is backed by the fresh stdio run captured by `test/qa/app-server/task20-doc-example-check.ts`.
 
 Request:
 
 ```json
-{"id":1,"method":"initialize","params":{"clientInfo":{"name":"task20-docs","title":"Task 20 Docs","version":"0.0.1"},"capabilities":{"experimentalApi":false,"requestAttestation":false}}}
+{"id":1,"method":"initialize","params":{"clientInfo":{"name":"task20-docs","title":"Task 20 Docs","version":"0.0.1"},"capabilities":{"experimentalApi":true,"requestAttestation":false}}}
+```
+
+Response:
+
+```json
+{"id":1,"result":{"userAgent":"task20-docs/2026.7.2 (Darwin 25.4.0; arm64) senpi_app_server","codexHome":"/tmp/senpi-task20-docs/agent","platformFamily":"unix","platformOs":"macos"}}
 ```
 
 `capabilities.experimentalApi` gates experimental methods and notifications. `capabilities.optOutNotificationMethods` may list notification method names the client does not want to receive.
@@ -113,20 +115,16 @@ Start a new app-server thread and subscribe the initializing connection to that 
 Request:
 
 ```json
-{"id":2,"method":"thread/start","params":{"cwd":"/tmp/senpi-task20-thread-cwd"}}
-```
-
-The server may emit a notification before the correlated response:
-
-```json
-{"method":"thread/started","params":{"thread":{"id":"019f2406-934e-7ab5-8dbb-f6a16914e785","sessionId":"019f2406-934e-7ab5-8dbb-f6a16914e785","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783015838.585,"updatedAt":1783015838.585,"recencyAt":1783015838.585,"status":{"type":"idle"},"path":"/tmp/senpi-task20-thread-sessions/2026-07-02T18-10-38-542Z_019f2406-934e-7ab5-8dbb-f6a16914e785.jsonl","cwd":"/tmp/senpi-task20-thread-cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}}}
+{"id":4,"method":"thread/start","params":{"cwd":"/tmp/senpi-task20-docs/cwd"}}
 ```
 
 Response:
 
 ```json
-{"id":2,"result":{"thread":{"id":"019f2406-934e-7ab5-8dbb-f6a16914e785","sessionId":"019f2406-934e-7ab5-8dbb-f6a16914e785","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783015838.585,"updatedAt":1783015838.585,"recencyAt":1783015838.585,"status":{"type":"idle"},"path":"/tmp/senpi-task20-thread-sessions/2026-07-02T18-10-38-542Z_019f2406-934e-7ab5-8dbb-f6a16914e785.jsonl","cwd":"/tmp/senpi-task20-thread-cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]},"model":"claude-opus-4-8","modelProvider":"anthropic","serviceTier":null,"cwd":"/tmp/senpi-task20-thread-cwd","runtimeWorkspaceRoots":["/tmp/senpi-task20-thread-cwd"],"instructionSources":[],"approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"dangerFullAccess"},"activePermissionProfile":null,"reasoningEffort":"medium","multiAgentMode":"explicitRequestOnly"}}
+{"id":4,"result":{"thread":{"id":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","sessionId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783017975.555,"updatedAt":1783017975.555,"recencyAt":1783017975.555,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-501Z_019f2427-2ecd-743b-bfec-f7381ee0ccd2.jsonl","cwd":"/tmp/senpi-task20-docs/cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]},"model":"claude-opus-4-8","modelProvider":"anthropic","serviceTier":null,"cwd":"/tmp/senpi-task20-docs/cwd","runtimeWorkspaceRoots":["/tmp/senpi-task20-docs/cwd"],"instructionSources":[],"approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"dangerFullAccess"},"activePermissionProfile":null,"reasoningEffort":"medium","multiAgentMode":"explicitRequestOnly"}}
 ```
+
+The server may emit a `thread/started` notification before the correlated response.
 
 ### thread/resume
 
@@ -135,13 +133,29 @@ Load an existing saved thread and subscribe the connection to it.
 Request:
 
 ```json
-{"id":4,"method":"thread/resume","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785"}}
+{"id":5,"method":"thread/resume","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2"}}
 ```
 
 Response:
 
 ```json
-{"id":4,"result":{"thread":{"id":"019f2406-934e-7ab5-8dbb-f6a16914e785","sessionId":"019f2406-934e-7ab5-8dbb-f6a16914e785","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783015838.585,"updatedAt":1783015838.585,"recencyAt":1783015838.585,"status":{"type":"idle"},"path":"/tmp/senpi-task20-thread-sessions/2026-07-02T18-10-38-542Z_019f2406-934e-7ab5-8dbb-f6a16914e785.jsonl","cwd":"/tmp/senpi-task20-thread-cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]},"model":"claude-opus-4-8","modelProvider":"anthropic","serviceTier":null,"cwd":"/tmp/senpi-task20-thread-cwd","runtimeWorkspaceRoots":["/tmp/senpi-task20-thread-cwd"],"instructionSources":[],"approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"dangerFullAccess"},"activePermissionProfile":null,"reasoningEffort":"medium","multiAgentMode":"explicitRequestOnly","initialTurnsPage":null}}
+{"id":5,"result":{"thread":{"id":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","sessionId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783017975.555,"updatedAt":1783017975.555,"recencyAt":1783017975.555,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-501Z_019f2427-2ecd-743b-bfec-f7381ee0ccd2.jsonl","cwd":"/tmp/senpi-task20-docs/cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]},"model":"claude-opus-4-8","modelProvider":"anthropic","serviceTier":null,"cwd":"/tmp/senpi-task20-docs/cwd","runtimeWorkspaceRoots":["/tmp/senpi-task20-docs/cwd"],"instructionSources":[],"approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"dangerFullAccess"},"activePermissionProfile":null,"reasoningEffort":"medium","multiAgentMode":"explicitRequestOnly","initialTurnsPage":null}}
+```
+
+### thread/list
+
+List saved and loaded threads. The response includes `backwardsCursor` for Codex compatibility.
+
+Request:
+
+```json
+{"id":6,"method":"thread/list","params":{"limit":1}}
+```
+
+Response:
+
+```json
+{"id":6,"result":{"data":[{"id":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","sessionId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"unknown","createdAt":1783017975.555,"updatedAt":1783017975.555,"recencyAt":1783017975.555,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-501Z_019f2427-2ecd-743b-bfec-f7381ee0ccd2.jsonl","cwd":"/tmp/senpi-task20-docs/cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}],"nextCursor":null,"backwardsCursor":null}}
 ```
 
 ### thread/loaded/list
@@ -151,13 +165,13 @@ List loaded threads in the current app-server process.
 Request:
 
 ```json
-{"id":5,"method":"thread/loaded/list","params":{"limit":1}}
+{"id":7,"method":"thread/loaded/list","params":{"limit":1}}
 ```
 
 Response:
 
 ```json
-{"id":5,"result":{"data":[{"id":"019f2406-934e-7ab5-8dbb-f6a16914e785","sessionId":"019f2406-934e-7ab5-8dbb-f6a16914e785","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"unknown","createdAt":1783015838.585,"updatedAt":1783015838.585,"recencyAt":1783015838.585,"status":{"type":"idle"},"path":"/tmp/senpi-task20-thread-sessions/2026-07-02T18-10-38-542Z_019f2406-934e-7ab5-8dbb-f6a16914e785.jsonl","cwd":"/tmp/senpi-task20-thread-cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}],"nextCursor":null}}
+{"id":7,"result":{"data":[{"id":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","sessionId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"unknown","createdAt":1783017975.555,"updatedAt":1783017975.555,"recencyAt":1783017975.555,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-501Z_019f2427-2ecd-743b-bfec-f7381ee0ccd2.jsonl","cwd":"/tmp/senpi-task20-docs/cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}],"nextCursor":null}}
 ```
 
 ### thread/read
@@ -167,13 +181,13 @@ Read one thread. Pass `includeTurns: true` to include turn records.
 Request:
 
 ```json
-{"id":6,"method":"thread/read","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785","includeTurns":false}}
+{"id":8,"method":"thread/read","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","includeTurns":false}}
 ```
 
 Response:
 
 ```json
-{"id":6,"result":{"thread":{"id":"019f2406-934e-7ab5-8dbb-f6a16914e785","sessionId":"019f2406-934e-7ab5-8dbb-f6a16914e785","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783015838.585,"updatedAt":1783015838.585,"recencyAt":1783015838.585,"status":{"type":"idle"},"path":"/tmp/senpi-task20-thread-sessions/2026-07-02T18-10-38-542Z_019f2406-934e-7ab5-8dbb-f6a16914e785.jsonl","cwd":"/tmp/senpi-task20-thread-cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}}}
+{"id":8,"result":{"thread":{"id":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","sessionId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","forkedFromId":null,"parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783017975.555,"updatedAt":1783017975.555,"recencyAt":1783017975.555,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-501Z_019f2427-2ecd-743b-bfec-f7381ee0ccd2.jsonl","cwd":"/tmp/senpi-task20-docs/cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]}}}
 ```
 
 ### thread/name/set
@@ -183,13 +197,13 @@ Set the display name for a thread.
 Request:
 
 ```json
-{"id":7,"method":"thread/name/set","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785","name":"Docs example"}}
+{"id":9,"method":"thread/name/set","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","name":"Docs example"}}
 ```
 
 Response:
 
 ```json
-{"id":7,"result":{}}
+{"id":9,"result":{}}
 ```
 
 ### thread/fork
@@ -199,13 +213,13 @@ Fork a thread into a new session-backed thread.
 Request:
 
 ```json
-{"id":8,"method":"thread/fork","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785","cwd":"/tmp/senpi-task20-thread-cwd"}}
+{"id":13,"method":"thread/fork","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","cwd":"/tmp/senpi-task20-docs/fork"}}
 ```
 
 Response:
 
 ```json
-{"id":8,"result":{"thread":{"id":"019f2406-ffff-7ab5-8dbb-f6a16914e785","sessionId":"019f2406-ffff-7ab5-8dbb-f6a16914e785","forkedFromId":"019f2406-934e-7ab5-8dbb-f6a16914e785","parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783015839.000,"updatedAt":1783015839.000,"recencyAt":1783015839.000,"status":{"type":"idle"},"path":"/tmp/senpi-task20-thread-sessions/fork.jsonl","cwd":"/tmp/senpi-task20-thread-cwd","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]},"model":"claude-opus-4-8","modelProvider":"anthropic","serviceTier":null,"cwd":"/tmp/senpi-task20-thread-cwd","runtimeWorkspaceRoots":["/tmp/senpi-task20-thread-cwd"],"instructionSources":[],"approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"dangerFullAccess"},"activePermissionProfile":null,"reasoningEffort":"medium","multiAgentMode":"explicitRequestOnly"}}
+{"id":13,"result":{"thread":{"id":"019f2427-2f05-7415-818f-5946d46873fe","sessionId":"019f2427-2f05-7415-818f-5946d46873fe","forkedFromId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","parentThreadId":null,"preview":"","ephemeral":false,"modelProvider":"anthropic","createdAt":1783017975.583,"updatedAt":1783017975.583,"recencyAt":1783017975.583,"status":{"type":"idle"},"path":"/tmp/senpi-task20-docs/sessions/2026-07-02T18-46-15-557Z_019f2427-2f05-7415-818f-5946d46873fe.jsonl","cwd":"/tmp/senpi-task20-docs/fork","cliVersion":"2026.7.2","source":"appServer","threadSource":null,"agentNickname":null,"agentRole":null,"gitInfo":null,"name":null,"turns":[]},"model":"claude-opus-4-8","modelProvider":"anthropic","serviceTier":null,"cwd":"/tmp/senpi-task20-docs/fork","runtimeWorkspaceRoots":["/tmp/senpi-task20-docs/fork"],"instructionSources":[],"approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"dangerFullAccess"},"activePermissionProfile":null,"reasoningEffort":"medium","multiAgentMode":"explicitRequestOnly"}}
 ```
 
 ### thread/archive
@@ -215,13 +229,13 @@ Archive and unload a thread.
 Request:
 
 ```json
-{"id":9,"method":"thread/archive","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785"}}
+{"id":14,"method":"thread/archive","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2"}}
 ```
 
 Response:
 
 ```json
-{"id":9,"result":{}}
+{"id":14,"result":{}}
 ```
 
 ### thread/delete
@@ -231,61 +245,61 @@ Delete a thread.
 Request:
 
 ```json
-{"id":10,"method":"thread/delete","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785"}}
+{"id":15,"method":"thread/delete","params":{"threadId":"019f2427-2f05-7415-818f-5946d46873fe"}}
 ```
 
 Response:
 
 ```json
-{"id":10,"result":{}}
+{"id":15,"result":{}}
 ```
 
 ### thread/unsubscribe
 
-Unsubscribe the current connection from a loaded thread. When the thread is not loaded, the response status is `notLoaded`.
+Unsubscribe the current connection from a loaded thread. The live example below runs after `thread/archive`, so the thread has already unloaded and the response status is `notLoaded`.
 
 Request:
 
 ```json
-{"id":11,"method":"thread/unsubscribe","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785"}}
+{"id":16,"method":"thread/unsubscribe","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2"}}
 ```
 
 Response:
 
 ```json
-{"id":11,"result":{"status":"unsubscribed"}}
+{"id":16,"result":{"status":"notLoaded"}}
 ```
 
 ### turn/start
 
-Start an agent turn on a loaded thread. The response is emitted after the prompt is accepted; later output arrives as notifications.
+Start an agent turn on a loaded thread. A successful turn requires a loaded thread and model execution; this live no-token example documents the current error response for a missing thread.
 
 Request:
 
 ```json
-{"id":12,"method":"turn/start","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785","input":[{"type":"text","text":"Say ok."}]}}
+{"id":12,"method":"turn/start","params":{"threadId":"missing-thread","input":[{"type":"text","text":"Say ok."}]}}
 ```
 
 Response:
 
 ```json
-{"id":12,"result":{"turn":{"id":"turn-019f2406","items":[],"itemsView":[],"status":"inProgress","error":null,"startedAt":1783015840.000,"completedAt":null,"durationMs":null}}}
+{"id":12,"error":{"code":-32603,"message":"Thread not found: missing-thread"}}
 ```
 
 ### turn/steer
 
-Queue steering text for an active turn.
+Queue steering text for an active turn. The live no-token example documents the current error response when the thread has no active turn.
 
 Request:
 
 ```json
-{"id":13,"method":"turn/steer","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785","expectedTurnId":"turn-019f2406","input":[{"type":"text","text":"Prefer the shorter answer."}]}}
+{"id":11,"method":"turn/steer","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","expectedTurnId":"not-active","input":[{"type":"text","text":"Prefer brevity."}]}}
 ```
 
 Response:
 
 ```json
-{"id":13,"result":{"turnId":"turn-019f2406"}}
+{"id":11,"error":{"code":-32603,"message":"No active turn for thread 019f2427-2ecd-743b-bfec-f7381ee0ccd2"}}
 ```
 
 ### turn/interrupt
@@ -295,29 +309,29 @@ Interrupt an active turn. Interrupting a non-active or already-finished turn is 
 Request:
 
 ```json
-{"id":14,"method":"turn/interrupt","params":{"threadId":"019f2406-934e-7ab5-8dbb-f6a16914e785","turnId":"turn-019f2406"}}
+{"id":10,"method":"turn/interrupt","params":{"threadId":"019f2427-2ecd-743b-bfec-f7381ee0ccd2","turnId":"not-active"}}
 ```
 
 Response:
 
 ```json
-{"id":14,"result":{}}
+{"id":10,"result":{}}
 ```
 
-### Unsupported Methods
+### thread/search
 
-Unsupported methods return `-32601`.
+`thread/search` is part of the Codex request catalog, but senpi app-server does not implement it yet. It returns `-32601`.
 
 Request:
 
 ```json
-{"id":15,"method":"thread/search","params":{"query":"docs"}}
+{"id":17,"method":"thread/search","params":{"query":"docs"}}
 ```
 
 Response:
 
 ```json
-{"id":15,"error":{"code":-32601,"message":"Method not found: thread/search"}}
+{"id":17,"error":{"code":-32601,"message":"Method not found: thread/search"}}
 ```
 
 ## Implemented Method Inventory
