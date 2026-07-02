@@ -1,4 +1,5 @@
 import { readFile, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import WebSocket from "ws";
 import { VERSION } from "../../../config.ts";
 import type { AppServerListen } from "../index.ts";
@@ -23,19 +24,26 @@ export async function probeListen(
 	listen: AppServerListen,
 	timeoutMs: number,
 ): Promise<string | undefined> {
-	if (listen.kind !== "ws") return undefined;
+	if (listen.kind === "stdio") return undefined;
+	let token: string | undefined;
 	try {
-		return probeWebSocket(listen.url, (await readFile(paths.tokenFile, "utf8")).trim(), timeoutMs);
+		token = (await readFile(paths.tokenFile, "utf8")).trim();
 	} catch (error: unknown) {
-		if (isNodeErrorCode(error, "ENOENT")) return undefined;
-		throw error;
+		if (isNodeErrorCode(error, "ENOENT") && listen.kind === "ws") return undefined;
+		if (!isNodeErrorCode(error, "ENOENT")) throw error;
+		token = undefined;
 	}
+	const probeTarget =
+		listen.kind === "ws"
+			? listen.url
+			: `ws+unix://${listen.path ?? join(dirname(paths.tokenFile), "app-server.sock")}:/`;
+	return probeWebSocket(probeTarget, token && token.length > 0 ? token : undefined, timeoutMs);
 }
 
-export function probeWebSocket(url: string, token: string, timeoutMs: number): Promise<string | undefined> {
+export function probeWebSocket(url: string, token: string | undefined, timeoutMs: number): Promise<string | undefined> {
 	return new Promise((resolveProbe) => {
 		let settled = false;
-		const socket = new WebSocket(url, { headers: { Authorization: `Bearer ${token}` } });
+		const socket = new WebSocket(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
 		const finish = (result: string | undefined): void => {
 			if (settled) return;
 			settled = true;
