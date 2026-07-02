@@ -1,3 +1,7 @@
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { restoreStdout } from "../../src/core/output-guard.ts";
@@ -159,3 +163,66 @@ describe("app-server stdio transport", () => {
 		}
 	});
 });
+
+describe("app-server stdio mode process", () => {
+	it("responds to initialize when spawned through the real CLI entry", async () => {
+		// Given: an isolated real app-server process using stdio transport.
+		const root = await mkdtemp(join(tmpdir(), "senpi-app-server-stdio-process-"));
+		const child = spawn("npx", ["tsx", "src/cli.ts", "app-server"], {
+			cwd: process.cwd(),
+			env: {
+				...process.env,
+				SENPI_CODING_AGENT_DIR: join(root, "agent"),
+				SENPI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
+				PI_OFFLINE: "1",
+			},
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+
+		try {
+			// When: the client sends initialize over stdin.
+			const line = readStdoutLine(child, 15_000);
+			child.stdin.end(initializeFrame(1));
+
+			// Then: the process writes a parseable initialize response before the deadline.
+			const parsed: unknown = JSON.parse(await line);
+			expect(parsed).toMatchObject({ id: 1, result: { userAgent: expect.any(String) } });
+			await expect(waitForExit(child, 15_000)).resolves.toBe(0);
+		} finally {
+			child.kill("SIGKILL");
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+});
+
+function readStdoutLine(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<string> {
+	return new Promise((resolve, reject) => {
+		let buffer = "";
+		const timeout = setTimeout(() => reject(new Error(`stdout line not observed within ${timeoutMs}ms`)), timeoutMs);
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
+		child.stdout.on("data", (chunk: string) => {
+			buffer += chunk;
+			const newline = buffer.indexOf("\n");
+			if (newline === -1) {
+				return;
+			}
+			clearTimeout(timeout);
+			resolve(buffer.slice(0, newline));
+		});
+		child.once("exit", (code) => {
+			clearTimeout(timeout);
+			reject(new Error(`app-server exited before stdout response: ${String(code)}`));
+		});
+	});
+}
+
+function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<number | null> {
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => reject(new Error(`process exit not observed within ${timeoutMs}ms`)), timeoutMs);
+		child.once("exit", (code) => {
+			clearTimeout(timeout);
+			resolve(code);
+		});
+	});
+}
