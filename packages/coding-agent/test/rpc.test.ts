@@ -1,4 +1,6 @@
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,27 +9,258 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RpcClient } from "../src/modes/rpc/rpc-client.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const MOCK_PROVIDER = "anthropic";
+const MOCK_MODEL = "mock-claude-rpc";
+const MOCK_API_KEY = "sk-ant-rpc-test";
+
+const PROVIDER_ENV_KEYS = [
+	"ANTHROPIC_API_KEY",
+	"ANTHROPIC_OAUTH_TOKEN",
+	"OPENAI_API_KEY",
+	"AZURE_OPENAI_API_KEY",
+	"DEEPSEEK_API_KEY",
+	"NVIDIA_API_KEY",
+	"GEMINI_API_KEY",
+	"GOOGLE_CLOUD_API_KEY",
+	"GROQ_API_KEY",
+	"CEREBRAS_API_KEY",
+	"XAI_API_KEY",
+	"FIREWORKS_API_KEY",
+	"TOGETHER_API_KEY",
+	"OPENROUTER_API_KEY",
+	"AI_GATEWAY_API_KEY",
+	"ZAI_API_KEY",
+	"ZAI_CODING_CN_API_KEY",
+	"MISTRAL_API_KEY",
+	"MINIMAX_API_KEY",
+	"MINIMAX_CN_API_KEY",
+	"MOONSHOT_API_KEY",
+	"MOONSHOTAI_API_KEY",
+	"KIMI_API_KEY",
+	"OPENCODE_API_KEY",
+	"CLOUDFLARE_API_KEY",
+	"HF_TOKEN",
+] as const;
+
+interface FakeModelRequest {
+	readonly url: string | undefined;
+	readonly model: string | undefined;
+	readonly apiKeyHeader: string | undefined;
+	readonly text: string;
+}
+
+interface FakeModelServer {
+	readonly origin: string;
+	readonly requests: readonly FakeModelRequest[];
+	close(): Promise<void>;
+}
+
+interface TextContentBlock {
+	readonly type: "text";
+	readonly text: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isAddressInfo(value: string | AddressInfo | null): value is AddressInfo {
+	return isRecord(value) && typeof value.port === "number";
+}
+
+function isTextContentBlock(value: unknown): value is TextContentBlock {
+	return isRecord(value) && value.type === "text" && typeof value.text === "string";
+}
+
+function textFromContent(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (!Array.isArray(value)) return "";
+	return value
+		.map((part) => (isTextContentBlock(part) ? part.text : ""))
+		.filter((text) => text.length > 0)
+		.join("\n");
+}
+
+function requestText(body: unknown): string {
+	if (!isRecord(body) || !Array.isArray(body.messages)) return "";
+	return body.messages
+		.map((message) => (isRecord(message) ? textFromContent(message.content) : ""))
+		.filter((text) => text.length > 0)
+		.join("\n");
+}
+
+function responseTextFor(body: unknown): string {
+	const text = requestText(body);
+	const uniqueValue = /\bunique-\d+\b/.exec(text)?.[0];
+	if (uniqueValue) return uniqueValue;
+	if (text.includes("test123")) return "test123";
+	if (/summar/i.test(text) || /compact/i.test(text)) return "Summary: the session contains the prior turns.";
+	if (/\bok\b/i.test(text)) return "ok";
+	if (/hello/i.test(text)) return "hello";
+	return "ok";
+}
+
+function writeAnthropicSse(res: ServerResponse, text: string, model: string): void {
+	res.writeHead(200, {
+		"content-type": "text/event-stream",
+		"cache-control": "no-cache",
+		connection: "keep-alive",
+	});
+	const send = (event: string, data: Record<string, unknown>) => {
+		res.write(`event: ${event}\n`);
+		res.write(`data: ${JSON.stringify({ type: event, ...data })}\n\n`);
+	};
+	send("message_start", {
+		message: {
+			id: "msg_rpc_mock",
+			type: "message",
+			role: "assistant",
+			model,
+			content: [],
+			stop_reason: null,
+			stop_sequence: null,
+			usage: { input_tokens: 1, output_tokens: 0 },
+		},
+	});
+	send("content_block_start", { index: 0, content_block: { type: "text", text: "" } });
+	send("content_block_delta", { index: 0, delta: { type: "text_delta", text } });
+	send("content_block_stop", { index: 0 });
+	send("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 1 } });
+	send("message_stop", {});
+	res.end();
+}
+
+async function startFakeModelServer(): Promise<FakeModelServer> {
+	const requests: FakeModelRequest[] = [];
+	const server = createServer((req, res) => {
+		const chunks: Buffer[] = [];
+		req.on("data", (chunk: Buffer) => {
+			chunks.push(chunk);
+		});
+		req.on("end", () => {
+			const raw = Buffer.concat(chunks).toString("utf8");
+			const body: unknown = raw ? JSON.parse(raw) : {};
+			const model = isRecord(body) && typeof body.model === "string" ? body.model : undefined;
+			const text = requestText(body);
+			requests.push({
+				url: req.url,
+				model,
+				apiKeyHeader: typeof req.headers["x-api-key"] === "string" ? req.headers["x-api-key"] : undefined,
+				text,
+			});
+			if (req.url?.includes("/messages")) {
+				writeAnthropicSse(res, responseTextFor(body), model ?? MOCK_MODEL);
+				return;
+			}
+			res.writeHead(404, { "content-type": "application/json" });
+			res.end(JSON.stringify({ error: { message: `no route: ${req.method ?? "GET"} ${req.url ?? "/"}` } }));
+		});
+	});
+
+	return new Promise((resolve, reject) => {
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => {
+			server.off("error", reject);
+			const address = server.address();
+			if (!isAddressInfo(address)) {
+				reject(new Error("Fake model server did not bind to a TCP port"));
+				return;
+			}
+			resolve({
+				origin: `http://127.0.0.1:${address.port}`,
+				requests,
+				close: () =>
+					new Promise<void>((resolveClose, rejectClose) => {
+						server.close((error) => {
+							if (error) {
+								rejectClose(error);
+								return;
+							}
+							resolveClose();
+						});
+					}),
+			});
+		});
+	});
+}
+
+function hermeticProviderEnv(): Record<string, string> {
+	return Object.fromEntries(PROVIDER_ENV_KEYS.map((key) => [key, ""]));
+}
+
+function writeRpcModelsJson(agentDir: string, baseUrl: string): void {
+	writeFileSync(
+		join(agentDir, "models.json"),
+		`${JSON.stringify(
+			{
+				providers: {
+					[MOCK_PROVIDER]: {
+						baseUrl,
+						apiKey: MOCK_API_KEY,
+						api: "anthropic-messages",
+						models: [
+							{
+								id: MOCK_MODEL,
+								baseUrl,
+								api: "anthropic-messages",
+								reasoning: true,
+								contextWindow: 128000,
+								maxTokens: 4096,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							},
+						],
+					},
+				},
+			},
+			null,
+			2,
+		)}\n`,
+	);
+}
+
+function getAssistantText(events: readonly AgentEvent[]): string | undefined {
+	for (const event of events) {
+		if (event.type !== "message_end" || event.message.role !== "assistant") continue;
+		const textContent = event.message.content.find(isTextContentBlock);
+		if (textContent) return textContent.text;
+	}
+	return undefined;
+}
 
 /**
  * RPC mode tests.
  */
-describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_TOKEN)("RPC mode", () => {
+describe("RPC mode", () => {
 	let client: RpcClient;
 	let sessionDir: string;
+	let fakeModelServer: FakeModelServer;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		sessionDir = join(tmpdir(), `pi-rpc-test-${Date.now()}`);
+		mkdirSync(sessionDir, { recursive: true });
+		fakeModelServer = await startFakeModelServer();
+		writeRpcModelsJson(sessionDir, fakeModelServer.origin);
+		writeFileSync(
+			join(sessionDir, "settings.json"),
+			`${JSON.stringify({ compaction: { keepRecentTokens: 1 } }, null, 2)}\n`,
+		);
 		client = new RpcClient({
 			cliPath: join(__dirname, "..", "src", "cli.ts"),
 			cwd: join(__dirname, ".."),
-			env: { PI_CODING_AGENT_DIR: sessionDir },
-			provider: "anthropic",
-			model: "claude-sonnet-4-5",
+			env: {
+				...hermeticProviderEnv(),
+				ANTHROPIC_API_KEY: MOCK_API_KEY,
+				PI_OFFLINE: "1",
+				SENPI_CODING_AGENT_DIR: sessionDir,
+			},
+			provider: MOCK_PROVIDER,
+			model: MOCK_MODEL,
 		});
 	});
 
 	afterEach(async () => {
 		await client.stop();
+		await fakeModelServer.close();
 		if (sessionDir && existsSync(sessionDir)) {
 			rmSync(sessionDir, { recursive: true });
 		}
@@ -38,8 +271,8 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		const state = await client.getState();
 
 		expect(state.model).toBeDefined();
-		expect(state.model?.provider).toBe("anthropic");
-		expect(state.model?.id).toBe("claude-sonnet-4-5");
+		expect(state.model?.provider).toBe(MOCK_PROVIDER);
+		expect(state.model?.id).toBe(MOCK_MODEL);
 		expect(state.isStreaming).toBe(false);
 		expect(state.messageCount).toBe(0);
 	}, 30000);
@@ -89,8 +322,8 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 	test("should handle manual compaction", async () => {
 		await client.start();
 
-		// First send a prompt to have messages to compact
 		await client.promptAndWait("Say hello");
+		await client.promptAndWait("Say hello again");
 
 		// Compact
 		const result = await client.compact();
@@ -169,16 +402,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 			"What was the exact output of the echo command I just ran? Reply with just the value, nothing else.",
 		);
 
-		// Find assistant's response
-		const messageEndEvents = events.filter((e) => e.type === "message_end") as AgentEvent[];
-		const assistantMessage = messageEndEvents.find(
-			(e) => e.type === "message_end" && e.message?.role === "assistant",
-		) as any;
-
-		expect(assistantMessage).toBeDefined();
-
-		const textContent = assistantMessage.message.content.find((c: any) => c.type === "text");
-		expect(textContent?.text).toContain(uniqueValue);
+		expect(getAssistantText(events)).toContain(uniqueValue);
 	}, 90000);
 
 	test("should set and get thinking level", async () => {
@@ -329,6 +553,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await client.start();
 
 		await client.promptAndWait("Reply with just 'ok'");
+		await client.promptAndWait("Reply with just 'ok' again");
 		const before = await client.getEntries();
 
 		await client.compact();
