@@ -31,10 +31,6 @@ export function messageIdFromMessage(message: AssistantMessage): string | undefi
 	return message.responseId;
 }
 
-export function unfinishedTextItems(items: Map<number, ActiveTextItem>): Array<[number, ActiveTextItem]> {
-	return Array.from(items.entries()).filter((entry) => !entry[1].completed);
-}
-
 export function assertNeverProjection(value: never): never {
 	throw new Error(`Unhandled app-server projection variant: ${String(value)}`);
 }
