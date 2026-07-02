@@ -12,8 +12,10 @@ import {
 	type RouterNotification,
 } from "../../src/modes/app-server/server/notifications.ts";
 import { registerThreadLifecycleHandlers } from "../../src/modes/app-server/threads/handlers.ts";
-import { ThreadRegistry } from "../../src/modes/app-server/threads/registry.ts";
+import { ThreadRegistry, type ThreadRegistryOptions } from "../../src/modes/app-server/threads/registry.ts";
 import { TurnLog } from "../../src/modes/app-server/threads/turn-log.ts";
+
+type HarnessOptions = Pick<ThreadRegistryOptions, "createSession">;
 
 export const roots: string[] = [];
 
@@ -49,7 +51,7 @@ export async function cleanupRoots(): Promise<void> {
 	}
 }
 
-export async function createHarness(): Promise<{
+export async function createHarness(options: HarnessOptions = {}): Promise<{
 	readonly connection: FakeConnection;
 	readonly registry: MethodRegistry;
 	readonly root: string;
@@ -57,10 +59,13 @@ export async function createHarness(): Promise<{
 	readonly turnLog: TurnLog;
 }> {
 	const root = await scratchRoot();
-	return { root, ...createHarnessForRoot(root) };
+	return { root, ...createHarnessForRoot(root, options) };
 }
 
-export function createHarnessForRoot(root: string): {
+export function createHarnessForRoot(
+	root: string,
+	options: HarnessOptions = {},
+): {
 	readonly connection: FakeConnection;
 	readonly registry: MethodRegistry;
 	readonly threads: ThreadRegistry;
@@ -70,6 +75,7 @@ export function createHarnessForRoot(root: string): {
 	const threads = new ThreadRegistry({
 		agentDir: join(root, "agent"),
 		sessionDir: join(root, "sessions"),
+		createSession: options.createSession,
 	});
 	const notifications = new NotificationRouter({ connections: [connection] });
 	const registry = createRegistry();

@@ -11,6 +11,8 @@ export type ThreadListDependencies = {
 	readonly archiveState: ThreadArchiveState;
 };
 
+const DEFAULT_THREAD_LIST_LIMIT = 25;
+
 export async function listThreadsResponse(
 	requestParams: unknown,
 	dependencies: ThreadListDependencies,
@@ -18,7 +20,7 @@ export async function listThreadsResponse(
 	const params = objectValue(requestParams);
 	const page = await dependencies.threads.listThreads({
 		cursor: optionalString(params.cursor) ?? null,
-		limit: optionalNumber(params.limit) ?? undefined,
+		limit: optionalNumber(params.limit) ?? DEFAULT_THREAD_LIST_LIMIT,
 	});
 	const archived = params.archived === true;
 	const threads = archived ? await archivedListThreads(page.threads, dependencies.archiveState) : page.threads;

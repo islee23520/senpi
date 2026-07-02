@@ -1,4 +1,6 @@
+import { type Api, getModel, type Model } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { type CreateAgentSessionOptions, createAgentSession } from "../../src/core/sdk.ts";
 import { createRegistry } from "../../src/modes/app-server/rpc/registry.ts";
 import { NotificationRouter } from "../../src/modes/app-server/server/notifications.ts";
 import { registerThreadLifecycleHandlers } from "../../src/modes/app-server/threads/handlers.ts";
@@ -6,10 +8,12 @@ import { TurnLog } from "../../src/modes/app-server/threads/turn-log.ts";
 import {
 	cleanupRoots,
 	createHarness,
+	dataArray,
 	objectAt,
 	responseResult,
 	stringAt,
 	threadIdFromResponse,
+	writePersistedSession,
 } from "./app-server-thread-handlers-harness.ts";
 
 describe("app-server thread lifecycle handlers", () => {
@@ -67,6 +71,55 @@ describe("app-server thread lifecycle handlers", () => {
 		expect(typeof thread.path === "string" || thread.path === null).toBe(true);
 		const threadId = stringAt(thread, "id");
 		expect(threads.getLoadedThread(threadId).subscribers.has(connection.id)).toBe(true);
+	});
+
+	it("passes requested model to thread creation and echoes requested approval policy", async () => {
+		// Given: a requested catalog model and a handler harness observing createSession options.
+		const requestedModel: Model<Api> = getModel("openai", "gpt-5");
+		const createdModels: Array<Model<Api> | undefined> = [];
+		const { connection, registry, root } = await createHarness({
+			createSession: async (options: CreateAgentSessionOptions) => {
+				createdModels.push(options.model);
+				return createAgentSession(options);
+			},
+		});
+
+		// When: the connection starts a thread with model and approvalPolicy overrides.
+		const response = await registry.dispatch(connection, {
+			id: 21,
+			method: "thread/start",
+			params: {
+				cwd: root,
+				model: "gpt-5",
+				modelProvider: "openai",
+				approvalPolicy: "on-request",
+			},
+		});
+
+		// Then: thread creation receives the requested model and the response echoes the requested policy.
+		expect(response).not.toHaveProperty("error");
+		expect(createdModels).toEqual([requestedModel]);
+		expect(responseResult(response)).toMatchObject({
+			model: requestedModel.id,
+			modelProvider: requestedModel.provider,
+			approvalPolicy: "on-request",
+		});
+	});
+
+	it("defaults thread/list to 25 items when limit is omitted", async () => {
+		// Given: more persisted threads than the protocol default page size.
+		const { connection, registry, root } = await createHarness();
+		for (let index = 0; index < 26; index += 1) {
+			await writePersistedSession(root, `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`);
+		}
+
+		// When: thread/list is requested without an explicit limit.
+		const response = await registry.dispatch(connection, { id: 22, method: "thread/list", params: {} });
+		const result = responseResult(response);
+
+		// Then: only the default 25 items are returned and pagination continues.
+		expect(dataArray(result)).toHaveLength(25);
+		expect(result.nextCursor).not.toBeNull();
 	});
 
 	it("returns the exact unknown rollout text when resuming a missing thread", async () => {

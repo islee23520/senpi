@@ -11,6 +11,7 @@ import { ThreadArchiveState } from "./archive-state.ts";
 import { connectionId, objectValue, optionalString, removeLoadedThread, requiredString } from "./handler-params.ts";
 import { listThreadsResponse, loadedThreadsResponse } from "./list-handlers.ts";
 import { type ThreadEntry, ThreadNotFoundError, type ThreadRegistry } from "./registry.ts";
+import { requestedApprovalPolicy, requestedStartModel } from "./start-options.ts";
 import type { TurnLog } from "./turn-log.ts";
 import { buildWireThread, NOT_LOADED_STATUS } from "./wire-thread.ts";
 
@@ -23,6 +24,10 @@ export interface ThreadLifecycleHandlersOptions {
 }
 
 type RuntimeThreadResponse = ThreadStartResponse | ThreadResumeResponse | ThreadForkResponse;
+type RuntimeResponseOptions = {
+	readonly approvalPolicy?: ThreadStartResponse["approvalPolicy"];
+	readonly forkedFromId?: string | null;
+};
 
 const DEFAULT_IDLE_UNLOAD_MINUTES = 30;
 
@@ -88,10 +93,10 @@ class ThreadLifecycleHandlers {
 	private async start(connection: RegistryConnection, request: RpcRequest): Promise<ThreadStartResponse> {
 		const params = objectValue(request.params);
 		const cwd = optionalString(params.cwd) ?? process.cwd();
-		const entry = await this.threads.createThread({ cwd });
+		const entry = await this.threads.createThread({ cwd, model: requestedStartModel(params) });
 		this.attachThread(entry);
 		this.subscribe(entry, connectionId(connection));
-		const response = this.runtimeResponse(entry, false);
+		const response = this.runtimeResponse(entry, false, { approvalPolicy: requestedApprovalPolicy(params) });
 		this.notifications.broadcast({ method: "thread/started", params: { thread: response.thread } });
 		return response;
 	}
@@ -121,7 +126,7 @@ class ThreadLifecycleHandlers {
 		const entry = await this.threads.forkThread(sourceThreadId, { cwd: optionalString(params.cwd) ?? undefined });
 		this.attachThread(entry);
 		this.subscribe(entry, connectionId(connection));
-		const response = this.runtimeResponse(entry, true, sourceThreadId);
+		const response = this.runtimeResponse(entry, true, { forkedFromId: sourceThreadId });
 		this.notifications.broadcast({ method: "thread/started", params: { thread: response.thread } });
 		return response;
 	}
@@ -187,10 +192,10 @@ class ThreadLifecycleHandlers {
 	private runtimeResponse(
 		entry: ThreadEntry,
 		includeTurns: boolean,
-		forkedFromId: string | null = null,
+		options: RuntimeResponseOptions = {},
 	): RuntimeThreadResponse {
 		const model = entry.session.model;
-		const thread = buildWireThread(entry, this.turnLog, includeTurns, { forkedFromId });
+		const thread = buildWireThread(entry, this.turnLog, includeTurns, { forkedFromId: options.forkedFromId ?? null });
 		return {
 			thread,
 			model: model?.id ?? "unknown",
@@ -199,7 +204,7 @@ class ThreadLifecycleHandlers {
 			cwd: entry.cwd,
 			runtimeWorkspaceRoots: [entry.cwd],
 			instructionSources: [],
-			approvalPolicy: "never",
+			approvalPolicy: options.approvalPolicy ?? "never",
 			approvalsReviewer: "user",
 			sandbox: { type: "dangerFullAccess" },
 			activePermissionProfile: null,
