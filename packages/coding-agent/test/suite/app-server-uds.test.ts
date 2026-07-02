@@ -1,8 +1,8 @@
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { ServerCore } from "../../src/modes/app-server/server/server-core.ts";
 import {
@@ -21,6 +21,7 @@ describe("app-server unix socket websocket listener", () => {
 		for (const root of roots.splice(0)) {
 			await rm(root, { recursive: true, force: true });
 		}
+		vi.unstubAllEnvs();
 	});
 
 	it("round-trips initialize over websocket frames on a unix socket without bearer auth by default", async () => {
@@ -40,6 +41,23 @@ describe("app-server unix socket websocket listener", () => {
 		expect(handle.connectionCount).toBe(1);
 		expect(handle.core.getConnection("unix-1")?.transportKind).toBe("unix");
 		socket.close();
+	});
+
+	it("creates the default no-bearer socket directory with owner-only permissions", async () => {
+		// Given: a default UDS listener rooted in an isolated agent directory.
+		const agentDir = await agentDirFor("senpi-app-server-uds-agent-");
+		vi.stubEnv("SENPI_CODING_AGENT_DIR", agentDir);
+
+		// When: the listener starts without explicit bearer auth.
+		const handle = await startAppServerUnixSocketListener({
+			core: new ServerCore({ codexHome: "/tmp/senpi-uds-test-home", version: "2026.7.2" }),
+		});
+		handles.push(handle);
+		const socketDirectory = join(agentDir, "app-server");
+
+		// Then: filesystem auth is backed by a private socket directory.
+		expect(handle.socketPath).toBe(join(socketDirectory, "app-server.sock"));
+		expect((await stat(socketDirectory)).mode & 0o777).toBe(0o700);
 	});
 
 	it("unlinks stale socket files before binding and removes its socket file on close", async () => {
@@ -124,6 +142,12 @@ async function socketPathFor(prefix: string): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), prefix));
 	roots.push(root);
 	return join(root, "app.sock");
+}
+
+async function agentDirFor(prefix: string): Promise<string> {
+	const root = await mkdtemp(join("/tmp", prefix));
+	roots.push(root);
+	return root;
 }
 
 function initializeRequest(id: number, name: string): Record<string, unknown> {
