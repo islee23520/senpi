@@ -124,10 +124,10 @@ export async function startAppServerWebSocketListener(
 		async close() {
 			accepting = false;
 			for (const websocket of connections) {
-				websocket.close();
+				websocket.terminate();
 			}
-			await closeServer(wss);
 			await closeServer(server);
+			await closeServer(wss);
 		},
 	};
 }

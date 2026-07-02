@@ -9,6 +9,7 @@ import { ApprovalBridge, createAppServerUIContext } from "./server/approvals.ts"
 import type { Connection, ConnectionId, ConnectionInput, TransportKind } from "./server/connection.ts";
 import { type ConnectionTransport, NotificationRouter } from "./server/notifications.ts";
 import { ServerCore } from "./server/server-core.ts";
+import { decodeCursor, encodeCursor, objectValue, optionalNumber, optionalString } from "./threads/handler-params.ts";
 import { registerThreadLifecycleHandlers } from "./threads/handlers.ts";
 import { type ThreadEntry, ThreadNotFoundError, ThreadRegistry } from "./threads/registry.ts";
 import { TurnLog } from "./threads/turn-log.ts";
@@ -386,6 +387,7 @@ function createAppServerRuntime(requestShutdown: (reason: string) => void): AppS
 		notifications,
 		idleUnloadMinutes: 30,
 	});
+	registerLoadedThreadObjectListHandler(registry, threads);
 
 	return { core, threads, turnLog, turns };
 }
@@ -426,6 +428,24 @@ function registerTurnHandlers(registry: MethodRegistry, turns: TurnEngineApi): v
 	registry.register("turn/interrupt", {
 		scope: "thread",
 		handler: (context) => turns.interruptTurn(turnInterruptParams(context.request)),
+	});
+}
+
+function registerLoadedThreadObjectListHandler(registry: MethodRegistry, threads: ThreadRegistry): void {
+	registry.register("thread/loaded/list", {
+		scope: "thread",
+		handler: (context) => {
+			const params = objectValue(context.request.params);
+			const cursor = decodeCursor(optionalString(params.cursor) ?? null);
+			const limit = optionalNumber(params.limit) ?? Number.POSITIVE_INFINITY;
+			const loaded = threads.listLoaded();
+			const data = loaded.slice(cursor, cursor + limit);
+			const nextOffset = cursor + data.length;
+			return {
+				data,
+				nextCursor: nextOffset < loaded.length ? encodeCursor(nextOffset) : null,
+			};
+		},
 	});
 }
 

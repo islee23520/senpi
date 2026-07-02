@@ -59,7 +59,7 @@ describe("app-server mode entry", () => {
 			socket.send(JSON.stringify({ id: 3, method: "thread/loaded/list", params: {} }));
 			expect(await reader.readUntilResponse(3)).toMatchObject({
 				id: 3,
-				result: { data: [threadId] },
+				result: { data: [expect.objectContaining({ id: threadId })] },
 			});
 			socket.send(JSON.stringify({ id: 4, method: "thread/unsubscribe", params: { threadId } }));
 			expect(await reader.readUntilResponse(4)).toEqual({ id: 4, result: { status: "unsubscribed" } });
