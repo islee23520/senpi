@@ -1,100 +1,47 @@
-import * as crypto from "node:crypto";
-// allow: SIZE_OK - Todo 9's write scope requires the complete turn engine in this single module.
 import type {
-	JsonValue,
 	ThreadId,
-	Turn,
 	TurnInterruptParams,
 	TurnInterruptResponse,
 	TurnStartParams,
 	TurnStartResponse,
 	TurnSteerParams,
 	TurnSteerResponse,
-	UserInput,
 } from "../protocol/index.ts";
-import type { JsonRpcError } from "../rpc/errors.ts";
-import type { ActiveTurn } from "./registry.ts";
 import type { TurnLog, WireItem } from "./turn-log.ts";
+import {
+	buildTurn,
+	buildUserMessage,
+	createTurnId,
+	invalidRequest,
+	type LoggedStartStatus,
+	type PendingTurn,
+	parseInput,
+	readLoggedItems,
+	type TurnEngineApi,
+	type TurnEngineNotification,
+	type TurnEngineOptions,
+	type TurnEngineStore,
+	type TurnEngineThreadEntry,
+	type TurnWireStatus,
+	toTurnEngineError,
+	wireItemToJson,
+} from "./turn-runtime.ts";
 
-type TurnWireStatus = "inProgress" | "completed" | "failed" | "interrupted";
-type LoggedStartStatus = "running";
-
-export type TurnEngineSessionEvent = { readonly type: string; readonly [key: string]: unknown };
-
-export interface TurnEngineSession {
-	prompt(
-		text: string,
-		options?: { readonly source?: "rpc"; readonly preflightResult?: (success: boolean) => void },
-	): Promise<void>;
-	steer(text: string): Promise<void>;
-	abort(): Promise<void>;
-	subscribe(listener: (event: TurnEngineSessionEvent) => void): () => void;
-}
-
-export type TurnEngineThreadStatus = "idle" | "active";
-
-export interface TurnEngineThreadEntry {
-	readonly id: string;
-	readonly session: TurnEngineSession;
-	activeTurn: ActiveTurn | null;
-	status: TurnEngineThreadStatus;
-	updatedAt: string;
-}
-
-export interface TurnEngineStore<Entry extends TurnEngineThreadEntry = TurnEngineThreadEntry> {
-	getLoadedThread(threadId: string): Entry;
-	runThreadTask<T>(threadId: string, task: () => Promise<T> | T): Promise<T>;
-}
-
-export interface TurnEngineNotification {
-	readonly method: string;
-	readonly params?: JsonValue;
-}
-
-export interface TurnEngineOptions<Entry extends TurnEngineThreadEntry = TurnEngineThreadEntry> {
-	readonly store: TurnEngineStore<Entry>;
-	readonly turnLog: TurnLog;
-	readonly emitToThread: (threadId: string, notification: TurnEngineNotification) => void;
-	readonly broadcast: (notification: TurnEngineNotification) => void;
-}
-
-export class TurnEngineError extends Error {
-	readonly error: JsonRpcError;
-
-	constructor(error: JsonRpcError) {
-		super(error.message);
-		this.name = "TurnEngineError";
-		this.error = error;
-	}
-}
-
-type PendingTurn = {
-	readonly threadId: ThreadId;
-	readonly turnId: string;
-	readonly startedAt: string;
-	readonly startedAtMs: number;
-	readonly resolve: () => void;
-	interrupted: boolean;
-	completed: boolean;
-};
-
-type ParsedInput = {
-	readonly text: string;
-	readonly content: readonly UserInput[];
-};
+export {
+	type TurnEngineApi,
+	TurnEngineError,
+	type TurnEngineNotification,
+	type TurnEngineOptions,
+	type TurnEngineSession,
+	type TurnEngineSessionEvent,
+	type TurnEngineStore,
+	type TurnEngineThreadEntry,
+	type TurnEngineThreadStatus,
+} from "./turn-runtime.ts";
 
 export function createTurnEngine<Entry extends TurnEngineThreadEntry = TurnEngineThreadEntry>(
 	options: TurnEngineOptions<Entry>,
-): {
-	readonly startTurn: (params: TurnStartParams) => Promise<TurnStartResponse>;
-	readonly steerTurn: (params: TurnSteerParams) => Promise<TurnSteerResponse>;
-	readonly interruptTurn: (params: TurnInterruptParams) => Promise<TurnInterruptResponse>;
-	readonly completeTurn: (
-		threadId: ThreadId,
-		status?: Exclude<TurnWireStatus, "inProgress">,
-		message?: string,
-	) => void;
-} {
+): TurnEngineApi {
 	return new TurnEngine(options);
 }
 
@@ -123,7 +70,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 					const parsedInput = parseInput(params.input);
 					const entry = this.getLoadedThreadOrThrow(params.threadId);
 					this.ensureSessionSubscription(params.threadId, entry);
-					const turnId = crypto.randomUUID();
+					const turnId = createTurnId();
 					const startedAtMs = Date.now();
 					const startedAt = new Date(startedAtMs).toISOString();
 					const turn = buildTurn(turnId, "inProgress", startedAtMs, null, []);
@@ -143,31 +90,46 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 					});
 					this.emitUserMessage(params.threadId, turnId, startedAtMs, userMessage);
 
+					let pendingTurn: PendingTurn;
 					const completion = new Promise<void>((complete) => {
-						this.pendingByThreadId.set(params.threadId, {
-							threadId: params.threadId,
+						pendingTurn = {
 							turnId,
 							startedAt,
 							startedAtMs,
 							resolve: complete,
 							interrupted: false,
 							completed: false,
-						});
+						};
+						this.pendingByThreadId.set(params.threadId, pendingTurn);
 					});
-
-					didSettle = true;
-					resolve({ turn });
 
 					void entry.session
 						.prompt(parsedInput.text, {
 							source: "rpc",
 							preflightResult: (success) => {
-								if (!success) {
+								if (success) {
+									if (!didSettle) {
+										didSettle = true;
+										resolve({ turn });
+									}
+									return;
+								}
+								if (!pendingTurn.completed) {
 									this.completeTurn(params.threadId, "failed", "Prompt preflight failed");
 								}
 							},
 						})
+						.then(() => {
+							if (!didSettle) {
+								didSettle = true;
+								reject(toTurnEngineError(new Error("Prompt preflight failed")));
+							}
+						})
 						.catch((error: unknown) => {
+							if (!didSettle) {
+								didSettle = true;
+								reject(toTurnEngineError(error));
+							}
 							this.completeTurn(
 								params.threadId,
 								"failed",
@@ -178,7 +140,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 				} catch (error) {
 					if (!didSettle) {
 						didSettle = true;
-						reject(toTurnEngineError(error));
+						reject(toTurnEngineError(error instanceof Error ? error : new Error(String(error))));
 					}
 				}
 			});
@@ -206,6 +168,12 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		}
 		const parsedInput = parseInput(params.input);
 		await entry.session.steer(parsedInput.text);
+		this.emitUserMessage(
+			params.threadId,
+			activeTurn.turnId,
+			Date.now(),
+			buildUserMessage(params.clientUserMessageId ?? null, parsedInput.content),
+		);
 		return { turnId: activeTurn.turnId };
 	}
 
@@ -249,7 +217,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 			completedStatus,
 			pending.startedAtMs,
 			completedAtMs,
-			this.readLoggedItems(threadId, pending.turnId),
+			readLoggedItems(this.turnLog, threadId, pending.turnId),
 			message,
 		);
 
@@ -287,15 +255,6 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		});
 	}
 
-	private readLoggedItems(threadId: ThreadId, turnId: string): readonly JsonValue[] {
-		return (
-			this.turnLog
-				.readTurns(threadId)
-				.find((turn) => turn.turnId === turnId)
-				?.items.map((item) => wireItemToJson(item)) ?? []
-		);
-	}
-
 	private getLoadedThreadOrThrow(threadId: ThreadId): Entry {
 		try {
 			return this.store.getLoadedThread(threadId);
@@ -303,118 +262,4 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 			throw invalidRequest(`Thread not found: ${threadId}`);
 		}
 	}
-}
-
-function parseInput(input: readonly UserInput[]): ParsedInput {
-	if (input.length === 0) {
-		throw invalidParams("Invalid params: input must include at least one text item");
-	}
-
-	const content: UserInput[] = [];
-	const textParts: string[] = [];
-	for (const item of input) {
-		switch (item.type) {
-			case "text": {
-				if (item.text.trim().length === 0) {
-					throw invalidParams("Invalid params: text input must not be empty");
-				}
-				const textItem = {
-					type: "text",
-					text: item.text,
-					text_elements: item.text_elements ?? [],
-				} satisfies UserInput;
-				content.push(textItem);
-				textParts.push(item.text);
-				break;
-			}
-			case "image":
-			case "localImage":
-			case "skill":
-			case "mention":
-				throw invalidParams(`Invalid params: unsupported input item type ${item.type}`);
-			default:
-				throw invalidParams("Invalid params: unknown input item type");
-		}
-	}
-
-	if (textParts.length === 0) {
-		throw invalidParams("Invalid params: text input is required");
-	}
-	return { text: textParts.join("\n"), content };
-}
-
-function buildTurn(
-	turnId: string,
-	status: TurnWireStatus,
-	startedAtMs: number,
-	completedAtMs: number | null,
-	items: readonly JsonValue[],
-	message?: string,
-): Turn {
-	return {
-		id: turnId,
-		items,
-		itemsView: "full",
-		status,
-		error:
-			status === "failed"
-				? {
-						message: message ?? "Turn failed",
-						codexErrorInfo: "other",
-						additionalDetails: null,
-					}
-				: null,
-		startedAt: startedAtMs / 1000,
-		completedAt: completedAtMs === null ? null : completedAtMs / 1000,
-		durationMs: completedAtMs === null ? null : completedAtMs - startedAtMs,
-	};
-}
-
-function buildUserMessage(clientUserMessageId: string | null, content: readonly UserInput[]): WireItem {
-	return {
-		type: "userMessage",
-		id: clientUserMessageId ?? crypto.randomUUID(),
-		clientId: clientUserMessageId,
-		content: [...content],
-	};
-}
-
-function wireItemToJson(item: WireItem): JsonValue {
-	const jsonItem: { [key: string]: JsonValue | undefined } = {};
-	for (const [key, value] of Object.entries(item)) {
-		jsonItem[key] = unknownToJsonValue(value);
-	}
-	return jsonItem;
-}
-
-function unknownToJsonValue(value: unknown): JsonValue {
-	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-		return value;
-	}
-	if (Array.isArray(value)) {
-		return value.map(unknownToJsonValue);
-	}
-	if (typeof value === "object") {
-		const objectValue: { [key: string]: JsonValue | undefined } = {};
-		for (const [key, child] of Object.entries(value)) {
-			objectValue[key] = unknownToJsonValue(child);
-		}
-		return objectValue;
-	}
-	return null;
-}
-
-function invalidRequest(message: string): TurnEngineError {
-	return new TurnEngineError({ code: -32600, message });
-}
-
-function invalidParams(message: string): TurnEngineError {
-	return new TurnEngineError({ code: -32602, message });
-}
-
-function toTurnEngineError(error: unknown): TurnEngineError {
-	if (error instanceof TurnEngineError) {
-		return error;
-	}
-	return new TurnEngineError({ code: -32603, message: error instanceof Error ? error.message : String(error) });
 }

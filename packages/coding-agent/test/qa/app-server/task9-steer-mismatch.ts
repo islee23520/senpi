@@ -10,7 +10,12 @@ class QaSession implements TurnEngineSession {
 	steerCalls = 0;
 	private readonly listeners: Array<(event: { readonly type: "agent_end" }) => void> = [];
 
-	async prompt(): Promise<void> {}
+	async prompt(
+		_text: string,
+		options?: { readonly source?: "rpc"; readonly preflightResult?: (success: boolean) => void },
+	): Promise<void> {
+		options?.preflightResult?.(true);
+	}
 
 	async steer(): Promise<void> {
 		this.steerCalls += 1;
@@ -70,13 +75,32 @@ class QaStore implements TurnEngineStore<QaEntry> {
 
 async function main(): Promise<void> {
 	const store = new QaStore();
+	const notifications: string[] = [];
+	const turnLog = new TurnLog();
 	const engine = createTurnEngine({
 		store,
-		turnLog: new TurnLog(),
-		emitToThread: () => {},
+		turnLog,
+		emitToThread: (_threadId, notification) => {
+			notifications.push(notification.method);
+		},
 		broadcast: () => {},
 	});
 	const started = await engine.startTurn({ threadId: "thread-qa", input: [{ type: "text", text: "hello" }] });
+	notifications.length = 0;
+	await engine.steerTurn({
+		threadId: "thread-qa",
+		expectedTurnId: started.turn.id,
+		clientUserMessageId: "qa-steer-message",
+		input: [{ type: "text", text: "valid steer" }],
+	});
+	console.log(`SUCCESS_STEER_NOTIFICATIONS=${notifications.join(",")}`);
+	console.log(`TURN_LOG_ITEMS=${turnLog.readTurns("thread-qa")[0]?.items.length ?? 0}`);
+	if (notifications.join(",") !== "item/started,item/completed") {
+		throw new Error("successful steer did not emit item lifecycle notifications");
+	}
+	if (turnLog.readTurns("thread-qa")[0]?.items.length !== 2) {
+		throw new Error("successful steer was not appended to the active turn log");
+	}
 	try {
 		await engine.steerTurn({
 			threadId: "thread-qa",
@@ -94,7 +118,7 @@ async function main(): Promise<void> {
 		if (!error.error.message.includes("stale-id") || !error.error.message.includes(started.turn.id)) {
 			throw new Error("mismatch error did not contain stale and actual turn ids");
 		}
-		if (store.entry.session.steerCalls !== 0) {
+		if (store.entry.session.steerCalls !== 1) {
 			throw new Error("stale steer reached the session");
 		}
 	} finally {

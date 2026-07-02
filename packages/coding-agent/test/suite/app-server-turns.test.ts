@@ -12,10 +12,19 @@ class ScriptedSession implements TurnEngineSession {
 	readonly promptCalls: Array<{ readonly text: string; readonly source: string | undefined }> = [];
 	readonly steerCalls: string[] = [];
 	abortCalls = 0;
+	promptPreflightResult = true;
+	promptError: Error | null = null;
 	private readonly listeners: Array<(event: { readonly type: "agent_end" }) => void> = [];
 
-	async prompt(text: string, options?: { readonly source?: string }): Promise<void> {
+	async prompt(
+		text: string,
+		options?: { readonly source?: string; readonly preflightResult?: (success: boolean) => void },
+	): Promise<void> {
 		this.promptCalls.push({ text, source: options?.source });
+		options?.preflightResult?.(this.promptPreflightResult);
+		if (this.promptError) {
+			throw this.promptError;
+		}
 	}
 
 	async steer(text: string): Promise<void> {
@@ -92,15 +101,18 @@ function createHarness(): {
 	readonly engine: ReturnType<typeof createTurnEngine<FakeEntry>>;
 	readonly store: FakeStore;
 	readonly notifications: TurnEngineNotification[];
+	readonly turnLog: TurnLog;
 } {
 	const store = new FakeStore();
+	const turnLog = new TurnLog();
 	const notifications: TurnEngineNotification[] = [];
 	return {
 		store,
 		notifications,
+		turnLog,
 		engine: createTurnEngine({
 			store,
-			turnLog: new TurnLog(),
+			turnLog,
 			emitToThread: (_threadId, notification) => notifications.push(notification),
 			broadcast: (notification) => notifications.push(notification),
 		}),
@@ -172,6 +184,54 @@ describe("app-server turn engine", () => {
 		expect(entry.session.steerCalls).toEqual([]);
 		entry.session.emitAgentEnd();
 		await entry.taskQueue;
+	});
+
+	it("logs successful steering on the active turn without turn/started", async () => {
+		const { engine, store, notifications, turnLog } = createHarness();
+		const entry = store.add("thread-a");
+		const started = await engine.startTurn({
+			threadId: "thread-a",
+			clientUserMessageId: "client-user-1",
+			input: [{ type: "text", text: "hello" }],
+		});
+		notifications.length = 0;
+
+		await expect(
+			engine.steerTurn({
+				threadId: "thread-a",
+				expectedTurnId: started.turn.id,
+				clientUserMessageId: "client-steer-1",
+				input: [{ type: "text", text: "steer", text_elements: [] }],
+			}),
+		).resolves.toEqual({ turnId: started.turn.id });
+
+		expect(entry.session.steerCalls).toEqual(["steer"]);
+		expect(notifications.map((notification) => notification.method)).toEqual(["item/started", "item/completed"]);
+		expect(notifications[0]?.params).toMatchObject({
+			threadId: "thread-a",
+			turnId: started.turn.id,
+			item: { id: "client-steer-1", clientId: "client-steer-1", type: "userMessage" },
+		});
+		expect(turnLog.readTurns("thread-a")[0]?.items).toMatchObject([
+			{ type: "userMessage", clientId: "client-user-1" },
+			{ type: "userMessage", clientId: "client-steer-1" },
+		]);
+		entry.session.emitAgentEnd();
+		await entry.taskQueue;
+	});
+
+	it("rejects turn start before acknowledgement when prompt preflight fails", async () => {
+		const { engine, store } = createHarness();
+		const entry = store.add("thread-a");
+		entry.session.promptPreflightResult = false;
+		entry.session.promptError = new Error("missing model");
+
+		await expect(
+			engine.startTurn({ threadId: "thread-a", input: [{ type: "text", text: "hello" }] }),
+		).rejects.toMatchObject({ error: { code: -32603, message: "missing model" } });
+		await entry.taskQueue;
+		expect(entry.activeTurn).toBeNull();
+		expect(entry.status).toBe("idle");
 	});
 
 	it("tolerates interrupt after the active turn already ended", async () => {
