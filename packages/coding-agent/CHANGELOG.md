@@ -4,11 +4,14 @@
 
 ### Added
 
+- Added `ctx.updateToolHookStatus()` so `tool_call`/`tool_result` extension handlers can report what they are doing in the live "Running PreToolUse/PostToolUse hook" TUI status row
+
 ### Changed
 
 ### Fixed
 
 - Fixed TUI screen corruption from external stdout writes: `console.log` from libraries or extensions while a TUI owns the terminal (interactive mode, startup dialogs, config selector) is now hidden from the screen and appended, redacted, to the debug log — matching the existing stderr guard.
+- Fixed the live tool hook status row showing a generic `running builtin:hooks` label instead of the running command hook's configured `statusMessage` (falling back to its sanitized command text)
 
 ## [2026.7.3] - 2026-07-03
 
