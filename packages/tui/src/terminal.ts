@@ -586,8 +586,11 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	setTitle(title: string): void {
-		// OSC 0;title BEL - set terminal window title
-		this.rawWrite(`\x1b]0;${title}\x07`);
+		// OSC 0;title BEL - set terminal window title. Control characters are
+		// stripped so a title cannot terminate the OSC early and leak the rest
+		// onto the screen.
+		const sanitizedTitle = title.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+		this.rawWrite(`\x1b]0;${sanitizedTitle}\x07`);
 	}
 
 	setProgress(active: boolean): void {
