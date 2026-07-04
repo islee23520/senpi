@@ -1251,12 +1251,14 @@ describe("ExtensionRunner", () => {
 			expect(lifecycleEvents).toHaveLength(3);
 		});
 
-		it("bounds live tool hook status updates to the display budget", async () => {
+		it("sanitizes and bounds live tool hook status updates", async () => {
 			const runtime = createExtensionRuntime();
 			const longMessage = "x".repeat(200);
+			const noisyMessage = "line\u001b[31mone\ntwo\t\u0007 done";
 			const extension = await loadExtensionFromFactory(
 				(pi) => {
 					pi.on("tool_call", async (_event, ctx) => {
+						ctx.updateToolHookStatus?.(noisyMessage);
 						ctx.updateToolHookStatus?.(longMessage);
 					});
 				},
@@ -1276,8 +1278,9 @@ describe("ExtensionRunner", () => {
 				input: {},
 			});
 
-			const update = lifecycleEvents.find((event) => event.phase === "update");
-			expect(update?.statusMessage).toBe(`${"x".repeat(76)}...`);
+			const updates = lifecycleEvents.filter((event) => event.phase === "update");
+			expect(updates[0]?.statusMessage).toBe("lineone two done");
+			expect(updates[1]?.statusMessage).toBe(`${"x".repeat(76)}...`);
 		});
 
 		it("uses bounded custom hook status labels", async () => {

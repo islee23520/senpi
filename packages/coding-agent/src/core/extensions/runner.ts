@@ -7,6 +7,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model } from "@earendil-works/pi-ai";
 import type { KeyId } from "@earendil-works/pi-tui";
 import { type Theme, theme } from "../../modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../../utils/ansi.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
 import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
@@ -190,6 +191,16 @@ export type ExtensionErrorListener = (error: ExtensionError) => void;
 
 function boundedToolHookStatusMessage(message: string): string {
 	return message.length <= 79 ? message : `${message.slice(0, 76)}...`;
+}
+
+function sanitizedToolHookStatusMessage(message: string): string {
+	return boundedToolHookStatusMessage(
+		stripAnsi(message)
+			.replace(/[\r\n\t]+/g, " ")
+			.replace(/[\u0000-\u001f\u007f]+/g, "")
+			.replace(/\s+/g, " ")
+			.trim(),
+	);
 }
 
 export type ExtensionToolHookName = "PreToolUse" | "PostToolUse";
@@ -706,7 +717,7 @@ export class ExtensionRunner {
 		const context = Object.defineProperties({}, Object.getOwnPropertyDescriptors(baseContext)) as ExtensionContext;
 		context.updateToolHookStatus = (update: string) => {
 			if (ended) return;
-			statusMessage = boundedToolHookStatusMessage(update);
+			statusMessage = sanitizedToolHookStatusMessage(update);
 			this.emitToolHookLifecycleEvent({ ...base, phase: "update", statusMessage });
 		};
 		return {
