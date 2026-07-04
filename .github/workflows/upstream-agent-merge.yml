@@ -355,12 +355,18 @@ jobs:
             sleep 5
           done
           gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --watch --fail-fast --interval 30
-          HEAD_SHA="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
-          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --merge --auto --delete-branch --match-head-commit "$HEAD_SHA"
+          PR_INFO="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName,headRefOid)"
+          HEAD_BRANCH="$(printf '%s' "$PR_INFO" | jq -r .headRefName)"
+          HEAD_SHA="$(printf '%s' "$PR_INFO" | jq -r .headRefOid)"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --merge --auto --match-head-commit "$HEAD_SHA"
           for attempt in {1..40}; do
             PR_STATE="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state)"
             if [ "$PR_STATE" = "MERGED" ]; then
               break
+            fi
+            if [ "$PR_STATE" = "CLOSED" ]; then
+              echo "::error::PR ${PR_NUMBER} closed without merging after auto-merge was enabled."
+              exit 1
             fi
             if [ "$attempt" = "40" ]; then
               echo "::error::PR ${PR_NUMBER} did not merge after auto-merge was enabled."
@@ -368,6 +374,9 @@ jobs:
             fi
             sleep 15
           done
+          if [ -n "$HEAD_BRANCH" ] && [ "$HEAD_BRANCH" != "main" ]; then
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" --delete "$HEAD_BRANCH"
+          fi
           echo "merged=true" >> "$GITHUB_OUTPUT"
 
       - name: Fresh /cl release audit
