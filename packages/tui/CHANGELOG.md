@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Fixed render scheduling state leaking across TUI `stop()`/`start()`, which could leave a restarted TUI unable to render passive updates (streaming output, timers) until a keypress or forced redraw.
+
 ## [2026.7.3] - 2026-07-03
 
 ### Added
