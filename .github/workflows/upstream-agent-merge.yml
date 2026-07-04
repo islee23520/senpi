@@ -374,10 +374,11 @@ jobs:
             fi
             sleep 15
           done
-          if [ -n "$HEAD_BRANCH" ] && [ "$HEAD_BRANCH" != "main" ]; then
-            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" --delete "$HEAD_BRANCH"
-          fi
           echo "merged=true" >> "$GITHUB_OUTPUT"
+          if [ -n "$HEAD_BRANCH" ] && [ "$HEAD_BRANCH" != "main" ]; then
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" --delete "$HEAD_BRANCH" \
+              || echo "::warning::Could not delete merged branch ${HEAD_BRANCH}; continuing release."
+          fi
 
       - name: Fresh /cl release audit
         id: release_audit
