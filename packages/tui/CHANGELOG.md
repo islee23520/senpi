@@ -4,9 +4,14 @@
 
 ### Added
 
+- Added an opt-in `ProcessTerminal` external stdout guard (`onExternalStdoutWrite`): while the terminal is started, stdout writes not issued by the terminal itself (e.g. `console.log` from libraries or extensions) are forwarded to the handler instead of reaching the screen, preventing differential-render desync and visual corruption.
+
 ### Changed
 
 ### Fixed
+
+- Fixed render scheduling state leaking across TUI `stop()`/`start()`, which could leave a restarted TUI unable to render passive updates (streaming output, timers) until a keypress or forced redraw.
+- Fixed `setTitle` to strip control characters so session, tool, or extension titles containing BEL/ESC cannot terminate the OSC sequence early and dump the remainder onto the screen.
 
 ## [2026.7.3] - 2026-07-03
 
