@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Fixed TUI screen corruption from external stdout writes: `console.log` from libraries or extensions while a TUI owns the terminal (interactive mode, startup dialogs, config selector) is now hidden from the screen and appended, redacted, to the debug log — matching the existing stderr guard.
+
 ## [2026.7.3] - 2026-07-03
 
 ### Added
