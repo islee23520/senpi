@@ -250,6 +250,63 @@ describe("Anthropic provider-native replay", () => {
 		expect(toolResultIds).toContain("toolu_post");
 	});
 
+	it("drops an unpaired server_tool_use before a fallback boundary but keeps a paired one", async () => {
+		// Per server-side-fallback-2026-06-01, blocks before the final fallback
+		// marker belong to the declined attempt. The replay contract keeps text and
+		// *paired* server-tool blocks but omits an unpaired `server_tool_use` — its
+		// missing result would otherwise leave it dangling and 400 the turn. Here the
+		// declined attempt has one paired search (result present) and one unpaired
+		// search (fallback interrupted before its result); only the paired pair may
+		// replay.
+		const model = getModel("anthropic", "claude-fable-5");
+		const pairedUse = { type: "server_tool_use", id: "srvu_paired", name: "web_search", input: { query: "a" } };
+		const pairedResult = {
+			type: "web_search_tool_result",
+			tool_use_id: "srvu_paired",
+			content: [{ type: "web_search_result", title: "A", url: "https://a.example", encrypted_content: "enc" }],
+		};
+		const unpairedUse = { type: "server_tool_use", id: "srvu_unpaired", name: "web_search", input: { query: "b" } };
+		const fallbackBlock = {
+			type: "fallback",
+			from: { model: "claude-fable-5" },
+			to: { model: "claude-opus-4-8" },
+			trigger: { type: "refusal", category: "cyber" },
+		};
+		const assistant = assistantMessage(
+			[
+				{ type: "providerNative", subtype: "server_tool_use", raw: pairedUse },
+				{ type: "providerNative", subtype: "web_search_tool_result", raw: pairedResult },
+				{ type: "providerNative", subtype: "server_tool_use", raw: unpairedUse },
+				{ type: "providerNative", subtype: "fallback", raw: fallbackBlock },
+				{ type: "thinking", thinking: "served", thinkingSignature: "sig_post" },
+				{ type: "toolCall", id: "toolu_post", name: "read", arguments: { path: "README.md" } },
+			],
+			{ stopReason: "toolUse", model: "claude-fable-5" },
+		);
+
+		const payload = await capturePayload(model, [
+			{ role: "user", content: "hello", timestamp: 1 },
+			assistant,
+			{
+				role: "toolResult",
+				toolCallId: "toolu_post",
+				toolName: "read",
+				content: [{ type: "text", text: "out" }],
+				isError: false,
+				timestamp: 2,
+			},
+		]);
+
+		const assistantPayload = payload.messages?.find((message) => message.role === "assistant");
+		expect(assistantPayload?.content).toEqual([
+			pairedUse,
+			pairedResult,
+			fallbackBlock,
+			{ type: "thinking", thinking: "served", signature: "sig_post" },
+			{ type: "tool_use", id: "toolu_post", name: "read", input: { path: "README.md" } },
+		]);
+	});
+
 	it("drops same-model provider-native blocks with unknown subtypes", async () => {
 		const model = getModel("anthropic", "claude-haiku-4-5");
 		const assistant = assistantMessage(

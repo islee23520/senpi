@@ -372,6 +372,26 @@ function lastAnthropicFallbackBoundary(content: AssistantMessage["content"]): nu
 	return boundary;
 }
 
+function isAnthropicServerToolUseBlock(raw: unknown): raw is { readonly type: "server_tool_use"; readonly id: string } {
+	return isRecord(raw) && raw.type === "server_tool_use" && typeof raw.id === "string";
+}
+
+// tool_use ids referenced by server-tool result blocks in content[0, boundary).
+// A pre-boundary `server_tool_use` whose id is absent here is unpaired — the
+// fallback interrupted the declined attempt before its result arrived — so
+// replaying it would leave a server tool_use with no adjacent result and 400 the
+// turn. Paired server-tool blocks replay verbatim per the fallback contract.
+function pairedServerToolUseIdsBeforeBoundary(content: AssistantMessage["content"], boundary: number): Set<string> {
+	const paired = new Set<string>();
+	for (let index = 0; index < boundary; index++) {
+		const block = content[index];
+		if (block.type !== "providerNative" || !isRecord(block.raw)) continue;
+		const toolUseId = block.raw.tool_use_id;
+		if (typeof toolUseId === "string") paired.add(toolUseId);
+	}
+	return paired;
+}
+
 // Tool-call ids emitted by a discarded pre-fallback attempt on a same-model
 // assistant turn. These tool_use blocks are dropped from the assistant turn, so
 // their tool_result blocks must be dropped from the following user turn too — an
@@ -1551,19 +1571,30 @@ function convertMessages(
 		} else if (msg.role === "assistant") {
 			const blocks: ContentBlockParam[] = [];
 			const isSameModel = isSameAnthropicModel(msg, model);
-			// Drop the declined attempt's model-internal blocks (thinking, tool_use)
-			// that precede the final fallback marker; the marker onward is the
-			// serving model's output and replays verbatim.
+			// Blocks before the final fallback marker are the declined attempt; the
+			// marker onward is the serving model's output and replays verbatim.
 			const fallbackBoundary = isSameModel ? lastAnthropicFallbackBoundary(msg.content) : -1;
+			const preBoundaryPairedServerToolUseIds =
+				fallbackBoundary >= 0
+					? pairedServerToolUseIdsBeforeBoundary(msg.content, fallbackBoundary)
+					: new Set<string>();
 
 			for (let blockIndex = 0; blockIndex < msg.content.length; blockIndex++) {
 				const block = msg.content[blockIndex];
-				if (
-					fallbackBoundary >= 0 &&
-					blockIndex < fallbackBoundary &&
-					(block.type === "thinking" || block.type === "toolCall")
-				) {
-					continue;
+				if (fallbackBoundary >= 0 && blockIndex < fallbackBoundary) {
+					// Drop the declined attempt's model-internal blocks: thinking,
+					// tool_use, and any unpaired server_tool_use. Paired server-tool
+					// blocks and text survive per the fallback replay contract.
+					if (block.type === "thinking" || block.type === "toolCall") {
+						continue;
+					}
+					if (
+						block.type === "providerNative" &&
+						isAnthropicServerToolUseBlock(block.raw) &&
+						!preBoundaryPairedServerToolUseIds.has(block.raw.id)
+					) {
+						continue;
+					}
 				}
 				if (block.type === "text") {
 					if (block.text.trim().length === 0) continue;
