@@ -185,7 +185,9 @@ export class McpService {
 			};
 			this.#connections.set(key, entry);
 			this.#connectionKeysByName.set(name, key);
-			if (cachedCatalog === undefined) connects.push(this.#connectAndRefresh(entry, server.config));
+			if (cachedCatalog === undefined || server.config.lifecycle === "eager") {
+				connects.push(this.#connectAndRefresh(entry, server.config));
+			}
 		}
 		await Promise.all(connects);
 	}

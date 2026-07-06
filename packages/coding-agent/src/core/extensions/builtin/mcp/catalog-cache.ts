@@ -34,7 +34,7 @@ export function getMcpCatalogCachePath(agentDir = getAgentDir()): string {
 
 export async function readMcpCatalogCache(agentDir?: string): Promise<McpCatalogCacheFile> {
 	try {
-		const parsed = JSON.parse(await readFile(getMcpCatalogCachePath(agentDir), "utf8")) as unknown;
+		const parsed: unknown = JSON.parse(await readFile(getMcpCatalogCachePath(agentDir), "utf8"));
 		return normalizeCacheFile(parsed);
 	} catch {
 		return EMPTY_CACHE;

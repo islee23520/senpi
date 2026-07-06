@@ -93,6 +93,24 @@ describe("MCP disk metadata cache", () => {
 		expect(cache.servers.fx.tools.map((tool) => tool.name)).toEqual(["tool_1"]);
 	});
 
+	it("refreshes eager servers from the live catalog when a valid warm cache differs", async () => {
+		const root = makeCacheRoot("eager-mismatch");
+		const counterFile = join(root.agentDir, "eager-spawns.txt");
+		setConfig(root, {
+			fx: { ...stdioServer(["--tools", "2", "--spawn-counter-file", counterFile]), lifecycle: "eager" },
+		});
+		writeCache(root, { fx: cachedServer(root, "fx", { toolNames: ["stale_cached"] }) });
+		const pi = capturingPi();
+
+		await attach(root, pi);
+
+		expect(await readCounter(counterFile)).toBe(1);
+		expect(pi.registeredTools).toEqual(["mcp_fx_tool_1", "mcp_fx_tool_2"]);
+		expect(pi.registeredTools).not.toContain("mcp_fx_stale_cached");
+		const cache = await readCache(root);
+		expect(cache.servers.fx.tools.map((tool) => tool.name)).toEqual(["tool_1", "tool_2"]);
+	});
+
 	it("keeps concurrent cache writers from leaving torn JSON", async () => {
 		const root = makeCacheRoot("concurrent");
 		setConfig(root, { fx: stdioServer(["--tools", "3"]) });
