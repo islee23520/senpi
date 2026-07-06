@@ -24,22 +24,28 @@ const DEFAULT_ROWS = 24;
 const DEFAULT_SCROLLBACK = 1000;
 const MIN_SIZE = 1;
 const MAX_SIZE = 10000;
+const MIN_REPLAY_HISTORY_LENGTH = 4096;
+const MAX_REPLAY_HISTORY_LENGTH = 1_000_000;
 
 export class TerminalScreen {
 	private terminal: XtermTerminalType;
 	private readonly history: string[] = [];
+	private historyLength = 0;
+	private readonly maxReplayHistoryLength: number;
 	private readonly scrollback: number;
 
 	constructor(options: TerminalScreenOptions = {}) {
 		const cols = normalizeDimension(options.cols, DEFAULT_COLS);
 		const rows = normalizeDimension(options.rows, DEFAULT_ROWS);
 		this.scrollback = normalizeScrollback(options.scrollback);
+		this.maxReplayHistoryLength = normalizeReplayHistoryLength(cols, rows, this.scrollback);
 		this.terminal = this.createTerminal(cols, rows);
 	}
 
 	feed(data: string | Uint8Array): Promise<void> {
-		const payload = sanitizeInput(data);
-		if (payload.length > 0) this.history.push(payload);
+		const payload = decodeInput(data);
+		const sanitizedPayload = sanitizeString(payload);
+		if (sanitizedPayload.length > 0) this.appendHistory(sanitizedPayload);
 		return this.write(payload);
 	}
 
@@ -97,13 +103,39 @@ export class TerminalScreen {
 	}
 
 	private write(payload: string): Promise<void> {
-		return new Promise((resolve) => {
+		return new Promise((resolve, reject) => {
 			try {
 				this.terminal.write(payload, resolve);
-			} catch {
-				this.terminal.write(sanitizeString(payload), resolve);
+			} catch (error) {
+				const sanitizedPayload = sanitizeString(payload);
+				if (sanitizedPayload === payload) {
+					reject(error instanceof Error ? error : new Error(String(error)));
+					return;
+				}
+				this.terminal.write(sanitizedPayload, resolve);
 			}
 		});
+	}
+
+	private appendHistory(payload: string): void {
+		this.history.push(payload);
+		this.historyLength += payload.length;
+		this.trimHistory();
+	}
+
+	private trimHistory(): void {
+		while (this.historyLength > this.maxReplayHistoryLength && this.history.length > 1) {
+			const removed = this.history.shift();
+			if (removed === undefined) return;
+			this.historyLength -= removed.length;
+		}
+
+		if (this.historyLength <= this.maxReplayHistoryLength) return;
+		const [onlyChunk] = this.history;
+		if (onlyChunk === undefined) return;
+		const trimmed = sanitizeString(onlyChunk.slice(-this.maxReplayHistoryLength));
+		this.history[0] = trimmed;
+		this.historyLength = trimmed.length;
 	}
 }
 
@@ -121,9 +153,14 @@ function normalizeScrollback(value: number | undefined): number {
 	return Math.max(0, Math.trunc(value));
 }
 
-function sanitizeInput(value: string | Uint8Array): string {
-	if (typeof value === "string") return sanitizeString(value);
-	return sanitizeString(new TextDecoder("utf-8", { fatal: false }).decode(value));
+function normalizeReplayHistoryLength(cols: number, rows: number, scrollback: number): number {
+	const visibleCells = Math.max(MIN_SIZE, cols) * Math.max(MIN_SIZE, rows + scrollback + 1);
+	return Math.min(MAX_REPLAY_HISTORY_LENGTH, Math.max(MIN_REPLAY_HISTORY_LENGTH, visibleCells * 4));
+}
+
+function decodeInput(value: string | Uint8Array): string {
+	if (typeof value === "string") return value;
+	return new TextDecoder("utf-8", { fatal: false }).decode(value);
 }
 
 function sanitizeString(value: string): string {
