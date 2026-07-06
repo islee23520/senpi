@@ -1,7 +1,7 @@
 {
 	"name": "@earendil-works/pi-tui",
 	"private": true,
-	"version": "2026.7.4",
+	"version": "2026.7.5-2",
 	"description": "Terminal User Interface library with differential rendering for efficient text-based applications",
 	"type": "module",
 	"main": "dist/index.js",
@@ -9,7 +9,7 @@
 		"clean": "shx rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json",
 		"bench:frame-cost": "tsx bench/frame-cost.ts",
-		"test": "node --test --import tsx test/*.test.ts",
+		"test": "node --test --import tsx --test-reporter=dot --test-reporter-destination=stdout test/*.test.ts",
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"files": [
