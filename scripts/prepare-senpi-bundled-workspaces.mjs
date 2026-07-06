@@ -5,17 +5,54 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
+export const SUPPORTED_NATIVE_PREBUILD_TARGETS = [
+	"darwin-arm64",
+	"darwin-x64",
+	"linux-arm64",
+	"linux-x64",
+	"win32-arm64",
+	"win32-x64",
+];
+
+export function nativePrebuildTarget(platform = process.platform, arch = process.arch) {
+	const target = `${platform}-${arch}`;
+	if (!SUPPORTED_NATIVE_PREBUILD_TARGETS.includes(target)) {
+		throw new Error(`Unsupported native prebuild target: ${target}`);
+	}
+	return target;
+}
+
+export function nativePrebuildFile(target) {
+	return `native/prebuilds/${target}/senpi_pty.${target}.node`;
+}
+
 const bundledWorkspaces = [
 	{ source: "packages/agent", targetName: "pi-agent-core" },
 	{ source: "packages/ai", targetName: "pi-ai" },
-	{ source: "packages/pty", targetName: "pi-pty", requiredFiles: ["package.json", "dist/index.js", "native/index.js"] },
+	{
+		source: "packages/pty",
+		targetName: "pi-pty",
+		requiredFiles: ["package.json", "dist/index.js", "native/index.js"],
+		nativePrebuild: true,
+	},
 	{ source: "packages/tui", targetName: "pi-tui" },
 ];
 const internalPackageNames = new Set(bundledWorkspaces.map((workspace) => `@earendil-works/${workspace.targetName}`));
-const bundledWorkspacePackageChecks = bundledWorkspaces.map((workspace) => ({
-	packageName: `@earendil-works/${workspace.targetName}`,
-	requiredFiles: workspace.requiredFiles ?? ["package.json", "dist/index.js"],
-}));
+
+function requiredFilesForWorkspace(workspace, nativeTargets) {
+	const requiredFiles = [...(workspace.requiredFiles ?? ["package.json", "dist/index.js"])];
+	if (workspace.nativePrebuild) {
+		requiredFiles.push(...nativeTargets.map(nativePrebuildFile));
+	}
+	return requiredFiles;
+}
+
+export function bundledWorkspacePackageChecks(nativeTargets = [nativePrebuildTarget()]) {
+	return bundledWorkspaces.map((workspace) => ({
+		packageName: `@earendil-works/${workspace.targetName}`,
+		requiredFiles: requiredFilesForWorkspace(workspace, nativeTargets),
+	}));
+}
 
 function shouldCopyWorkspaceFile(sourceRoot, sourcePath) {
 	const path = relative(sourceRoot, sourcePath);
@@ -70,11 +107,12 @@ export function copyPublishDependencies(repoRoot) {
 	}
 }
 
-export function assertSenpiPackedWorkspaceFiles(packed) {
+export function assertSenpiPackedWorkspaceFiles(packed, options = {}) {
+	const nativeTargets = options.nativePrebuildTargets ?? [nativePrebuildTarget()];
 	const filePaths = new Set((packed.files ?? []).map((file) => file.path));
 	const missing = [];
 
-	for (const { packageName, requiredFiles } of bundledWorkspacePackageChecks) {
+	for (const { packageName, requiredFiles } of bundledWorkspacePackageChecks(nativeTargets)) {
 		const packageRoot = `package/node_modules/${packageName}`;
 		const dryRunPackageRoot = `node_modules/${packageName}`;
 		for (const requiredFile of requiredFiles) {
@@ -100,6 +138,15 @@ export function prepareSenpiBundledWorkspaces(repoRoot = root) {
 		const distPath = join(sourceRoot, "dist");
 		if (!existsSync(distPath)) {
 			throw new Error(`Missing ${distPath}. Run npm run build before preparing bundled workspaces.`);
+		}
+
+		const requiredFiles = requiredFilesForWorkspace(workspace, [nativePrebuildTarget()]);
+		for (const requiredFile of requiredFiles) {
+			const requiredPath = join(sourceRoot, requiredFile);
+			if (!existsSync(requiredPath)) {
+				const packageName = `@earendil-works/${workspace.targetName}`;
+				throw new Error(`Missing ${requiredPath}. ${packageName} cannot be bundled without loader-visible package files.`);
+			}
 		}
 
 		const targetRoot = join(codingAgentNodeModules, workspace.targetName);
