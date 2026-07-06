@@ -16,7 +16,9 @@
  */
 
 import * as crypto from "node:crypto";
+import type { OAuthProviderId } from "@earendil-works/pi-ai/compat";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
+import { buildLoginProviderInfos } from "../../core/auth-providers.ts";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -24,8 +26,10 @@ import type {
 	WorkingIndicatorOptions,
 } from "../../core/extensions/index.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
+import { buildCustomUnsupportedRequest, DEFAULT_CUSTOM_EXTENSION_LABEL } from "./custom-capability.ts";
 import { createRpcEventOutputBuffer } from "./event-output-buffer.ts";
 import type {
+	RpcAuthProvider,
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
@@ -33,6 +37,12 @@ import type {
 	RpcSessionState,
 	RpcSlashCommand,
 } from "./rpc-types.ts";
+
+/** Additive per-connection options. Absent = classic default (byte-identical). */
+export interface RpcConnectionOptions {
+	/** Client capability flags from the handshake (e.g. custom_unsupported opt-in). */
+	capabilities?: readonly string[];
+}
 
 /**
  * The output side of a connection. `writeRaw` receives already-serialized JSONL
@@ -45,6 +55,11 @@ export interface RpcConnectionSink {
 }
 
 export interface RpcConnectionHandler {
+	/**
+	 * Resolves once the initial session bind completes. Awaiting it guarantees the
+	 * extension UI context is installed (used by tests that drive ctx.ui directly).
+	 */
+	readonly ready: Promise<void>;
 	/** Feed one inbound JSONL line (command or extension_ui_response). */
 	handleInputLine(line: string): Promise<void>;
 	/**
@@ -66,7 +81,9 @@ export interface RpcConnectionHandler {
 export function createRpcConnectionHandler(
 	runtimeHost: AgentSessionRuntime,
 	sink: RpcConnectionSink,
+	options: RpcConnectionOptions = {},
 ): RpcConnectionHandler {
+	const clientCapabilities = options.capabilities;
 	let session = runtimeHost.session;
 	let unsubscribe: (() => void) | undefined;
 	let unsubscribeBackpressure: (() => void) | undefined;
@@ -107,6 +124,12 @@ export function createRpcConnectionHandler(
 	>();
 
 	let shutdownRequested = false;
+
+	// In-flight OAuth logins, keyed by provider. login_start registers one; the
+	// login promise clears it on completion; login_cancel aborts it. The flow is
+	// fire-command-then-subscribe: login_start responds immediately and the URL +
+	// terminal result arrive as auth_login_url / auth_login_end events.
+	const activeLogins = new Map<string, AbortController>();
 
 	/** Helper for dialog methods with signal/timeout support */
 	function createDialogPromise<T>(
@@ -247,7 +270,17 @@ export function createRpcConnectionHandler(
 		},
 
 		async custom() {
-			// Custom UI not supported in RPC mode
+			// Custom UI cannot be rendered in RPC mode. By default this returns
+			// undefined synchronously with NO wire message — byte-identical to the
+			// original behavior. ONLY when the client advertised the
+			// "custom_unsupported" capability do we emit an additive notice request
+			// (so neo can render a "requires the classic TUI" dialog) before
+			// returning undefined. The name is best-effort: ctx.ui.custom carries no
+			// extension identity, so a generic label is used.
+			const request = buildCustomUnsupportedRequest(clientCapabilities, DEFAULT_CUSTOM_EXTENSION_LABEL);
+			if (request) {
+				output(request);
+			}
 			return undefined as never;
 		},
 
@@ -379,6 +412,53 @@ export function createRpcConnectionHandler(
 		unsubscribeBackpressure = session.agent.subscribe(async () => {
 			await waitForRpcBackpressure();
 		});
+	};
+
+	/**
+	 * Drive an OAuth login for one provider as fire-command-then-subscribe.
+	 *
+	 * Reuses AuthStorage.login (the same callbacks the classic TUI uses). Only the
+	 * URL-based happy path is surfaced over RPC: onAuth emits an auth_login_url
+	 * event; success/failure/cancel emit a single auth_login_end event. Callbacks
+	 * that need interactive mid-flow input (onPrompt/onSelect/onManualCodeInput)
+	 * are not answerable in the event-only model, so they reject cleanly — the
+	 * neo client uses the browser/callback-server completion path. Secrets are
+	 * never emitted: only the provider id, the auth URL, and a success flag (plus a
+	 * non-secret error message) cross the wire.
+	 */
+	const startLogin = async (provider: string): Promise<void> => {
+		// A second login_start for the same provider aborts the prior attempt.
+		activeLogins.get(provider)?.abort();
+		const controller = new AbortController();
+		activeLogins.set(provider, controller);
+
+		const rejectInteractive = (): never => {
+			throw new Error("Interactive login input is not supported over RPC");
+		};
+
+		try {
+			await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
+				onAuth: (info) => {
+					outputEvent({ type: "auth_login_url", provider, url: info.url });
+				},
+				onDeviceCode: (info) => {
+					outputEvent({ type: "auth_login_url", provider, url: info.verificationUri });
+				},
+				onPrompt: async () => rejectInteractive(),
+				onSelect: async () => rejectInteractive(),
+				onProgress: () => {},
+				signal: controller.signal,
+			});
+			session.modelRegistry.refresh();
+			outputEvent({ type: "auth_login_end", provider, success: true });
+		} catch (loginError: unknown) {
+			const message = loginError instanceof Error ? loginError.message : String(loginError);
+			outputEvent({ type: "auth_login_end", provider, success: false, error: message });
+		} finally {
+			if (activeLogins.get(provider) === controller) {
+				activeLogins.delete(provider);
+			}
+		}
 	};
 
 	// Handle a single command
@@ -686,6 +766,50 @@ export function createRpcConnectionHandler(
 				return success(id, "get_commands", { commands });
 			}
 
+			// =================================================================
+			// Auth (task 13)
+			// =================================================================
+
+			case "get_auth_providers": {
+				const modelRegistry = session.modelRegistry;
+				const oauthInfos = buildLoginProviderInfos(modelRegistry, "oauth");
+				const apiKeyInfos = buildLoginProviderInfos(modelRegistry, "api_key");
+				const providers: RpcAuthProvider[] = [...oauthInfos, ...apiKeyInfos].map((info) => ({
+					id: info.id,
+					name: info.name,
+					authType: info.authType,
+					status: modelRegistry.getProviderAuthStatus(info.id),
+				}));
+				return success(id, "get_auth_providers", { providers });
+			}
+
+			case "login_start": {
+				// Respond IMMEDIATELY: success:true means the flow has started. The
+				// URL and terminal result are delivered via auth_login_url /
+				// auth_login_end events, because an interactive OAuth round-trip
+				// cannot fit within the request timeout.
+				void startLogin(command.provider);
+				return success(id, "login_start");
+			}
+
+			case "login_cancel": {
+				const controller = activeLogins.get(command.provider);
+				controller?.abort();
+				return success(id, "login_cancel");
+			}
+
+			case "login_api_key": {
+				session.modelRegistry.authStorage.set(command.provider, { type: "api_key", key: command.key });
+				session.modelRegistry.refresh();
+				return success(id, "login_api_key");
+			}
+
+			case "logout": {
+				session.modelRegistry.authStorage.logout(command.provider);
+				session.modelRegistry.refresh();
+				return success(id, "logout");
+			}
+
 			default: {
 				const unknownCommand = command as { type: string };
 				return error(id, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
@@ -757,6 +881,7 @@ export function createRpcConnectionHandler(
 	const ready = rebindSession();
 
 	return {
+		ready,
 		async handleInputLine(line: string) {
 			await ready;
 			await handleInputLine(line);

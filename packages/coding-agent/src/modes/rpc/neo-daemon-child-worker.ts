@@ -11,6 +11,7 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { RPC_CLIENT_CAPABILITIES_ENV } from "./custom-capability.ts";
 import { attachJsonlLineReader } from "./jsonl.ts";
 import type { NeoDaemonWorker, NeoDaemonWorkerFactory } from "./neo-daemon-mode.ts";
 import { neoRuntimeOptionsToRpcArgv } from "./neo-runtime-options-argv.ts";
@@ -35,8 +36,13 @@ export function createNeoChildWorkerFactory(config: NeoChildWorkerConfig): NeoDa
 	const execPath = config.execPath ?? process.execPath;
 	const killGraceMs = config.killGraceMs ?? 3000;
 
-	return async ({ runtimeOptions, cwd, agentDir, writeToClient, signal }): Promise<NeoDaemonWorker> => {
+	return async ({ runtimeOptions, capabilities, cwd, agentDir, writeToClient, signal }): Promise<NeoDaemonWorker> => {
 		const runtimeArgv = neoRuntimeOptionsToRpcArgv(runtimeOptions);
+		// The handshake's client capabilities are additive per-connection flags
+		// (e.g. custom_unsupported opt-in). Forward them to the child rpc process
+		// via an env var — argv carries runtime construction only, and the child's
+		// rpc-mode reads this to gate additive UI behavior. Empty = default child.
+		const capabilitiesEnv = capabilities.length > 0 ? { [RPC_CLIENT_CAPABILITIES_ENV]: capabilities.join(",") } : {};
 		// neoRuntimeOptionsToRpcArgv already prepends ["--mode","rpc"]; strip it if
 		// baseArgs points at rpc-entry (which injects --mode rpc itself). We keep it
 		// simple and always pass through cli-main-style args; rpc-entry tolerates a
@@ -46,6 +52,7 @@ export function createNeoChildWorkerFactory(config: NeoChildWorkerConfig): NeoDa
 			env: {
 				...process.env,
 				SENPI_CODING_AGENT_DIR: agentDir,
+				...capabilitiesEnv,
 			},
 			stdio: ["pipe", "pipe", "pipe"],
 		});
