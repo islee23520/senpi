@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -92,6 +92,27 @@ describe("ServerConnection state machine", () => {
 			"connecting->degraded",
 		]);
 		expect(events.tools).toEqual([]);
+	});
+
+	it("fails fixture startup when the spawn counter cannot be read", async () => {
+		const root = await tmpRoot("counter-read-error");
+		const counterFile = join(root, "spawns.txt");
+		await writeFile(counterFile, "7\n", { mode: 0o200 });
+		await chmod(counterFile, 0o200);
+		const connection = createConnection("counter-read-error", root, [
+			"--tools",
+			"1",
+			"--spawn-counter-file",
+			counterFile,
+		]);
+		connections.push(connection);
+
+		await expect(connection.connect()).rejects.toThrow(/failed during connect|closed/i);
+		await chmod(counterFile, 0o600);
+
+		expect(connection.state).toBe("degraded");
+		expect(connection.lastError).toBeInstanceOf(Error);
+		expect(await readCounter(counterFile)).toBe(7);
 	});
 
 	it("supports explicit degraded, suspended, auth, registration, tools-changed, and disable seams", async () => {

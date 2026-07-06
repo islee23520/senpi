@@ -28,13 +28,13 @@ function recordSpawn(counterFile: string | undefined): void {
 	try {
 		current = Number(readFileSync(counterFile, "utf8").trim()) || 0;
 	} catch (error) {
-		ignoreMissingCounter(error);
+		if (!isNodeErrorCode(error, "ENOENT")) throw error;
 	}
 	writeFileSync(counterFile, `${current + 1}\n`);
 }
 
-function ignoreMissingCounter(error: unknown): void {
-	void error;
+function isNodeErrorCode(error: unknown, code: string): error is Error & { code: string } {
+	return error instanceof Error && "code" in error && error.code === code;
 }
 
 main().catch((error: unknown) => {
