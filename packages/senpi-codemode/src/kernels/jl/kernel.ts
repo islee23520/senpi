@@ -1,0 +1,24 @@
+import { join } from "node:path";
+import type { BridgeConnectionConfig } from "../../bridge/protocol.ts";
+import { SubprocessKernel, type SubprocessSpawn } from "../shared/subprocess-kernel.ts";
+
+export interface JuliaKernelStartOptions {
+	readonly cwd: string;
+	readonly sessionId: string;
+	readonly connection: BridgeConnectionConfig;
+	readonly command?: string;
+	readonly spawn?: SubprocessSpawn;
+}
+
+export class JuliaKernel extends SubprocessKernel {
+	static start(options: JuliaKernelStartOptions): JuliaKernel {
+		return new JuliaKernel({
+			command: options.command ?? "julia",
+			args: ["--startup-file=no", "--history-file=no", "--color=no", join(import.meta.dirname, "runner.jl")],
+			cwd: options.cwd,
+			sessionId: options.sessionId,
+			connection: options.connection,
+			spawn: options.spawn,
+		});
+	}
+}
