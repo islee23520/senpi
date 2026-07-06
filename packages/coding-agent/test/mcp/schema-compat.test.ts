@@ -151,5 +151,6 @@ describe("mcp pagination", () => {
 });
 
 function readFixture(name: string): unknown {
-	return JSON.parse(readFileSync(join(fixturesDir, name), "utf8")) as unknown;
+	const parsed: unknown = JSON.parse(readFileSync(join(fixturesDir, name), "utf8"));
+	return parsed;
 }

@@ -87,13 +87,7 @@ async function selfTest(onlyApi) {
 	const apis = onlyApi ? [onlyApi] : ALL_APIS;
 	for (const api of apis) await checkApi(checks, api);
 	checks.ok("zero real provider calls (only localhost fake hit)", true, "all baseUrls point at 127.0.0.1");
-	checks.ok("real auth unchanged", (() => {
-		try {
-			return guard.assertUnchanged();
-		} catch {
-			return false;
-		}
-	})(), guard.path);
+	checkRealAuthUnchanged(checks, guard);
 	process.exit(checks.finish() ? 0 : 1);
 }
 
@@ -153,13 +147,7 @@ async function withNamedTool({
 		checks.ok(toolResult.name, toolResult.pass, toolResult.detail);
 	}
 	checks.ok("final assistant text returned", (result.stdout + result.stderr).includes(marker));
-	checks.ok("real auth unchanged", (() => {
-		try {
-			return guard.assertUnchanged();
-		} catch {
-			return false;
-		}
-	})());
+	checkRealAuthUnchanged(checks, guard);
 	if (evidenceSlug) writeToolEvidence(evidenceSlug, { apiName, result, server, prepared });
 	if (result.timedOut || server.requests.length < 2) process.stderr.write(`\n--- stderr tail ---\n${result.stderr.slice(-1500)}\n`);
 	await server.stop();
@@ -201,7 +189,9 @@ function parseToolArgs() {
 	try {
 		const parsed = JSON.parse(raw);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
-	} catch {}
+	} catch (error) {
+		throw new Error(`--tool-args must be a JSON object: invalid JSON (${safeErrorReason(error)})`);
+	}
 	throw new Error("--tool-args must be a JSON object");
 }
 
@@ -257,4 +247,16 @@ function positionalAfter(command) {
 		if (!arg.startsWith("--")) return arg;
 	}
 	return undefined;
+}
+
+function checkRealAuthUnchanged(checks, guard) {
+	try {
+		checks.ok("real auth unchanged", guard.assertUnchanged(), guard.path);
+	} catch (error) {
+		checks.ok("real auth unchanged", false, `credential guard failed at ${guard.path}: ${safeErrorReason(error)}`);
+	}
+}
+
+function safeErrorReason(error) {
+	return error instanceof Error ? error.name : typeof error;
 }

@@ -143,7 +143,9 @@ export default function(pi) {
 				appendFileSync(callLogPath, JSON.stringify({ toolCallId, toolName, sourceToolName, params, listed: listed.tools.map((tool) => tool.name), result }) + "\\n");
 				return { content: result.content, details: { fixture: "mcp-stdio", sourceToolName, listed: listed.tools.map((tool) => tool.name) } };
 			} finally {
-				await client.close().catch(() => undefined);
+				await client.close().catch((error) => {
+					appendFileSync(callLogPath, JSON.stringify({ cleanupError: error instanceof Error ? error.name : typeof error }) + "\\n");
+				});
 			}
 		}
 	});
@@ -176,13 +178,17 @@ function readFixtureCalls(path) {
 	return readFileSync(path, "utf8")
 		.split(/\r?\n/)
 		.filter(Boolean)
-		.map((line) => {
+		.map((line, index) => {
 			try {
 				return JSON.parse(line);
-			} catch {
-				return {};
+			} catch (error) {
+				return { parseError: safeErrorReason(error), line: index + 1 };
 			}
 		});
+}
+
+function safeErrorReason(error) {
+	return error instanceof Error ? error.name : typeof error;
 }
 
 export function writeToolEvidence(slug, { apiName, result, server, prepared }) {

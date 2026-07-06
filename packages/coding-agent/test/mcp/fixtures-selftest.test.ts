@@ -41,8 +41,10 @@ describe("MCP fixture servers", () => {
 
 		await client.close();
 		clients.pop();
-		expect(pid).toBeTypeOf("number");
-		await assertProcessDead(pid!);
+		if (pid === null) {
+			throw new Error("stdio fixture transport did not expose a pid");
+		}
+		await assertProcessDead(pid);
 	});
 
 	it("serves generated tools over streamable HTTP and expires sessions with 404", async () => {
@@ -83,13 +85,17 @@ describe("MCP fixture servers", () => {
 	});
 
 	it("surfaces EOF when a stdio fixture crashes after the first call", async () => {
-		const { client } = await connectToStdioFixture(["--tools", "1", "--crash-after", "1"]);
+		const { client, transport } = await connectToStdioFixture(["--tools", "1", "--crash-after", "1"]);
 		clients.push(client);
+		const pid = transport.pid;
+		if (pid === null) {
+			throw new Error("stdio fixture transport did not expose a pid");
+		}
 
 		const first = await client.callTool({ name: "tool_1", arguments: {} });
 		expect(first.isError).not.toBe(true);
 
-		await new Promise((resolve) => setTimeout(resolve, 80));
+		await assertProcessDead(pid);
 		await expect(client.callTool({ name: "tool_1", arguments: {} })).rejects.toThrow(
 			/closed|Connection|EOF|Not connected/i,
 		);

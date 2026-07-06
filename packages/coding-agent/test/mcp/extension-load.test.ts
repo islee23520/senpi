@@ -1,24 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createEventBus } from "../../src/core/event-bus.ts";
 import { builtinExtensions } from "../../src/core/extensions/builtin/index.ts";
 import { getMcpService, resetMcpServiceForTests } from "../../src/core/extensions/builtin/mcp/service.ts";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	ExtensionHandler,
-	SessionShutdownEvent,
-	SessionStartEvent,
-} from "../../src/core/extensions/types.ts";
-
-type EventHandler = ExtensionHandler<unknown>;
-type EventHandlers = Map<string, EventHandler[]>;
-
-interface RecordedExtensionApi {
-	api: ExtensionAPI;
-	events: EventHandlers;
-	registerTool: ReturnType<typeof vi.fn<ExtensionAPI["registerTool"]>>;
-	registerCommand: ReturnType<typeof vi.fn<ExtensionAPI["registerCommand"]>>;
-	registerFlag: ReturnType<typeof vi.fn<ExtensionAPI["registerFlag"]>>;
-}
+import { createExtensionRuntime, loadExtensionFromFactory } from "../../src/core/extensions/loader.ts";
+import type { Extension, SessionShutdownEvent, SessionStartEvent } from "../../src/core/extensions/types.ts";
 
 describe("mcp builtin extension load", () => {
 	beforeEach(() => {
@@ -29,26 +14,22 @@ describe("mcp builtin extension load", () => {
 		expect(builtinExtensions.some((extension) => extension.id === "mcp")).toBe(true);
 	});
 
-	it("keeps the factory no-op without session/config work", () => {
-		const entry = getMcpBuiltinEntry();
-		const recorded = createRecordedExtensionApi();
+	it("keeps the factory no-op without session/config work", async () => {
+		const extension = await loadMcpBuiltinExtension();
 
-		entry.factory(recorded.api);
-
-		expect(recorded.registerTool).not.toHaveBeenCalled();
-		expect(recorded.registerCommand).not.toHaveBeenCalled();
-		expect(recorded.registerFlag).not.toHaveBeenCalled();
-		expect(recorded.events.get("session_start")).toHaveLength(1);
-		expect(recorded.events.get("session_shutdown")).toHaveLength(1);
+		expect(extension.tools.size).toBe(0);
+		expect(extension.commands.size).toBe(0);
+		expect(extension.flags.size).toBe(0);
+		expect(extension.handlers.get("session_start")).toHaveLength(1);
+		expect(extension.handlers.get("session_shutdown")).toHaveLength(1);
 	});
 
 	it("retains the singleton across session switches and disposes only for quit or reload", async () => {
 		for (const reason of ["new", "resume", "fork"] as const) {
-			const recorded = createRecordedExtensionApi();
-			getMcpBuiltinEntry().factory(recorded.api);
+			const extension = await loadMcpBuiltinExtension();
 
-			await emitSessionStart(recorded.events, "startup");
-			await emitSessionShutdown(recorded.events, reason);
+			await emitSessionStart(extension, "startup");
+			await emitSessionShutdown(extension, reason);
 
 			expect(getMcpService().getSnapshot()).toMatchObject({
 				disposed: false,
@@ -61,14 +42,13 @@ describe("mcp builtin extension load", () => {
 		}
 
 		for (const reason of ["quit", "reload"] as const) {
-			const recorded = createRecordedExtensionApi();
-			getMcpBuiltinEntry().factory(recorded.api);
+			const extension = await loadMcpBuiltinExtension();
 
-			await emitSessionStart(recorded.events, "startup");
-			await emitSessionStart(recorded.events, "resume");
+			await emitSessionStart(extension, "startup");
+			await emitSessionStart(extension, "resume");
 			const serviceBeforeShutdown = getMcpService();
-			await emitSessionShutdown(recorded.events, reason);
-			await emitSessionShutdown(recorded.events, reason);
+			await emitSessionShutdown(extension, reason);
+			await emitSessionShutdown(extension, reason);
 
 			expect(serviceBeforeShutdown.getSnapshot()).toMatchObject({
 				disposed: true,
@@ -83,12 +63,11 @@ describe("mcp builtin extension load", () => {
 	});
 
 	it("creates a usable singleton for a new session after reload disposal", async () => {
-		const recorded = createRecordedExtensionApi();
-		getMcpBuiltinEntry().factory(recorded.api);
+		const extension = await loadMcpBuiltinExtension();
 
-		await emitSessionStart(recorded.events, "startup");
+		await emitSessionStart(extension, "startup");
 		const serviceBeforeReload = getMcpService();
-		await emitSessionShutdown(recorded.events, "reload");
+		await emitSessionShutdown(extension, "reload");
 
 		expect(serviceBeforeReload.getSnapshot()).toMatchObject({
 			disposed: true,
@@ -97,7 +76,7 @@ describe("mcp builtin extension load", () => {
 			hasSessionContext: false,
 		});
 
-		await emitSessionStart(recorded.events, "reload");
+		await emitSessionStart(extension, "reload");
 		const serviceAfterReload = getMcpService();
 
 		expect(serviceAfterReload).not.toBe(serviceBeforeReload);
@@ -114,40 +93,34 @@ describe("mcp builtin extension load", () => {
 
 function getMcpBuiltinEntry() {
 	const entry = builtinExtensions.find((extension) => extension.id === "mcp");
-	expect(entry).toBeDefined();
-	return entry!;
+	if (!entry) {
+		throw new Error("mcp builtin extension entry was not registered");
+	}
+	return entry;
 }
 
-function createRecordedExtensionApi(): RecordedExtensionApi {
-	const events: EventHandlers = new Map();
-	const registerTool = vi.fn<ExtensionAPI["registerTool"]>();
-	const registerCommand = vi.fn<ExtensionAPI["registerCommand"]>();
-	const registerFlag = vi.fn<ExtensionAPI["registerFlag"]>();
-	const api = {
-		on(event: string, handler: EventHandler): void {
-			const handlers = events.get(event) ?? [];
-			handlers.push(handler);
-			events.set(event, handlers);
-		},
-		registerTool,
-		registerCommand,
-		registerFlag,
-	} as unknown as ExtensionAPI;
-	return { api, events, registerTool, registerCommand, registerFlag };
+function loadMcpBuiltinExtension(): Promise<Extension> {
+	return loadExtensionFromFactory(
+		getMcpBuiltinEntry().factory,
+		process.cwd(),
+		createEventBus(),
+		createExtensionRuntime(),
+		"<mcp-builtin-test>",
+	);
 }
 
-async function emitSessionStart(events: EventHandlers, reason: SessionStartEvent["reason"]): Promise<void> {
+async function emitSessionStart(extension: Extension, reason: SessionStartEvent["reason"]): Promise<void> {
 	const event: SessionStartEvent = { type: "session_start", reason };
-	await emit(events, "session_start", event);
+	await emit(extension, "session_start", event);
 }
 
-async function emitSessionShutdown(events: EventHandlers, reason: SessionShutdownEvent["reason"]): Promise<void> {
+async function emitSessionShutdown(extension: Extension, reason: SessionShutdownEvent["reason"]): Promise<void> {
 	const event: SessionShutdownEvent = { type: "session_shutdown", reason };
-	await emit(events, "session_shutdown", event);
+	await emit(extension, "session_shutdown", event);
 }
 
-async function emit(events: EventHandlers, name: string, event: unknown): Promise<void> {
-	for (const handler of events.get(name) ?? []) {
-		await handler(event, {} as ExtensionContext);
+async function emit(extension: Extension, name: string, event: unknown): Promise<void> {
+	for (const handler of extension.handlers.get(name) ?? []) {
+		await handler(event, {});
 	}
 }

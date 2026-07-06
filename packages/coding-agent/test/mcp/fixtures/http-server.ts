@@ -112,7 +112,7 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
 			try {
 				resolve(raw ? JSON.parse(raw) : undefined);
 			} catch (error) {
-				reject(error);
+				reject(error instanceof Error ? error : new Error(String(error)));
 			}
 		});
 		req.on("error", reject);

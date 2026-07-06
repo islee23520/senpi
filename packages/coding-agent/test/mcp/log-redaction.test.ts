@@ -194,9 +194,11 @@ https://example.invalid/path?client_secret=${token}`);
 
 	it("degrades to ring-buffer-only with one warning when the sink is unwritable", () => {
 		const agentDir = process.env.SENPI_CODING_AGENT_DIR;
-		expect(agentDir).toBeDefined();
-		const logDir = join(agentDir!, "logs", "mcp");
-		chmodSync(join(agentDir!, ".."), 0o500);
+		if (agentDir === undefined) {
+			throw new Error("SENPI_CODING_AGENT_DIR was not initialized for log redaction test");
+		}
+		const logDir = join(agentDir, "logs", "mcp");
+		chmodSync(join(agentDir, ".."), 0o500);
 
 		const logger = createMcpLogger("unwritable", { logDir });
 

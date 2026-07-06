@@ -118,7 +118,7 @@ function waitForFirstStdoutLine(
 }
 
 function parseHttpReadyLine(line: string): { url: string; pid: number } {
-	const parsed = JSON.parse(line) as unknown;
+	const parsed: unknown = JSON.parse(line);
 	if (!isReadyLine(parsed)) {
 		throw new Error(`invalid HTTP fixture readiness line: ${line}`);
 	}
