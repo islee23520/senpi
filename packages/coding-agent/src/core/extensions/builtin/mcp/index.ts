@@ -40,6 +40,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 			const systemPrompt = injectMcpInstructions(event.systemPrompt);
 			return systemPrompt === undefined ? undefined : { systemPrompt };
 		} catch (error) {
+			if (!(error instanceof Error)) throw error;
 			await reportMcpAsyncError("mcp.before_agent_start", error, sink);
 			return undefined;
 		}
