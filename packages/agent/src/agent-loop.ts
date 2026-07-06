@@ -716,25 +716,25 @@ function isSequentialToolCall(currentContext: AgentContext, toolCall: AgentToolC
 type PreparedToolCall = {
 	kind: "prepared";
 	toolCall: AgentToolCall;
-	tool: AgentTool<any>;
+	tool: AgentTool;
 	args: unknown;
 };
 
 type ImmediateToolCallOutcome = {
 	kind: "immediate";
 	toolCall: AgentToolCall;
-	result: AgentToolResult<any>;
+	result: AgentToolResult<unknown>;
 	isError: boolean;
 };
 
 type ExecutedToolCallOutcome = {
-	result: AgentToolResult<any>;
+	result: AgentToolResult<unknown>;
 	isError: boolean;
 };
 
 type FinalizedToolCallOutcome = {
 	toolCall: AgentToolCall;
-	result: AgentToolResult<any>;
+	result: AgentToolResult<unknown>;
 	isError: boolean;
 };
 
@@ -744,11 +744,11 @@ function shouldTerminateToolBatch(finalizedCalls: FinalizedToolCallOutcome[]): b
 
 export interface PreparedAgentToolCall {
 	toolCall: AgentToolCall;
-	tool: AgentTool<any>;
+	tool: AgentTool;
 	args: unknown;
 }
 
-export function prepareAgentToolCallArguments(tool: AgentTool<any>, toolCall: AgentToolCall): AgentToolCall {
+export function prepareAgentToolCallArguments(tool: AgentTool, toolCall: AgentToolCall): AgentToolCall {
 	if (!tool.prepareArguments) {
 		return toolCall;
 	}
@@ -758,11 +758,11 @@ export function prepareAgentToolCallArguments(tool: AgentTool<any>, toolCall: Ag
 	}
 	return {
 		...toolCall,
-		arguments: preparedArguments as Record<string, any>,
+		arguments: preparedArguments as Record<string, unknown>,
 	};
 }
 
-export function prepareAgentToolCall(tool: AgentTool<any>, toolCall: AgentToolCall): PreparedAgentToolCall {
+export function prepareAgentToolCall(tool: AgentTool, toolCall: AgentToolCall): PreparedAgentToolCall {
 	const preparedToolCall = prepareAgentToolCallArguments(tool, toolCall);
 	return {
 		toolCall: preparedToolCall,
@@ -930,7 +930,7 @@ async function finalizeExecutedToolCall(
 	};
 }
 
-function createErrorToolResult(message: string): AgentToolResult<any> {
+function createErrorToolResult(message: string): AgentToolResult<unknown> {
 	return {
 		content: [{ type: "text", text: message }],
 		details: {},

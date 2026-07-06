@@ -468,3 +468,23 @@ Direct external dependencies must use exact versions:
 
 Scope note:
 - The failing package-lock/package packages/senpi-codemode state is outside the allowed write/stage scope for this finalization task, so it was left untouched.
+
+
+## TODO 2 V1 GATE BLOCKER FIX
+
+Date: 2026-07-06
+Worktree: /Users/yeongyu/local-workspaces/senpi-wt/senpi-codemode
+
+Summary:
+- Fixed executeTool thrown-tool parity so thrown tool execution is converted to an error AgentToolResult, passed through tool_result hooks, and hook rewrites are honored.
+- Added regression coverage for a throwing tool observed and rewritten by a tool_result hook.
+- Split execute-tool tests so each execute-tool test file is under 250 pure LOC.
+- Removed explicit any from the agent-loop prepared-tool helper area.
+
+Evidence:
+- Full command output: .omo/evidence/task-6-fix-executeTool.txt
+- Real CLI QA artifact: local-ignore/qa-evidence/20260706-task-6-fix-executeTool/mock-loop-with-tool.txt
+- Focused tests: packages/coding-agent execute-tool glob passed, 2 files / 10 tests.
+- npm run check: passed.
+- LOC: execute-tool-hooks.test.ts 156, execute-tool.test.ts 195.
+- any scan: no hits in packages/agent/src/agent-loop.ts or execute-tool tests; remaining agent-session.ts hits are pre-existing Model<any> annotations and comments/prose.

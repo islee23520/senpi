@@ -1093,13 +1093,23 @@ export class AgentSession {
 			);
 		}
 
-		const result = await prepared.tool.execute(
-			prepared.toolCall.id,
-			prepared.args as never,
-			options?.signal,
-			options?.onUpdate as AgentToolUpdateCallback<unknown> | undefined,
-		);
-		const hookResult = await this._emitAfterToolCallHooks(prepared.toolCall, prepared.args, result, false);
+		let result: AgentToolResult<unknown>;
+		let isError = false;
+		try {
+			result = await prepared.tool.execute(
+				prepared.toolCall.id,
+				prepared.args as never,
+				options?.signal,
+				options?.onUpdate as AgentToolUpdateCallback<unknown> | undefined,
+			);
+		} catch (err) {
+			result = {
+				content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],
+				details: {},
+			};
+			isError = true;
+		}
+		const hookResult = await this._emitAfterToolCallHooks(prepared.toolCall, prepared.args, result, isError);
 
 		if (!hookResult) {
 			return result as AgentToolResult<TDetails>;
