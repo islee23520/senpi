@@ -1,10 +1,9 @@
 import type { ExtensionAPI, ExtensionContext, SessionShutdownEvent, SessionStartEvent } from "../../types.ts";
-import { collectToolCatalog, type McpToolCatalogEntry } from "./catalog.ts";
 import { loadMcpConfig, visitSpawnableMcpServers } from "./config.ts";
 import type { ResolvedMcpConfig, ResolvedMcpServer } from "./config-schema.ts";
 import { ServerConnection, type ServerConnectionState } from "./connection.ts";
-import { computeMcpExposurePolicy } from "./expose/policy.ts";
-import { registerMcpCatalogTools } from "./expose/register.ts";
+import { registerDirectMcpTools } from "./expose/session.ts";
+import { getMcpServerExposureStatus, type McpServerExposureStatus } from "./expose/status.ts";
 import { createMcpLogger, type McpLogger } from "./log.ts";
 
 export { registerToolsPreservingActiveSet } from "./active-set.ts";
@@ -47,11 +46,6 @@ export interface McpServerCounters {
 	errorCount: number;
 	totalLatencyMs: number;
 	reconnectCount: number;
-}
-
-export interface McpServerExposureStatus {
-	readonly hint?: string;
-	readonly toolCount: number | null;
 }
 
 interface McpConnectionEntry {
@@ -142,28 +136,7 @@ export class McpService {
 			return { toolCount: null };
 		}
 		const serverConfig = server.config;
-		try {
-			const result = await entry.connection.client.listTools({}, { timeout: 500 });
-			const catalog = result.tools.map((tool) => ({
-				annotations: tool.annotations,
-				connection: entry.connection,
-				description: tool.description,
-				requestTimeoutMs: serverConfig.requestTimeoutMs,
-				schema: tool.inputSchema,
-				server: name,
-				tool: tool.name,
-			}));
-			const policy = computeMcpExposurePolicy(catalog, serverConfig, config.settings);
-			return {
-				hint:
-					policy.filteredEntries.length === 0
-						? "No MCP tools matched includeTools/excludeTools filters."
-						: undefined,
-				toolCount: policy.activeEntries.length,
-			};
-		} catch {
-			return { toolCount: null };
-		}
+		return getMcpServerExposureStatus(name, entry.connection, serverConfig, config.settings);
 	}
 
 	recordCall(name: string, elapsedMs: number, failed: boolean): void {
@@ -246,22 +219,7 @@ export class McpService {
 	): Promise<void> {
 		const config = this.#config;
 		if (config === null) return;
-		const registeredEntries: McpToolCatalogEntry[] = [];
-		const activeEntries: McpToolCatalogEntry[] = [];
-		for (const entry of this.#connections.values()) {
-			const server = config.servers[entry.name];
-			if (server?.config === undefined) continue;
-			if (entry.connection.state !== "connected") continue;
-			const entries = await collectToolCatalog(entry.name, entry.connection, server.config);
-			const policy = computeMcpExposurePolicy(entries, server.config, config.settings);
-			for (const warning of policy.warnings) entry.logger.warn(warning);
-			registeredEntries.push(...policy.registeredEntries);
-			activeEntries.push(...policy.activeEntries);
-		}
-		if (registeredEntries.length === 0) return;
-		registerMcpCatalogTools(pi, registeredEntries, activeEntries, (message) =>
-			createMcpLogger("service").warn(message),
-		);
+		await registerDirectMcpTools(pi, config, this.#connections.values());
 	}
 
 	#serverSnapshot(name: string): McpServerSnapshot {

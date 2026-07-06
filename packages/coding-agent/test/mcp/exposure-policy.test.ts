@@ -112,12 +112,13 @@ describe("MCP Tier-A exposure policy", () => {
 	it("treats an includeTools filter matching zero tools as a non-error zero-exposure result", async () => {
 		const root = mcpRoot("zero-match");
 		setConfig(root, { fx: { ...stdioServer(["--tools", "5"]), includeTools: ["missing_*"] } });
-		const pi = capturingPi(["bash"]);
+		const pi = capturingPi(["bash", "mcp_fx_tool_1"]);
 
 		await attach(root, pi);
 
 		expect(pi.registeredTools).toEqual([]);
 		expect(pi.activeTools).toEqual(["bash"]);
+		expect(pi.setActiveCalls).toEqual([["bash"]]);
 		expect(logContains("fx", "0 exposed")).toBe(true);
 	});
 });

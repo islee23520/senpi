@@ -1,4 +1,5 @@
-import type { McpServerExposureStatus, McpServerSnapshot } from "./service.ts";
+import type { McpServerExposureStatus } from "./expose/status.ts";
+import type { McpServerSnapshot } from "./service.ts";
 
 export interface McpStatusRow {
 	readonly exposure: McpServerExposureStatus;
