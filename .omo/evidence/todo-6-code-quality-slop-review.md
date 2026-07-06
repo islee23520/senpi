@@ -1,44 +1,63 @@
-# Todo 6 Fix Code Quality / Slop Review
+# Todo 6 Post-Fix Code Quality / Slop Review
 
 Scope:
 
-- `packages/coding-agent/src/core/extensions/builtin/mcp/wrap.ts`
 - `packages/coding-agent/test/mcp/wrap.test.ts`
+- `packages/coding-agent/test/mcp/wrap-async.test.ts`
+
+## Change Summary
+
+- Split the oversized MCP wrapper test file by moving async wrapper and production logger coverage into `wrap-async.test.ts`.
+- Kept error taxonomy and raw async source guard coverage in `wrap.test.ts`.
+- No runtime/source behavior changed.
+
+## No RED Justification
+
+No RED run was required for this post-fix because the change is a test-only file split with unchanged assertions and imports adjusted only to match the new file boundary. The production logger regression remains covered by the focused passing test named `records wrapped error messages through the production MCP logger`.
+
+## LOC Guardrail
+
+Measured with both total `wc -l` and pure LOC excluding blank and `//` comment-only lines:
+
+- `packages/coding-agent/test/mcp/wrap.test.ts`: 108 total LOC, 97 pure LOC.
+- `packages/coding-agent/test/mcp/wrap-async.test.ts`: 194 total LOC, 172 pure LOC.
+
+Both modified test files are below the 250 pure LOC guardrail.
+
+Artifact: `local-ignore/qa-evidence/20260706-mcp-task-6-split/loc.txt`
 
 ## Programming Pass
 
 - No `any` introduced.
 - No inline imports introduced in checked TypeScript.
-- Erasable TypeScript only: interfaces, functions, and ordinary object narrowing.
-- Logger contract now matches the production `McpLogger` shape: `error(message, data?)`.
-- Error data is serialized to plain JSON-friendly fields: `name`, `message`, and optional `stack`.
-- Existing wrapper behavior is preserved: wrapped callbacks do not reject/crash, `notify` still receives the normalized `Error`, and logger failures still fall back to `console.error`.
+- Erasable TypeScript only: imports, interfaces, functions, classes, and object narrowing.
+- Test assertions and behavior are preserved across the split.
+- Temporary child-process scripts remain generated under OS temp directories and are cleaned by `afterEach`.
 
 ## Remove-AI-Slops Pass
 
-- Deletion ladder: no code is dead or speculative. The new serializer is required because production logger redaction/serialization intentionally treats plain `Error` as an object with no enumerable fields.
+- Deletion ladder: no test coverage was removed; async wrapper assertions were moved intact.
 - Obvious comments: none added.
-- Over-defensive code: no broad catch added. Existing logger/notify boundary catches are load-bearing because callbacks must not crash the agent.
-- Needlessly complex abstraction: one small serializer is shared by all log paths and avoids duplicating object construction at each call site.
-- Duplication/performance: no new repeated work or algorithmic change.
-- Oversized modules: unchanged and below the skill threshold for the touched files.
+- Over-defensive code: no new defensive branches were added.
+- Needlessly complex abstraction: no shared helper module was introduced; each test file owns only the helpers it needs.
+- Duplication/performance: no production code path changed.
+- Oversized modules: touched test files are now 97 and 172 pure LOC.
 
 ## Overfit Review
 
-- Previous test overfit to `MemoryLogger`, whose `error(scope, Error)` shape preserved `error.message` while production `createMcpLogger().error(message, data?)` wrote `{}`.
-- New regression uses real `createMcpLogger`, verifies both ring buffer and file output, and failed RED with the rejected shape:
-  `message:"prod.scope", data:{}` with no `prod boom`.
-- Existing `MemoryLogger` remains only for wrapper unit behavior; it now adapts the production-compatible `data.message` shape.
+- The production logger regression still uses real `createMcpLogger`, not only `MemoryLogger`.
+- The focused test verifies that `prod.scope` and `prod boom` are written to both ring buffer and file output.
+- Artifact: `local-ignore/qa-evidence/20260706-mcp-task-6-split/prod-logger-focused-test.txt`
 
-## Adversarial Review
+## Verification
 
-- `malformed_input/logger Error object`: covered by RED/GREEN production logger regression and manual safeTimer probe; a raw `Error` object no longer reaches logger data.
-- `misleading_success_output`: covered by artifact `local-ignore/qa-evidence/20260706-mcp-task-6-fix/prod-logger-probe.txt`, which inspects actual ring and file output.
-- `dirty_worktree/stale_state`: pre-existing dirty files were left unstaged/unmodified; only task-owned files are staged for commit.
-- `hung_or_long_commands`: focused test, mock-loop, and `npm run check` all exited normally.
-- `flaky_tests`: focused test was run RED and GREEN in the same turn; GREEN passed 9/9.
-- Irrelevant classes: network/provider auth exposure is N/A because mock-loop uses localhost fake providers and verified real auth unchanged.
+- Focused wrap tests: `cd packages/coding-agent && npx tsx ../../node_modules/vitest/dist/cli.js --run test/mcp/wrap.test.ts test/mcp/wrap-async.test.ts` passed 2 files / 9 tests.
+- Production logger focused test: `cd packages/coding-agent && npx tsx ../../node_modules/vitest/dist/cli.js --run test/mcp/wrap-async.test.ts -t "records wrapped error messages through the production MCP logger" --reporter verbose` passed 1 selected test.
+- Manual QA gate: `node .agents/skills/senpi-qa/scripts/mock-loop.mjs --with-tool --evidence mcp-task-6-split` passed 4/4 and reported real auth unchanged.
+- Check: `npm run check` exited 0.
+
+Evidence directory: `local-ignore/qa-evidence/20260706-mcp-task-6-split/`
 
 ## Residual Risk
 
-Low. The stack string is now present in MCP log data for async wrapper failures. The MCP logger already redacts data recursively before storing ring/file entries, and this change does not add new secret-bearing sources beyond the original thrown error content.
+Low. This is a test-only split; the only residual risk is import drift between split files, covered by the focused Vitest run and `npm run check`.
