@@ -314,3 +314,33 @@ ok  	github.com/code-yeongyu/senpi/packages/neo/internal/ui/transcript/terminali
 check:neo: packages/neo build+vet+test passed
 
 ## Final git diff --check scoped files
+
+## 2026-07-06 Task 12 rerun blocker addendum: JS const-await last-expression capture
+
+RED coverage:
+Command: cd packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/js-kernel.test.ts
+Result before evaluator fix: failed on the new exact regression cell.
+Failing test: JavaScriptKernel > captures the last expression after awaited statements.
+Cell:
+const y = await Promise.resolve(41)
+y + 1
+Expected ok true with valueRepr "42"; observed ok false.
+
+GREEN verification:
+Command: cd packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/js-kernel.test.ts
+Result: Test Files 1 passed (1); Tests 11 passed (11).
+
+Command: npm run check
+Result: passed.
+Summary: biome check, pinned deps, TS import check, shrinkwrap check, coding-agent install lock check, tsgo --noEmit, browser/web UI checks, and check:neo all exited 0.
+
+Direct worker-mode scenario:
+Command: npx tsx /tmp/senpi-js-last-expression-scenario.ts
+Output:
+{"mode":"worker","result":{"type":"result","cellId":"direct-scenario","ok":true,"valueRepr":"42","durationMs":3}}
+
+Scoped diff/LOC:
+Command: git diff --check -- packages/senpi-codemode/src/kernels/js/worker-indirect-eval.js packages/senpi-codemode/test/js-kernel.test.ts
+Result: passed with no output.
+Command: wc -l packages/senpi-codemode/src/kernels/js/worker-indirect-eval.js
+Result: 88 lines, under 250.

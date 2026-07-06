@@ -74,6 +74,13 @@ describe("JavaScriptKernel", () => {
 		});
 	});
 
+	it("captures the last expression after awaited statements", async () => {
+		await withKernel(async (kernel) => {
+			const run = await runCell(kernel, "const y = await Promise.resolve(41)\ny + 1");
+			expect(run.result).toMatchObject({ ok: true, valueRepr: "42" });
+		});
+	});
+
 	it("keeps a second queued cell behind an active tool call", async () => {
 		await withKernel(async (kernel) => {
 			const first = kernel.run({ cellId: "first", code: "return await tool.slow({ n: 1 })", timeoutMs: 2_000 });
