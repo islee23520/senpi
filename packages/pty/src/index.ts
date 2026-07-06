@@ -1,4 +1,5 @@
-import { loadNativePty, type NativePtyLoadResult, type NativePtyUnavailableDiagnostic } from "./native-loader.ts";
+import { loadNativePty, type NativePtyLoadResult } from "./native-loader.ts";
+import { TerminalSession as BaseTerminalSession, type TerminalSessionOptions } from "./session.ts";
 
 export type {
 	NativePtyBinding,
@@ -12,38 +13,26 @@ export {
 	type NativePtyRuntime,
 	NativePtySentinelMismatchError,
 } from "./native-loader.ts";
+export { TerminalScreen, type TerminalScreenOptions, type TerminalScreenSnapshot } from "./screen.ts";
+export {
+	type CreateNativeTerminalSession,
+	createTerminalSession,
+	TerminalSession,
+	type TerminalSessionBackend,
+	type TerminalSessionDataHandler,
+	type TerminalSessionDependencies,
+	type TerminalSessionExit,
+	type TerminalSessionExitError,
+	type TerminalSessionExitState,
+	type TerminalSessionHandle,
+	type TerminalSessionNativeOptions,
+	type TerminalSessionOperationResult,
+	type TerminalSessionOptions,
+} from "./session.ts";
 
-export interface PtySessionOptions {
-	readonly command?: string;
-	readonly args?: readonly string[];
-	readonly cwd?: string;
-	readonly env?: Readonly<Record<string, string | undefined>>;
-	readonly cols?: number;
-	readonly rows?: number;
-}
+export type PtySessionOptions = TerminalSessionOptions;
 
-export class PtySession {
-	readonly options: PtySessionOptions;
-	private readonly nativeLoadResult: NativePtyLoadResult;
-
-	constructor(options: PtySessionOptions = {}) {
-		this.options = {
-			...options,
-			args: options.args ? [...options.args] : undefined,
-			env: options.env ? { ...options.env } : undefined,
-		};
-		this.nativeLoadResult = loadNativePty();
-	}
-
-	get native(): NativePtyLoadResult {
-		return this.nativeLoadResult;
-	}
-
-	get unavailableDiagnostic(): NativePtyUnavailableDiagnostic | null {
-		if (this.nativeLoadResult.native !== null) return null;
-		return this.nativeLoadResult.diagnostic;
-	}
-}
+export class PtySession extends BaseTerminalSession {}
 
 export function loadPtyNative(): NativePtyLoadResult {
 	return loadNativePty();
