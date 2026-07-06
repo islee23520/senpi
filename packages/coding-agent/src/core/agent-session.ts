@@ -22,9 +22,14 @@ import type {
 	AgentMessage,
 	AgentState,
 	AgentTool,
+	AgentToolCall,
+	AgentToolResult,
+	AgentToolUpdateCallback,
+	PreparedAgentToolCall,
 	PrepareNextTurnContext,
 	ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
+import { prepareAgentToolCall } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai/compat";
 import {
 	cleanupSessionResources,
@@ -58,6 +63,8 @@ import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import type { ServiceTier } from "./extensions/builtin/service-tier.ts";
 import {
 	type ContextUsage,
+	ExecuteToolError,
+	type ExecuteToolOptions,
 	type ExtensionCommandContextActions,
 	type ExtensionErrorListener,
 	type ExtensionMode,
@@ -494,53 +501,66 @@ export class AgentSession {
 	 */
 	private _installAgentToolHooks(): void {
 		this.agent.beforeToolCall = async ({ toolCall, args }) => {
-			const runner = this._extensionRunner;
-			if (!runner.hasHandlers("tool_call")) {
-				return undefined;
-			}
-
-			await this._agentEventQueue;
-
-			try {
-				return await runner.emitToolCall({
-					type: "tool_call",
-					toolName: toolCall.name,
-					toolCallId: toolCall.id,
-					input: args as Record<string, unknown>,
-				});
-			} catch (err) {
-				if (err instanceof Error) {
-					throw err;
-				}
-				throw new Error(`Extension failed, blocking execution: ${String(err)}`);
-			}
+			return this._emitBeforeToolCallHooks(toolCall, args);
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
-			const runner = this._extensionRunner;
-			if (!runner.hasHandlers("tool_result")) {
-				return undefined;
-			}
+			return this._emitAfterToolCallHooks(toolCall, args, result, isError);
+		};
+	}
 
-			const hookResult = await runner.emitToolResult({
-				type: "tool_result",
+	private async _emitBeforeToolCallHooks(toolCall: AgentToolCall, args: unknown) {
+		const runner = this._extensionRunner;
+		if (!runner.hasHandlers("tool_call")) {
+			return undefined;
+		}
+
+		await this._agentEventQueue;
+
+		try {
+			return await runner.emitToolCall({
+				type: "tool_call",
 				toolName: toolCall.name,
 				toolCallId: toolCall.id,
 				input: args as Record<string, unknown>,
-				content: result.content,
-				details: result.details,
-				isError,
 			});
-
-			if (!hookResult) {
-				return undefined;
+		} catch (err) {
+			if (err instanceof Error) {
+				throw err;
 			}
+			throw new Error(`Extension failed, blocking execution: ${String(err)}`);
+		}
+	}
 
-			return {
-				content: hookResult.content,
-				details: hookResult.details,
-				isError: hookResult.isError ?? isError,
-			};
+	private async _emitAfterToolCallHooks(
+		toolCall: AgentToolCall,
+		args: unknown,
+		result: AgentToolResult<unknown>,
+		isError: boolean,
+	) {
+		const runner = this._extensionRunner;
+		if (!runner.hasHandlers("tool_result")) {
+			return undefined;
+		}
+
+		const hookResult = await runner.emitToolResult({
+			type: "tool_result",
+			toolName: toolCall.name,
+			toolCallId: toolCall.id,
+			input: args as Record<string, unknown>,
+			content: result.content,
+			details: result.details,
+			isError,
+		});
+
+		if (!hookResult) {
+			return undefined;
+		}
+
+		return {
+			content: hookResult.content,
+			details: hookResult.details,
+			isError: hookResult.isError ?? isError,
 		};
 	}
 
@@ -1021,6 +1041,75 @@ export class AgentSession {
 
 	getToolDefinition(name: string): ToolDefinition | undefined {
 		return this._toolDefinitions.get(name)?.definition;
+	}
+
+	async executeTool<TDetails = unknown>(
+		toolName: string,
+		params: unknown,
+		options?: ExecuteToolOptions<TDetails>,
+	): Promise<AgentToolResult<TDetails>> {
+		const activeTools = this.getActiveToolNames();
+		const tool = this.agent.state.tools.find((candidate) => candidate.name === toolName);
+		if (!tool) {
+			const knownToolNames = new Set(this._toolDefinitions.keys());
+			const code = knownToolNames.has(toolName) ? "inactive_tool" : "unknown_tool";
+			const activeList = activeTools.length > 0 ? activeTools.join(", ") : "(none)";
+			throw new ExecuteToolError(
+				code,
+				toolName,
+				code === "inactive_tool"
+					? `Tool ${toolName} is registered but inactive. Active tools: ${activeList}`
+					: `Unknown tool ${toolName}. Active tools: ${activeList}`,
+				activeTools,
+			);
+		}
+
+		const toolCall: AgentToolCall = {
+			type: "toolCall",
+			id: `codemode-${randomUUID()}`,
+			name: toolName,
+			arguments: params as Record<string, unknown>,
+		};
+
+		let prepared: PreparedAgentToolCall;
+		try {
+			prepared = prepareAgentToolCall(tool, toolCall);
+		} catch (err) {
+			throw new ExecuteToolError(
+				"invalid_params",
+				toolName,
+				err instanceof Error ? err.message : String(err),
+				activeTools,
+			);
+		}
+
+		const beforeResult = await this._emitBeforeToolCallHooks(prepared.toolCall, prepared.args);
+		if (beforeResult?.block) {
+			throw new ExecuteToolError(
+				"blocked",
+				toolName,
+				beforeResult.reason || "Tool execution was blocked",
+				activeTools,
+			);
+		}
+
+		const result = await prepared.tool.execute(
+			prepared.toolCall.id,
+			prepared.args as never,
+			options?.signal,
+			options?.onUpdate as AgentToolUpdateCallback<unknown> | undefined,
+		);
+		const hookResult = await this._emitAfterToolCallHooks(prepared.toolCall, prepared.args, result, false);
+
+		if (!hookResult) {
+			return result as AgentToolResult<TDetails>;
+		}
+
+		return {
+			content: hookResult.content ?? result.content,
+			details: (hookResult.details ?? result.details) as TDetails,
+			terminate: result.terminate,
+		};
 	}
 
 	/**
@@ -2701,6 +2790,7 @@ export class AgentSession {
 				setLabel: (entryId, label) => {
 					this.sessionManager.appendLabelChange(entryId, label);
 				},
+				executeTool: (toolName, params, options) => this.executeTool(toolName, params, options),
 				getActiveTools: () => this.getActiveToolNames(),
 				getAllTools: () => this.getAllTools(),
 				setActiveTools: (toolNames) => this.setActiveToolsByName(toolNames),
