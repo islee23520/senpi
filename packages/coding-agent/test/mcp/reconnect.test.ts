@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { McpServerConfig } from "../../src/core/extensions/builtin/mcp/config-schema.ts";
 import { ServerConnection } from "../../src/core/extensions/builtin/mcp/connection.ts";
 import { createMcpLogger } from "../../src/core/extensions/builtin/mcp/log.ts";
 import {
@@ -10,6 +8,7 @@ import {
 	getMcpReconnectDebugSnapshot,
 } from "../../src/core/extensions/builtin/mcp/reconnect.ts";
 import { getMcpService, resetMcpServiceForTests } from "../../src/core/extensions/builtin/mcp/service.ts";
+import { delay, readNumberFile, readNumberFileOrZero, serverConfig, waitFor } from "./fixtures/reconnect.ts";
 import {
 	attach,
 	capturingPi,
@@ -118,7 +117,7 @@ describe("MCP auto reconnect", () => {
 		if (connection === undefined) throw new Error("missing fx connection");
 		connection.markSuspended(new Error("test breaker open"));
 
-		await reconnectCapableService().reconnectServer("fx");
+		await getMcpService().reconnectServer("fx");
 
 		expect(getMcpService().getConnection("fx")?.state).toBe("connected");
 		expect(readNumberFile(counterFile)).toBe(2);
@@ -253,58 +252,3 @@ describe("MCP auto reconnect", () => {
 		expect(readNumberFile(callCounterFile)).toBe(1);
 	});
 });
-
-function readNumberFile(path: string): number {
-	return Number(readFileSync(path, "utf8").trim());
-}
-
-function readNumberFileOrZero(path: string): number {
-	try {
-		return readNumberFile(path);
-	} catch (error) {
-		if (isNodeErrorCode(error, "ENOENT")) return 0;
-		throw error;
-	}
-}
-
-function isNodeErrorCode(error: unknown, code: string): error is Error & { code: string } {
-	return error instanceof Error && "code" in error && error.code === code;
-}
-
-function reconnectCapableService(): { reconnectServer(name: string): Promise<void> } {
-	return getMcpService() as unknown as { reconnectServer(name: string): Promise<void> };
-}
-
-function delay(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function serverConfig(): McpServerConfig {
-	return {
-		args: [],
-		command: process.execPath,
-		connectTimeoutMs: 2000,
-		enabled: true,
-		exposure: "auto",
-		idleTimeoutMin: 10,
-		lifecycle: "lazy",
-		logLevel: "info",
-		requestTimeoutMs: 30_000,
-		type: "stdio",
-	};
-}
-
-async function waitFor(assertion: () => boolean, timeoutMs = 5000): Promise<void> {
-	const deadline = Date.now() + timeoutMs;
-	let lastError: unknown;
-	while (Date.now() < deadline) {
-		try {
-			if (assertion()) return;
-		} catch (error) {
-			lastError = error;
-		}
-		await delay(25);
-	}
-	if (lastError instanceof Error) throw lastError;
-	throw new Error("condition timed out");
-}

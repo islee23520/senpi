@@ -52,4 +52,3 @@ AssertionError: expected [Function] to throw error matching /ToolExecError: Erro
       Tests  2 failed | 6 passed (8)
    Start at  04:44:14
    Duration  6.18s (transform 1.04s, setup 10ms, import 1.68s, tests 4.41s, environment 0ms)
-

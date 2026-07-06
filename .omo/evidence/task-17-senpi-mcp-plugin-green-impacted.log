@@ -8,4 +8,3 @@ COMMAND: cd packages/coding-agent && npx tsx ../../node_modules/vitest/dist/cli.
       Tests  42 passed (42)
    Start at  04:26:44
    Duration  7.37s (transform 4.61s, setup 76ms, import 8.53s, tests 16.56s, environment 0ms)
-
