@@ -67,6 +67,13 @@ describe("JavaScriptKernel", () => {
 		});
 	});
 
+	it("supports bare top-level await", async () => {
+		await withKernel(async (kernel) => {
+			const run = await runCell(kernel, "await Promise.resolve(42)");
+			expect(run.result).toMatchObject({ ok: true, valueRepr: "42" });
+		});
+	});
+
 	it("keeps a second queued cell behind an active tool call", async () => {
 		await withKernel(async (kernel) => {
 			const first = kernel.run({ cellId: "first", code: "return await tool.slow({ n: 1 })", timeoutMs: 2_000 });

@@ -12,5 +12,6 @@ export async function awaitMaybePromise(value) {
 export function wrapUserCode(code) {
 	const persistentCode = code.replace(/(^|\n)\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/gu, "$1globalThis.$2 =");
 	if (/\breturn\b/u.test(persistentCode)) return `(async () => {\n${persistentCode}\n})()`;
+	if (/\bawait\b/u.test(persistentCode)) return `(async () => {\nreturn await (${persistentCode})\n})()`;
 	return persistentCode;
 }

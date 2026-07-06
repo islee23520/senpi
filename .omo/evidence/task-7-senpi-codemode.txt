@@ -219,6 +219,37 @@ packages/senpi-codemode/test/js-kernel.test.ts 204
 
 Checked 1343 files in 734ms. Fixed 1 file.
 
+## Task 12 append - JS kernel bare top-level await
+
+RED focused test before implementation:
+Command: cd packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/js-kernel.test.ts
+Output excerpt:
+FAIL  test/js-kernel.test.ts > JavaScriptKernel > supports bare top-level await
+AssertionError: expected { type: 'result', ... } to match object { ok: true, valueRepr: '42' }
+Received ok: false
+Test Files  1 failed (1)
+Tests  1 failed | 9 passed (10)
+
+GREEN focused test after implementation:
+Command: cd packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/js-kernel.test.ts
+Output: Test Files  1 passed (1); Tests  10 passed (10)
+
+Direct scenario:
+Command: cd packages/senpi-codemode && npx tsx -e "import { JavaScriptKernel } from './src/kernels/js/context-manager.ts'; void (async () => { const kernel = new JavaScriptKernel({ sessionId: 'direct-await', cwd: process.cwd(), parallelPoolWidth: 2 }); try { const result = await kernel.run({ cellId: 'direct-await-cell', code: 'await Promise.resolve(42)', timeoutMs: 2000 }); console.log(JSON.stringify(result)); } finally { await kernel.close(); } })();"
+Output: {"type":"result","cellId":"direct-await-cell","ok":true,"valueRepr":"42","durationMs":4}
+
+npm run check:
+Failed on existing out-of-scope warning:
+packages/senpi-codemode/test/py-kernel.test.ts:1:8 lint/correctness/noUnusedImports
+Per task scope, py/rb/jl files were not edited.
+
+Scoped diff:
+git diff --check passed with no output.
+git diff --numstat:
+1	0	packages/senpi-codemode/src/kernels/js/worker-indirect-eval.js
+7	0	packages/senpi-codemode/test/js-kernel.test.ts
+Total scoped LOC delta: 8 added lines, 0 deleted lines, <=250.
+
 > check:pinned-deps
 > node scripts/check-pinned-deps.mjs
 
