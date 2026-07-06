@@ -1101,6 +1101,17 @@ await runRpcMode(runtime);
 
 See [RPC documentation](rpc.md) for the JSON protocol.
 
+### App Server Mode
+
+App Server mode is a CLI run mode for Codex-compatible app and editor integrations. Use it when a client expects the Codex app-server JSON-RPC method names, notification stream, and thread lifecycle instead of senpi's SDK object model.
+
+```bash
+senpi app-server --listen ws://127.0.0.1:18990
+senpi app-server --listen stdio://
+```
+
+See [App Server documentation](app-server.md) for activation, framing, method coverage, and compatibility notes.
+
 ## RPC Mode Alternative
 
 For subprocess-based integration without building with the SDK, use the CLI directly:
