@@ -8,10 +8,10 @@
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  test/mcp/log-redaction.test.ts > mcp log redaction > redacts non-bearer authorization header values
-AssertionError: expected 'Authorization: <redacted:0e35f6e9> ab…' not to contain 'abc123'
+AssertionError: expected 'Authorization: <redacted:0e35f6e9> ab…' not to contain '<redacted:fixture-secret>'
 
-Expected: "abc123"
-Received: "Authorization: <redacted:0e35f6e9> abc123"
+Expected: "<redacted:fixture-secret>"
+Received: "Authorization: <redacted:0e35f6e9> <redacted:fixture-secret>"
 
  ❯ test/mcp/log-redaction.test.ts:80:24
      78|   const redacted = redactMcpLogText(`Authorization: Basic ${secret}`);
@@ -123,10 +123,10 @@ check:neo: packages/neo build+vet+test passed
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  test/mcp/log-redaction.test.ts > mcp log redaction > serializes BigInt data without dropping the log entry
-AssertionError: expected '{"timestamp":"2026-07-06T03:37:18.515…' not to contain 'abc123'
+AssertionError: expected '{"timestamp":"2026-07-06T03:37:18.515…' not to contain '<redacted:fixture-secret>'
 
-Expected: "abc123"
-Received: "{"timestamp":"2026-07-06T03:37:18.515Z","server":"bigint-data","level":"info","severity":6,"channel":"server","message":"request Authorization: Basic <redacted:6ca13d52>","data":{"headers":{"Authorization":"Basic abc123"},"count":"1","nested":{"values":["2"]}}}"
+Expected: "<redacted:fixture-secret>"
+Received: "{"timestamp":"2026-07-06T03:37:18.515Z","server":"bigint-data","level":"info","severity":6,"channel":"server","message":"request Authorization: Basic <redacted:6ca13d52>","data":{"headers":{"Authorization":"Basic <redacted:fixture-secret>"},"count":"1","nested":{"values":["2"]}}}"
 
  ❯ test/mcp/log-redaction.test.ts:99:25
      97|   const fileText = readFileSync(logger.filePath, "utf8");
@@ -203,8 +203,9 @@ ok  	github.com/code-yeongyu/senpi/packages/neo/internal/theme	(cached)
 check:neo: packages/neo build+vet+test passed
 
 # Manual QA artifacts
+Evidence sanitization note: this tracked RED/GREEN transcript preserves the failing assertions, but fixture Authorization values and token-shaped sidecar names were replaced with `<redacted:fixture-secret>` during Wave 0 evidence repair.
 manual logger QA: local-ignore/qa-evidence/20260706-mcp-log-task4-fix/manual-qa.txt
-raw secret grep matches: local-ignore/qa-evidence/20260706-mcp-log-task4-fix/grep-raw-abc123.matches (empty)
+raw secret grep matches: local-ignore/qa-evidence/20260706-mcp-log-task4-fix/grep-raw-<redacted:fixture-secret>.matches (empty)
 combined logger sinks: local-ignore/qa-evidence/20260706-mcp-log-task4-fix/combined-log.txt
 senpi QA CLI smoke: local-ignore/qa-evidence/20260706-mcp-log-task4-fix/senpi-qa-cli-smoke.txt
 cleanup: /tmp/senpi-mcp-log-task4-fix.mts removed; temp QA dir removed; no matching vitest/tsx QA processes

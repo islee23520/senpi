@@ -27,7 +27,7 @@ Artifacts:
 - `local-ignore/qa-evidence/20260706-mcp-log-task4-fix2/manual-qa-run.log`
 - `local-ignore/qa-evidence/20260706-mcp-log-task4-fix2/manual-qa.txt`
 - `local-ignore/qa-evidence/20260706-mcp-log-task4-fix2/combined-log.txt`
-- `local-ignore/qa-evidence/20260706-mcp-log-task4-fix2/grep-raw-abc123.matches` (0 bytes)
+- `local-ignore/qa-evidence/20260706-mcp-log-task4-fix2/grep-raw-<redacted:fixture-secret>.matches` (0 bytes)
 
 Scenario: Mandatory senpi-qa real CLI mock loop.
 Invocation: `node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test`

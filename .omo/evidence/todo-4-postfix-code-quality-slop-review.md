@@ -56,7 +56,7 @@ Adversarial review:
 - sensitive_key_bigint_data: PASS, focused regression and manual QA cover `{ auth: { count: 1n } }`.
 - cyclic_sensitive_object: PASS, focused regression covers a self-referential sensitive object.
 - basic_authorization_redaction: PASS, manual QA covers Basic Authorization and raw secret absence.
-- raw_secret_grep: PASS, `grep-raw-abc123.matches` is 0 bytes for captured logger sinks.
+- raw_secret_grep: PASS, `grep-raw-<redacted:fixture-secret>.matches` is 0 bytes for captured logger sinks.
 - misleading_success_output: PASS, RED artifact confirms the pre-fix failure and GREEN artifacts confirm the fix.
 - dirty/stale state: PASS, unrelated untracked evidence files were observed and not staged.
 - flaky tests: PASS, focused suite passed twice after the fix.
