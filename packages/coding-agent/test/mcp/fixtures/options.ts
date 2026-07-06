@@ -10,6 +10,7 @@ export interface FixtureOptions {
 	port: number;
 	expireSession: boolean;
 	bearerToken: string | undefined;
+	spawnGrandchild: boolean;
 }
 
 export function parseFixtureOptions(argv: readonly string[]): FixtureOptions {
@@ -25,6 +26,7 @@ export function parseFixtureOptions(argv: readonly string[]): FixtureOptions {
 		port: readIntegerFlag(argv, "--port", 0),
 		expireSession: argv.includes("--expire-session"),
 		bearerToken: readStringFlag(argv, "--bearer"),
+		spawnGrandchild: argv.includes("--spawn-grandchild"),
 	};
 	validateArgs(argv, options);
 	return options;
@@ -91,7 +93,7 @@ function validateArgs(argv: readonly string[], options: FixtureOptions): void {
 		"--port",
 		"--bearer",
 	]);
-	const bare = new Set(["--wedge", "--iserror-tool", "--emit-list-changed", "--expire-session"]);
+	const bare = new Set(["--wedge", "--iserror-tool", "--emit-list-changed", "--expire-session", "--spawn-grandchild"]);
 	for (let index = 0; index < argv.length; index++) {
 		const arg = argv[index];
 		if (valued.has(arg)) {
