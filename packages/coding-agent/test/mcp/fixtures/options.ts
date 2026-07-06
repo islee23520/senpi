@@ -1,6 +1,8 @@
 export interface FixtureOptions {
 	toolCount: number;
 	slowStartMs: number;
+	spawnCounterFile: string | undefined;
+	crashOnStart: boolean;
 	crashAfterCalls: number | null;
 	wedge: boolean;
 	isErrorTool: boolean;
@@ -17,6 +19,8 @@ export function parseFixtureOptions(argv: readonly string[]): FixtureOptions {
 	const options: FixtureOptions = {
 		toolCount: readIntegerFlag(argv, "--tools", 1),
 		slowStartMs: readIntegerFlag(argv, "--slow-start", 0),
+		spawnCounterFile: readStringFlag(argv, "--spawn-counter-file"),
+		crashOnStart: argv.includes("--crash-on-start"),
 		crashAfterCalls: readOptionalIntegerFlag(argv, "--crash-after"),
 		wedge: argv.includes("--wedge"),
 		isErrorTool: argv.includes("--iserror-tool"),
@@ -87,13 +91,21 @@ function validateArgs(argv: readonly string[], options: FixtureOptions): void {
 	const valued = new Set([
 		"--tools",
 		"--slow-start",
+		"--spawn-counter-file",
 		"--crash-after",
 		"--huge-output-tool",
 		"--instructions",
 		"--port",
 		"--bearer",
 	]);
-	const bare = new Set(["--wedge", "--iserror-tool", "--emit-list-changed", "--expire-session", "--spawn-grandchild"]);
+	const bare = new Set([
+		"--wedge",
+		"--crash-on-start",
+		"--iserror-tool",
+		"--emit-list-changed",
+		"--expire-session",
+		"--spawn-grandchild",
+	]);
 	for (let index = 0; index < argv.length; index++) {
 		const arg = argv[index];
 		if (valued.has(arg)) {
