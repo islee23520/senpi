@@ -109,6 +109,21 @@ export function parseError(): JsonRpcError {
 	return { code: -32700, message: "Parse error" };
 }
 
+/**
+ * Base class for handler-thrown errors that carry an intended JSON-RPC error
+ * payload. The method registry returns `rpcError` verbatim instead of masking
+ * the failure as a -32603 internal error.
+ */
+export class RpcHandlerError extends Error {
+	readonly rpcError: JsonRpcError;
+
+	constructor(error: JsonRpcError) {
+		super(error.message);
+		this.name = "RpcHandlerError";
+		this.rpcError = error;
+	}
+}
+
 export function invalidRequestError(): JsonRpcError {
 	return { code: -32600, message: "Invalid request" };
 }

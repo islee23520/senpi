@@ -5,6 +5,7 @@ import {
 	type JsonRpcError,
 	methodNotFoundError,
 	notInitializedError,
+	RpcHandlerError,
 } from "./errors.ts";
 
 export type RequestId = string | number | null;
@@ -85,6 +86,9 @@ class InMemoryMethodRegistry implements MethodRegistry {
 			const result = await registration.handler({ connection, request });
 			return { id: request.id, result };
 		} catch (error) {
+			if (error instanceof RpcHandlerError) {
+				return { id: request.id, error: error.rpcError };
+			}
 			return { id: request.id, error: internalError(error instanceof Error ? error.message : String(error)) };
 		}
 	}

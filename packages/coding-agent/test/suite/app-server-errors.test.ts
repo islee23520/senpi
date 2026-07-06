@@ -10,6 +10,7 @@ import {
 	notInitializedError,
 	overloadedError,
 	parseError,
+	RpcHandlerError,
 	serializeCodexErrorInfo,
 } from "../../src/modes/app-server/rpc/errors.ts";
 import { createRegistry } from "../../src/modes/app-server/rpc/registry.ts";
@@ -155,6 +156,26 @@ describe("app-server method registry", () => {
 
 		// Then: the thrown error is converted to a JSON-RPC internal error.
 		expect(response).toEqual({ id: 3, error: { code: -32603, message: "boom" } });
+	});
+
+	it("preserves typed JSON-RPC errors thrown by handlers instead of masking them as internal", async () => {
+		// Given: a handler that throws a typed invalid-params failure (e.g. the turn engine).
+		const registry = createRegistry();
+		const connection = { initialized: true, capabilities: { experimentalApi: true } };
+		registry.register("typed/m", {
+			handler: async () => {
+				throw new RpcHandlerError({ code: -32602, message: "Invalid params: input must be an array" });
+			},
+		});
+
+		// When: the method is dispatched.
+		const response = await registry.dispatch(connection, { id: 4, method: "typed/m" });
+
+		// Then: the intended code survives dispatch.
+		expect(response).toEqual({
+			id: 4,
+			error: { code: -32602, message: "Invalid params: input must be an array" },
+		});
 	});
 
 	it("allows initialize before the init gate and rejects repeated initialize", async () => {

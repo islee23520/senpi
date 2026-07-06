@@ -54,10 +54,16 @@ export function createAppServerWebSocketConnectionHandler(options: {
 				if (isBinary) return;
 				const parsed = parseNdjsonLine(data.toString("utf8"));
 				if (parsed.kind === "parse-error") {
-					void sendWebSocketMessage(websocket, parsed.message, options.outboundQueueBytes);
+					sendWebSocketMessage(websocket, parsed.message, options.outboundQueueBytes).catch((error: unknown) => {
+						terminateOnTransportError(websocket, error);
+					});
 					return;
 				}
-				void options.core.receive(connectionId, parsed);
+				// A rejected dispatch (e.g. the response send failing on a dying socket)
+				// must not surface as an unhandled rejection that kills the server.
+				options.core.receive(connectionId, parsed).catch((error: unknown) => {
+					terminateOnTransportError(websocket, error);
+				});
 			});
 			websocket.on("close", () => {
 				connections.delete(websocket);
@@ -105,6 +111,12 @@ function sendWebSocketMessage(
 			resolve();
 		});
 	});
+}
+
+function terminateOnTransportError(websocket: WebSocket, error: unknown): void {
+	const message = error instanceof Error ? error.message : String(error);
+	process.stderr.write(`app-server websocket transport error: ${message}\n`);
+	websocket.terminate();
 }
 
 function waitForSocketClose(websocket: WebSocket): Promise<void> {
