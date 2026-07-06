@@ -103,6 +103,22 @@ https://example.invalid/path?client_secret=${token}`);
 		}
 	});
 
+	it("redacts sensitive object values that contain BigInt data", () => {
+		const logger = createMcpLogger("sensitive-bigint");
+		const auth: { count: bigint; self?: unknown } = { count: 1n };
+		auth.self = auth;
+
+		expect(() => logger.info("probe", { auth })).not.toThrow();
+
+		const ringText = logger.getRingBuffer().join("\n");
+		const fileText = readFileSync(logger.filePath, "utf8");
+		for (const sinkText of [ringText, fileText]) {
+			expect(sinkText).toContain(expectedRedaction('{"count":"1","self":"[Circular]"}'));
+			expect(sinkText).not.toContain('"count":"1"');
+			expect(sinkText).not.toContain("[Circular]");
+		}
+	});
+
 	it("keeps the last 200 ring buffer lines and rotates the 0600 file at the cap", () => {
 		const logger = createMcpLogger("rotation/server", { maxFileBytes: 640 });
 

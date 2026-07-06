@@ -231,7 +231,15 @@ function redactMcpLogData(value: unknown, seen: WeakSet<object>): unknown {
 function stringifySecretValue(value: unknown): string {
 	if (typeof value === "string") return value;
 	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
-	return JSON.stringify(value);
+	const seen = new WeakSet<object>();
+	const json = JSON.stringify(value, (_key: string, item: unknown) => {
+		if (typeof item === "bigint") return item.toString();
+		if (typeof item !== "object" || item === null) return item;
+		if (seen.has(item)) return "[Circular]";
+		seen.add(item);
+		return item;
+	});
+	return json ?? String(value);
 }
 
 function redactionFor(secret: string): string {
