@@ -10,6 +10,7 @@ import {
 	getMcpServerExposureStatus,
 	type McpServerExposureStatus,
 } from "./expose/status.ts";
+import { configureMcpConnectionLifecycle, disposeMcpConnectionLifecycle } from "./idle.ts";
 import { createMcpLogger } from "./log.ts";
 import { buildMcpServerSnapshot } from "./service-snapshot.ts";
 import type {
@@ -72,7 +73,7 @@ export class McpService {
 		const entries = [...this.#connections.values()];
 		this.#connections.clear();
 		this.#connectionKeysByName.clear();
-		await Promise.all(entries.map((entry) => entry.connection.dispose()));
+		await Promise.all(entries.map((entry) => disposeEntryConnection(entry)));
 	}
 
 	isDisposed(): boolean {
@@ -159,7 +160,7 @@ export class McpService {
 			if (key === entry.key) continue;
 			this.#connections.delete(entry.key);
 			this.#connectionKeysByName.delete(entry.name);
-			disposals.push(entry.connection.dispose());
+			disposals.push(disposeEntryConnection(entry));
 		}
 		await Promise.all(disposals);
 
@@ -188,6 +189,7 @@ export class McpService {
 				createdAtMs: Date.now(),
 				counters: { callCount: 0, errorCount: 0, totalLatencyMs: 0, reconnectCount: 0 },
 			};
+			configureMcpConnectionLifecycle(connection, server.config, logger);
 			this.#connections.set(key, entry);
 			this.#connectionKeysByName.set(name, key);
 			if (shouldRaceMcpStartup(server.config.lifecycle)) {
@@ -255,6 +257,11 @@ export function getMcpService(): McpService {
 
 export function shouldDisposeMcpService(reason: SessionShutdownEvent["reason"]): reason is McpDisposeReason {
 	return reason === "quit" || reason === "reload";
+}
+
+async function disposeEntryConnection(entry: McpConnectionEntry): Promise<void> {
+	disposeMcpConnectionLifecycle(entry.connection);
+	await entry.connection.dispose();
 }
 
 export function resetMcpServiceForTests(): void {

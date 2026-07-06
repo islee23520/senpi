@@ -15,7 +15,7 @@ export function buildMcpServerSnapshot(
 		configHash: server?.configHash ?? null,
 		sourcePath: server?.sourcePath ?? null,
 		lifecycleState:
-			connection?.state === "idle" && entry?.cachedCatalog !== undefined
+			connection?.state === "idle" && connection.generation === 0 && entry?.cachedCatalog !== undefined
 				? "cached"
 				: (connection?.state ?? "not_spawned"),
 		generation: connection?.generation ?? null,

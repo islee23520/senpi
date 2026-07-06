@@ -8,6 +8,7 @@ import { registerToolsPreservingActiveSet } from "../active-set.ts";
 import type { McpToolCatalogEntry } from "../catalog.ts";
 import { ToolExecError } from "../errors.ts";
 import { ensureMcpToolCallConnection } from "../health.ts";
+import { runMcpConnectionLifecycleCall } from "../idle.ts";
 import {
 	buildMcpToolNames,
 	convertJsonSchemaToTypeBox,
@@ -88,17 +89,19 @@ async function callMcpTool(
 	label: string,
 ): Promise<Awaited<ReturnType<McpToolCatalogEntry["connection"]["client"]["callTool"]>>> {
 	try {
-		await ensureMcpToolCallConnection(entry.connection);
-		await entry.ensureConnected?.();
-		return await entry.connection.client.callTool({ name: entry.tool, arguments: args }, undefined, {
-			onprogress: (progress) => {
-				onUpdate?.({
-					content: [{ type: "text", text: formatProgress(label, progress) }],
-					details: { progress, server: entry.server, tool: entry.tool },
-				});
-			},
-			signal,
-			timeout: entry.requestTimeoutMs,
+		return await runMcpConnectionLifecycleCall(entry.connection, async () => {
+			await ensureMcpToolCallConnection(entry.connection);
+			await entry.ensureConnected?.();
+			return await entry.connection.client.callTool({ name: entry.tool, arguments: args }, undefined, {
+				onprogress: (progress) => {
+					onUpdate?.({
+						content: [{ type: "text", text: formatProgress(label, progress) }],
+						details: { progress, server: entry.server, tool: entry.tool },
+					});
+				},
+				signal,
+				timeout: entry.requestTimeoutMs,
+			});
 		});
 	} catch (error) {
 		throw new ToolExecError(`ToolExecError: ${errorLabel(error)}`, {
