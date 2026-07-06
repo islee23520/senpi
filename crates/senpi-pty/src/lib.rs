@@ -3,12 +3,15 @@ mod signals;
 
 pub use session::{PtyError, PtyExit, PtyResult, PtySession, PtySessionOptions};
 
-use napi::bindgen_prelude::{Buffer, Either3, Function, Result as NapiResult, Status, Uint8Array};
+use napi::bindgen_prelude::{
+    AsyncTask, Buffer, Either3, Env, Function, Result as NapiResult, Status, Task, Uint8Array,
+};
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 use napi::Error as NapiError;
 use napi_derive::napi;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 const PACKAGE_VERSION: &str = "2026.7.5-2";
@@ -70,13 +73,13 @@ impl NativePtySession {
     }
 
     #[napi(js_name = "waitExit")]
-    pub fn wait_exit(&mut self) -> NapiResult<NativePtyExit> {
-        let exit = self.open_session()?.wait().map_err(to_napi_error)?;
-        Ok(exit.into())
+    pub fn wait_exit(&mut self) -> NapiResult<AsyncTask<NativePtyWaitTask>> {
+        let waiter = self.open_session()?.wait_in_background().map_err(to_napi_error)?;
+        Ok(AsyncTask::new(NativePtyWaitTask { waiter: Some(waiter) }))
     }
 
     #[napi]
-    pub fn wait(&mut self) -> NapiResult<NativePtyExit> {
+    pub fn wait(&mut self) -> NapiResult<AsyncTask<NativePtyWaitTask>> {
         self.wait_exit()
     }
 }
@@ -191,4 +194,28 @@ impl From<PtyExit> for NativePtyExit {
 
 fn to_napi_error(error: PtyError) -> NapiError {
     NapiError::new(Status::GenericFailure, error.to_string())
+}
+
+pub struct NativePtyWaitTask {
+    waiter: Option<JoinHandle<PtyResult<PtyExit>>>,
+}
+
+impl Task for NativePtyWaitTask {
+    type Output = PtyExit;
+    type JsValue = NativePtyExit;
+
+    fn compute(&mut self) -> NapiResult<Self::Output> {
+        let waiter = self
+            .waiter
+            .take()
+            .ok_or_else(|| NapiError::new(Status::GenericFailure, "pty wait task already consumed"))?;
+        waiter
+            .join()
+            .map_err(|_| NapiError::new(Status::GenericFailure, "pty wait thread panicked"))?
+            .map_err(to_napi_error)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> NapiResult<Self::JsValue> {
+        Ok(output.into())
+    }
 }

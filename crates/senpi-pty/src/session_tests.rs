@@ -2,6 +2,7 @@ use super::{PtySession, PtySessionOptions};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(unix)]
 #[test]
 fn pty_session_streams_raw_bytes_and_exit_code() {
     let output = Arc::new(Mutex::new(Vec::new()));
@@ -34,6 +35,7 @@ fn pty_session_reports_nonexistent_command_error() {
     assert!(result.is_err());
 }
 
+#[cfg(unix)]
 #[test]
 fn pty_session_times_out_hung_command() {
     let mut session = PtySession::start(
@@ -50,6 +52,7 @@ fn pty_session_times_out_hung_command() {
     assert!(exit.timed_out);
 }
 
+#[cfg(unix)]
 #[test]
 fn pty_session_writes_stdin_round_trip() {
     let output = Arc::new(Mutex::new(Vec::new()));
@@ -68,6 +71,7 @@ fn pty_session_writes_stdin_round_trip() {
     assert!(String::from_utf8_lossy(&output.lock().unwrap()).contains("cat-round-trip"));
 }
 
+#[cfg(unix)]
 #[test]
 fn pty_session_resizes_reported_terminal_size() {
     let output = Arc::new(Mutex::new(Vec::new()));
@@ -86,6 +90,7 @@ fn pty_session_resizes_reported_terminal_size() {
     assert!(String::from_utf8_lossy(&output.lock().unwrap()).contains("33 101"));
 }
 
+#[cfg(unix)]
 #[test]
 fn pty_session_sends_signal_to_process_group() {
     let output = Arc::new(Mutex::new(Vec::new()));
@@ -107,6 +112,7 @@ fn pty_session_sends_signal_to_process_group() {
     assert!(String::from_utf8_lossy(&output.lock().unwrap()).contains("got-term"));
 }
 
+#[cfg(unix)]
 #[test]
 fn pty_session_kill_removes_child_process_tree() {
     let output = Arc::new(Mutex::new(Vec::new()));
@@ -127,6 +133,7 @@ fn pty_session_kill_removes_child_process_tree() {
     assert!(!process_exists(child_pid), "child pid {child_pid} still exists");
 }
 
+#[cfg(unix)]
 #[test]
 fn pty_session_write_after_exit_returns_benign_error() {
     let mut session = PtySession::start(PtySessionOptions::new("true"), |_| {}).unwrap();
@@ -149,6 +156,32 @@ fn wait_for_child_pid(output: &Arc<Mutex<Vec<u8>>>) -> u32 {
     child_pid.expect("child pid output")
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_pty_session_writes_resizes_kills_and_reports_exit() {
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&output);
+    let mut session = PtySession::start(
+        PtySessionOptions::new("cmd.exe")
+            .arg("/d")
+            .arg("/q")
+            .timeout(Duration::from_secs(5)),
+        move |chunk| seen.lock().unwrap().extend_from_slice(chunk),
+    )
+    .unwrap();
+
+    session.resize(100, 30).unwrap();
+    session.write(b"echo windows-pty-round-trip\r\n").unwrap();
+    wait_until(Duration::from_secs(3), || {
+        String::from_utf8_lossy(&output.lock().unwrap()).contains("windows-pty-round-trip")
+    });
+    session.kill().unwrap();
+    let exit = session.wait().unwrap();
+
+    assert!(exit.cancelled);
+    assert!(String::from_utf8_lossy(&output.lock().unwrap()).contains("windows-pty-round-trip"));
+}
+
 fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
@@ -162,6 +195,8 @@ fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
 
 #[cfg(unix)]
 fn process_exists(pid: u32) -> bool {
+    // SAFETY: libc::kill with signal 0 performs existence/permission checking only. The pid comes
+    // from test child output and no Rust memory is shared with libc.
     unsafe { libc::kill(pid as i32, 0) == 0 }
 }
 

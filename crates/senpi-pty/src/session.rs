@@ -237,6 +237,30 @@ impl PtySession {
         Ok(exit)
     }
 
+    pub fn wait_in_background(&mut self) -> PtyResult<JoinHandle<PtyResult<PtyExit>>> {
+        if let Some(exit) = &self.exit {
+            let exit = exit.clone();
+            return Ok(std::thread::spawn(move || Ok(exit)));
+        }
+        let mut child = self
+            .child
+            .take()
+            .ok_or_else(|| PtyError::new("pty session is closed"))?;
+        let finished = Arc::clone(&self.finished);
+        let cancelled = Arc::clone(&self.cancelled);
+        let timed_out = Arc::clone(&self.timed_out);
+
+        Ok(std::thread::spawn(move || {
+            let status = child.wait()?;
+            finished.store(true, Ordering::SeqCst);
+            Ok(PtyExit {
+                exit_code: Some(status.exit_code() as i32),
+                cancelled: cancelled.load(Ordering::SeqCst) || timed_out.load(Ordering::SeqCst),
+                timed_out: timed_out.load(Ordering::SeqCst),
+            })
+        }))
+    }
+
     fn signal_number(&mut self, signal: i32) -> PtyResult<()> {
         if self.finished.load(Ordering::SeqCst) {
             return Err(PtyError::new("pty session is closed"));

@@ -2,6 +2,7 @@ use senpi_pty::{PtySession, PtySessionOptions};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(unix)]
 #[test]
 fn manual_cat_resize_kill_transcript() {
     let cat_output = Arc::new(Mutex::new(Vec::new()));
@@ -63,6 +64,37 @@ fn manual_cat_resize_kill_transcript() {
     assert!(!process_exists(child_pid));
 }
 
+#[cfg(windows)]
+#[test]
+fn manual_windows_cmd_lifecycle_transcript() {
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&output);
+    let mut session = PtySession::start(
+        PtySessionOptions::new("cmd.exe")
+            .arg("/d")
+            .arg("/q")
+            .timeout(Duration::from_secs(5)),
+        move |chunk| seen.lock().unwrap().extend_from_slice(chunk),
+    )
+    .unwrap();
+
+    session.resize(100, 30).unwrap();
+    session.write(b"echo manual-windows-round-trip\r\n").unwrap();
+    wait_until(Duration::from_secs(3), || {
+        text(&output).contains("manual-windows-round-trip")
+    });
+    eprintln!("windows bytes: {:?}", text(&output));
+    session.kill().unwrap();
+    let exit = session.wait().unwrap();
+    eprintln!(
+        "windows exit: exit_code={:?} cancelled={} timed_out={}",
+        exit.exit_code, exit.cancelled, exit.timed_out
+    );
+
+    assert!(exit.cancelled);
+    assert!(text(&output).contains("manual-windows-round-trip"));
+}
+
 fn text(output: &Arc<Mutex<Vec<u8>>>) -> String {
     String::from_utf8_lossy(&output.lock().unwrap()).into_owned()
 }
@@ -91,6 +123,8 @@ fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
 
 #[cfg(unix)]
 fn process_exists(pid: u32) -> bool {
+    // SAFETY: libc::kill with signal 0 performs existence/permission checking only. The pid comes
+    // from the spawned manual QA child and no Rust memory is shared with libc.
     unsafe { libc::kill(pid as i32, 0) == 0 }
 }
 

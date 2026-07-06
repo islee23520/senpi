@@ -18,6 +18,9 @@ pub(crate) fn send_signal(
     fallback: &mut dyn ChildKiller,
 ) -> PtyResult<()> {
     if let Some(process_group) = process_group {
+        // SAFETY: libc::kill does not dereference Rust pointers. The process group id and signal
+        // are plain integers from portable-pty/libc constants, and the negative pid intentionally
+        // targets the child process group.
         let result = unsafe { libc::kill(-process_group, signal) };
         if result == 0 {
             return Ok(());

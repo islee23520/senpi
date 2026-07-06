@@ -590,4 +590,5 @@ module.exports = nativeBinding
 module.exports.PtySession = nativeBinding.PtySession
 module.exports.NativePtySession = nativeBinding.NativePtySession
 module.exports.__senpiPtyV2026_7_5 = nativeBinding.__senpiPtyV2026_7_5
+module.exports.startPtySession = nativeBinding.startPtySession
 module.exports.version = nativeBinding.version
