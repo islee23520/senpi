@@ -62,6 +62,19 @@ take precedence for built-in providers and reach even the localhost fake.
 `--with-tool` scripts two turns (model → `bash` tool call → final text) to prove
 the full loop iterates. It passes `--approve` for project trust.
 
+`--with-mcp-tool <tool> --tool-args '<json object>'` uses the same two-turn
+loop but emits an arbitrary MCP-style tool name such as `mcp_fx_tool_1`. Use it
+after an MCP fixture/runtime has registered that tool in the real CLI:
+
+```bash
+node .agents/skills/senpi-qa/scripts/mock-loop.mjs \
+  --with-mcp-tool mcp_fx_tool_1 \
+  --tool-args '{"value":"ok","mode":"alpha"}'
+```
+
+This proves the model can request a registered MCP tool through the live
+agent-loop surface; it does not start fixture servers by itself.
+
 ## B. In-process faux provider (for vitest-style assertions)
 
 For unit/integration assertions without spawning the CLI, use the faux provider

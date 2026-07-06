@@ -16,6 +16,7 @@
  *   node mock-loop.mjs --self-test                       # all three APIs round-trip
  *   node mock-loop.mjs --self-test --api anthropic-messages
  *   node mock-loop.mjs --with-tool [--api ...]           # full loop: model -> bash -> final text
+ *   node mock-loop.mjs --with-mcp-tool mcp_fx_tool_1 --tool-args '{"value":"ok"}'
  *   node mock-loop.mjs --run "prompt" [--api ...] [--evidence SLUG]
  */
 
@@ -111,20 +112,41 @@ async function selfTest(onlyApi) {
 }
 
 async function withTool(apiName) {
+	return withNamedTool({
+		apiName,
+		checkName: `mock-loop.mjs --with-tool (${apiName})`,
+		toolName: "bash",
+		toolArgs: { command: "echo TOOL-LOOP-OK-22b8" },
+		marker: "TOOL-LOOP-OK-22b8",
+		extraArgs: ["--approve"],
+	});
+}
+
+async function withMcpTool(apiName, toolName, toolArgs) {
+	return withNamedTool({
+		apiName,
+		checkName: `mock-loop.mjs --with-mcp-tool ${toolName} (${apiName})`,
+		toolName,
+		toolArgs,
+		marker: `MCP-TOOL-LOOP-OK:${toolName}`,
+		extraArgs: ["--approve"],
+	});
+}
+
+async function withNamedTool({ apiName, checkName, toolName, toolArgs, marker, extraArgs }) {
 	installCleanupHooks();
-	const checks = createChecks(`mock-loop.mjs --with-tool (${apiName})`);
+	const checks = createChecks(checkName);
 	const guard = guardRealAuth();
-	const toolMarker = "TOOL-LOOP-OK-22b8";
 	const { box, server, result } = await driveTurn({
 		apiName,
-		turns: [{ toolCalls: [{ name: "bash", args: { command: `echo ${toolMarker}` } }] }, { text: `Done: ${toolMarker}` }],
-		prompt: "Run the bash command and report the output.",
-		extraArgs: ["--approve"],
+		turns: [{ toolCalls: [{ name: toolName, args: toolArgs }] }, { text: `Done: ${marker}` }],
+		prompt: `Call the ${toolName} tool and report the output.`,
+		extraArgs,
 		timeoutMs: 120000,
 	});
 	checks.ok("CLI completed the multi-step loop", !result.timedOut, `code=${result.code}`);
 	checks.ok("two model turns served (loop iterated)", server.requests.length >= 2, `requests=${server.requests.length}`);
-	checks.ok("final assistant text returned", (result.stdout + result.stderr).includes(toolMarker));
+	checks.ok("final assistant text returned", (result.stdout + result.stderr).includes(marker));
 	checks.ok("real auth unchanged", (() => {
 		try {
 			return guard.assertUnchanged();
@@ -166,6 +188,16 @@ if (api && !API_PRESETS[api]) {
 	process.exit(2);
 }
 
+function parseToolArgs() {
+	const raw = flag("--tool-args");
+	if (!raw) return {};
+	try {
+		const parsed = JSON.parse(raw);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+	} catch {}
+	throw new Error("--tool-args must be a JSON object");
+}
+
 if (argv[0] === "--self-test") {
 	selfTest(api).catch((e) => {
 		process.stderr.write(`${e instanceof Error ? e.stack : String(e)}\n`);
@@ -176,6 +208,16 @@ if (argv[0] === "--self-test") {
 		process.stderr.write(`${e instanceof Error ? e.stack : String(e)}\n`);
 		process.exit(1);
 	});
+} else if (argv[0] === "--with-mcp-tool") {
+	Promise.resolve()
+		.then(() => {
+			const toolName = argv[1] || flag("--tool-name") || "mcp_fx_tool_1";
+			return withMcpTool(api || "openai-completions", toolName, parseToolArgs());
+		})
+		.catch((e) => {
+			process.stderr.write(`${e instanceof Error ? e.stack : String(e)}\n`);
+			process.exit(1);
+		});
 } else if (argv[0] === "--run") {
 	run(argv[1] || "say hello", api || "openai-completions", flag("--evidence")).catch((e) => {
 		process.stderr.write(`${e instanceof Error ? e.stack : String(e)}\n`);
@@ -187,6 +229,7 @@ if (argv[0] === "--self-test") {
 			"senpi-qa Channel 3 — Mock loop (zero real API calls)",
 			"  node mock-loop.mjs --self-test [--api <name>]   round-trip 1 or all 3 wire formats",
 			"  node mock-loop.mjs --with-tool [--api <name>]   full loop with a bash tool call",
+			"  node mock-loop.mjs --with-mcp-tool <tool> [--tool-args JSON]",
 			"  node mock-loop.mjs --run <prompt> [--api <name>]",
 			`  APIs: ${ALL_APIS.join(", ")}`,
 			"",

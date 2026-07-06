@@ -107,6 +107,7 @@ vars are stripped so only the inline mock key is ever used.
 node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test
 node .agents/skills/senpi-qa/scripts/mock-loop.mjs --self-test --api anthropic-messages
 node .agents/skills/senpi-qa/scripts/mock-loop.mjs --with-tool --api openai-responses
+node .agents/skills/senpi-qa/scripts/mock-loop.mjs --with-mcp-tool mcp_fx_tool_1 --tool-args '{"value":"ok"}'
 node .agents/skills/senpi-qa/scripts/mock-loop.mjs --run "summarize this repo" --evidence mock-summary
 ```
 
@@ -128,6 +129,7 @@ node .agents/skills/senpi-qa/scripts/cli-smoke.mjs --self-test
 | `scripts/rpc-drive.mjs --self-test` | `get_state` returns the documented `RpcSessionState`, no API call, auth unchanged |
 | `scripts/mock-loop.mjs --self-test` | scripted marker returns through the real loop via the mock provider; request used the mock model + key; zero real calls; auth unchanged |
 | `scripts/mock-loop.mjs --with-tool` | full loop: two model turns served, bash tool ran, final text returned |
+| `scripts/mock-loop.mjs --with-mcp-tool <tool>` | full loop with a scripted `mcp_*` tool call once the MCP fixture/runtime registers that tool |
 | `scripts/tui-smoke.mjs --self-test` | TUI boots, renders, accepts a keystroke, tears down; auth unchanged |
 | `scripts/cli-smoke.mjs --self-test` | `--help`/`--version`/`--list-models` work offline; unknown flag reported; auth unchanged |
 
