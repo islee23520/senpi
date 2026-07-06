@@ -6,7 +6,10 @@ export interface FixtureOptions {
 	crashAfterCalls: number | null;
 	wedge: boolean;
 	isErrorTool: boolean;
+	hugeSchemaTool: boolean;
 	hugeOutput: { bytes: number; lines: number } | null;
+	slowToolCallMs: number;
+	cancelLogFile: string | undefined;
 	emitListChanged: boolean;
 	instructions: string | undefined;
 	port: number;
@@ -24,7 +27,10 @@ export function parseFixtureOptions(argv: readonly string[]): FixtureOptions {
 		crashAfterCalls: readOptionalIntegerFlag(argv, "--crash-after"),
 		wedge: argv.includes("--wedge"),
 		isErrorTool: argv.includes("--iserror-tool"),
+		hugeSchemaTool: argv.includes("--huge-schema-tool"),
 		hugeOutput: readHugeOutput(argv),
+		slowToolCallMs: readIntegerFlag(argv, "--slow-tool-call", 0),
+		cancelLogFile: readStringFlag(argv, "--cancel-log"),
 		emitListChanged: argv.includes("--emit-list-changed"),
 		instructions: readStringFlag(argv, "--instructions"),
 		port: readIntegerFlag(argv, "--port", 0),
@@ -94,6 +100,8 @@ function validateArgs(argv: readonly string[], options: FixtureOptions): void {
 		"--spawn-counter-file",
 		"--crash-after",
 		"--huge-output-tool",
+		"--slow-tool-call",
+		"--cancel-log",
 		"--instructions",
 		"--port",
 		"--bearer",
@@ -102,6 +110,7 @@ function validateArgs(argv: readonly string[], options: FixtureOptions): void {
 		"--wedge",
 		"--crash-on-start",
 		"--iserror-tool",
+		"--huge-schema-tool",
 		"--emit-list-changed",
 		"--expire-session",
 		"--spawn-grandchild",

@@ -1,14 +1,12 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	SessionShutdownEvent,
-	SessionStartEvent,
-	ToolDefinition,
-} from "../../types.ts";
+import type { ExtensionAPI, ExtensionContext, SessionShutdownEvent, SessionStartEvent } from "../../types.ts";
+import { collectToolCatalog, type McpToolCatalogEntry } from "./catalog.ts";
 import { loadMcpConfig, visitSpawnableMcpServers } from "./config.ts";
 import type { ResolvedMcpConfig, ResolvedMcpServer } from "./config-schema.ts";
 import { ServerConnection, type ServerConnectionState } from "./connection.ts";
+import { registerMcpCatalogTools } from "./expose/register.ts";
 import { createMcpLogger } from "./log.ts";
+
+export { registerToolsPreservingActiveSet } from "./active-set.ts";
 
 type McpDisposeReason = Extract<SessionShutdownEvent["reason"], "quit" | "reload">;
 type McpSessionContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted">;
@@ -76,6 +74,7 @@ export class McpService {
 		});
 		this.#config = config;
 		await this.#syncFromConfig(config, options);
+		if (_pi !== undefined) await this.#registerDirectTools(_pi);
 	}
 
 	async handleSessionShutdown(event: SessionShutdownEvent): Promise<void> {
@@ -166,6 +165,23 @@ export class McpService {
 		}
 	}
 
+	async #registerDirectTools(
+		pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">,
+	): Promise<void> {
+		const config = this.#config;
+		if (config === null) return;
+		const entries: McpToolCatalogEntry[] = [];
+		for (const entry of this.#connections.values()) {
+			const server = config.servers[entry.name];
+			if (server?.config === undefined) continue;
+			if (server.config.exposure === "search" || server.config.exposure === "proxy") continue;
+			if (entry.connection.state !== "connected") continue;
+			entries.push(...(await collectToolCatalog(entry.name, entry.connection, server.config)));
+		}
+		if (entries.length === 0) return;
+		registerMcpCatalogTools(pi, entries, (message) => createMcpLogger("service").warn(message));
+	}
+
 	#serverSnapshot(name: string): McpServerSnapshot {
 		const server = this.#config?.servers[name];
 		const connection = this.getConnection(name);
@@ -193,18 +209,6 @@ export function getMcpService(): McpService {
 
 export function shouldDisposeMcpService(reason: SessionShutdownEvent["reason"]): reason is McpDisposeReason {
 	return reason === "quit" || reason === "reload";
-}
-
-export function registerToolsPreservingActiveSet(
-	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">,
-	tools: readonly ToolDefinition[],
-	intendedActiveTools: readonly string[] = pi.getActiveTools(),
-): void {
-	const intendedSet = [...intendedActiveTools];
-	for (const tool of [...tools].sort((left, right) => left.name.localeCompare(right.name))) {
-		pi.registerTool(tool);
-	}
-	pi.setActiveTools(intendedSet);
 }
 
 export function resetMcpServiceForTests(): void {
