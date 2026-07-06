@@ -27,7 +27,8 @@ export function wrapAsync<TArgs extends readonly unknown[]>(
 		try {
 			await fn(...args);
 		} catch (error) {
-			await reportMcpAsyncError(scope, error, sink);
+			const caughtError = error instanceof Error ? error : normalizeCaughtError(error);
+			await reportMcpAsyncError(scope, caughtError, sink);
 		}
 	};
 }
@@ -82,7 +83,8 @@ export async function reportMcpAsyncError(scope: string, error: unknown, sink: M
 	try {
 		await sink.notify(`MCP ${scope} failed: ${normalized.message}`, normalized);
 	} catch (notifyError) {
-		logError(`${scope}.notify`, normalizeError(notifyError), sink.logger);
+		const caughtNotifyError = notifyError instanceof Error ? notifyError : normalizeCaughtError(notifyError);
+		logError(`${scope}.notify`, caughtNotifyError, sink.logger);
 	}
 }
 
@@ -112,6 +114,10 @@ function serializeError(error: Error): SerializedError {
 
 function normalizeError(error: unknown): Error {
 	if (error instanceof Error) return error;
+	return normalizeCaughtError(error);
+}
+
+function normalizeCaughtError(error: unknown): Error {
 	if (typeof error === "string") return new Error(error);
 	return new Error(safeStringify(error));
 }

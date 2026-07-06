@@ -10,25 +10,28 @@ export const MCP_TOOL_NAME_MAX_LENGTH = 64;
 type WarnFn = (message: string) => void;
 
 export function buildMcpToolNames(entries: readonly McpToolNameEntry[], warn?: WarnFn): string[] {
-	const bases = entries.map((entry) => ellipsizeMiddle(buildBaseName(entry), MCP_TOOL_NAME_MAX_LENGTH));
-	const groups = new Map<string, number[]>();
-	for (let index = 0; index < bases.length; index += 1) {
-		const key = matcherKey(bases[index]!);
-		const indexes = groups.get(key) ?? [];
-		indexes.push(index);
-		groups.set(key, indexes);
+	const items = entries.map((entry, index) => ({
+		base: ellipsizeMiddle(buildBaseName(entry), MCP_TOOL_NAME_MAX_LENGTH),
+		entry,
+		index,
+	}));
+	const groups = new Map<string, typeof items>();
+	for (const item of items) {
+		const key = matcherKey(item.base);
+		const group = groups.get(key) ?? [];
+		group.push(item);
+		groups.set(key, group);
 	}
 
-	const names = [...bases];
-	for (const indexes of groups.values()) {
-		if (indexes.length < 2) continue;
-		warn?.(
-			`MCP tool name collision after normalization for '${bases[indexes[0]!]!}'; appended deterministic suffixes.`,
-		);
-		for (const index of indexes) {
-			const entry = entries[index]!;
-			const suffix = hashSuffix(entry);
-			names[index] = `${ellipsizeMiddle(bases[index]!, MCP_TOOL_NAME_MAX_LENGTH - suffix.length)}${suffix}`;
+	const names = items.map((item) => item.base);
+	for (const group of groups.values()) {
+		if (group.length < 2) continue;
+		const [first] = group;
+		if (!first) continue;
+		warn?.(`MCP tool name collision after normalization for '${first.base}'; appended deterministic suffixes.`);
+		for (const item of group) {
+			const suffix = hashSuffix(item.entry);
+			names[item.index] = `${ellipsizeMiddle(item.base, MCP_TOOL_NAME_MAX_LENGTH - suffix.length)}${suffix}`;
 		}
 	}
 	return names;

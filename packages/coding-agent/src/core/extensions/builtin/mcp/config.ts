@@ -110,7 +110,8 @@ function readTrustedConfig(
 function readConfigJson(path: string, trusted: boolean): JsonReadResult {
 	if (!existsSync(path)) return { raw: undefined };
 	try {
-		return { raw: JSON.parse(readFileSync(path, "utf-8")) as unknown };
+		const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
+		return { raw };
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);
 		if (trusted) throw new McpConfigValidationError(`Invalid MCP config at ${path}: ${reason}`);
