@@ -53,6 +53,20 @@ const AUTHORIZATION_VALUE_PATTERN =
 const BEARER_VALUE_PATTERN = /(\bBearer\s+)(?!<redacted:)([A-Za-z0-9._~+/=-]+)/gi;
 const KEY_VALUE_PATTERN =
 	/((?:"|')?[^"'\s:=,{}]*(?:api[_-]?key|key|token|secret|password|client_secret|auth)[^"'\s:=,{}]*(?:"|')?\s*[:=]\s*(?:"|')?)([^"',\s}\]&]+)/gi;
+const MCP_LOG_LEVELS: Record<string, McpLogLevelMapping> = {
+	emergency: { level: "emergency", severity: 0 },
+	alert: { level: "alert", severity: 1 },
+	critical: { level: "critical", severity: 2 },
+	crit: { level: "critical", severity: 2 },
+	error: { level: "error", severity: 3 },
+	err: { level: "error", severity: 3 },
+	warning: { level: "warning", severity: 4 },
+	warn: { level: "warning", severity: 4 },
+	notice: { level: "notice", severity: 5 },
+	informational: { level: "info", severity: 6 },
+	info: { level: "info", severity: 6 },
+	debug: { level: "debug", severity: 7 },
+};
 
 export function createMcpLogger(server: string, options: McpLoggerOptions = {}): McpLogger {
 	return new FileMcpLogger(server, options);
@@ -92,30 +106,7 @@ function redactMcpLogTextWithContext(text: string, context: RedactionContext): s
 }
 
 export function mapMcpLogLevel(level: string): McpLogLevelMapping {
-	switch (level) {
-		case "emergency":
-			return { level: "emergency", severity: 0 };
-		case "alert":
-			return { level: "alert", severity: 1 };
-		case "critical":
-		case "crit":
-			return { level: "critical", severity: 2 };
-		case "error":
-		case "err":
-			return { level: "error", severity: 3 };
-		case "warning":
-		case "warn":
-			return { level: "warning", severity: 4 };
-		case "notice":
-			return { level: "notice", severity: 5 };
-		case "informational":
-		case "info":
-			return { level: "info", severity: 6 };
-		case "debug":
-			return { level: "debug", severity: 7 };
-		default:
-			return { level: "info", severity: 6 };
-	}
+	return { ...(MCP_LOG_LEVELS[level] ?? MCP_LOG_LEVELS.info) };
 }
 
 class FileMcpLogger implements McpLogger {
