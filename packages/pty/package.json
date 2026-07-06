@@ -43,6 +43,9 @@
 	"engines": {
 		"node": ">=24.0.0"
 	},
+	"dependencies": {
+		"@xterm/headless": "5.5.0"
+	},
 	"devDependencies": {
 		"@types/node": "25.9.1"
 	}
