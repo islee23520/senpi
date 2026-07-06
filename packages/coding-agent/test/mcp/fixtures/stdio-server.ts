@@ -11,6 +11,10 @@ async function main(): Promise<void> {
 		process.stderr.write("stdio fixture crash-on-start\n");
 		process.exit(42);
 	}
+	if (options.crashAfterCalls === 0) {
+		process.stderr.write("stdio fixture crash-after 0\n");
+		process.exit(42);
+	}
 	if (maybeWedge(options)) return;
 	await delaySlowStart(options);
 	if (options.spawnGrandchild) {

@@ -89,7 +89,6 @@ export class ServerConnection {
 	getRootPid(): number | null {
 		return this.#connection?.getRootPid() ?? null;
 	}
-
 	connect(): Promise<Client> {
 		if (this.#state === "disabled") {
 			return Promise.reject(this.#connectError(`MCP server ${this.serverName} is disabled`, "connect"));
@@ -167,12 +166,16 @@ export class ServerConnection {
 			logger: this.#logger,
 			serverName: this.serverName,
 		});
-		connection.transport.onclose = () => {
-			if (this.#shutdownConnections.has(connection)) return;
-			if (generation === this.#generation && this.#state !== "disabled") {
-				this.markDegraded(this.#connectError(`MCP server ${this.serverName} transport closed`, "close", true));
-			}
-		};
+		connection.transport.onclose = wrapAsync(
+			"connection.transport.onclose",
+			() => {
+				if (this.#shutdownConnections.has(connection)) return;
+				if (generation === this.#generation && this.#state !== "disabled") {
+					this.markDegraded(this.#connectError(`MCP server ${this.serverName} transport closed`, "close", true));
+				}
+			},
+			this.#sink,
+		);
 		return connection;
 	}
 
