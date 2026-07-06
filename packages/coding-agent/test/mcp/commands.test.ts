@@ -2,16 +2,21 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
+import { AuthStorage } from "../../src/core/auth-storage.ts";
 import { createEventBus } from "../../src/core/event-bus.ts";
 import mcpExtension from "../../src/core/extensions/builtin/mcp/index.ts";
 import { getMcpService, resetMcpServiceForTests } from "../../src/core/extensions/builtin/mcp/service.ts";
 import { createExtensionRuntime, loadExtensionFromFactory } from "../../src/core/extensions/loader.ts";
+import { ExtensionRunner } from "../../src/core/extensions/runner.ts";
 import type {
 	Extension,
 	ExtensionCommandContext,
 	ExtensionUIContext,
 	SessionStartEvent,
 } from "../../src/core/extensions/types.ts";
+import { ModelRegistry } from "../../src/core/model-registry.ts";
+import { SessionManager } from "../../src/core/session-manager.ts";
+import { theme } from "../../src/modes/interactive/theme/theme.ts";
 import { cleanupRoots, makeRoot, setConfig, stdioServer, type TestRoot } from "./fixtures/service-lifecycle.ts";
 
 const cleanupTasks: Array<() => Promise<void>> = [];
@@ -46,7 +51,7 @@ describe("/mcp command suite", () => {
 			fx: stdioServer(["--tools", "2"]),
 		});
 		const { command, extension } = await loadCommand();
-		const ui = createUi({ customResult: undefined, selectResult: undefined });
+		const ui = createUi({ selectResult: undefined });
 		await emitSessionStart(extension, root);
 
 		await command.handler("", createCtx(root, ui));
@@ -185,16 +190,14 @@ interface SelectCall {
 	options: string[];
 }
 
-interface TestUi extends Pick<ExtensionUIContext, "select" | "confirm" | "custom" | "notify"> {
+interface TestUi extends ExtensionUIContext {
 	notifications: UiCall[];
 	selectCalls: SelectCall[];
 	confirmCalls: Array<{ title: string; message: string }>;
 	customCalls: number;
 }
 
-function createUi(
-	options: { confirmResults?: boolean[]; customResult?: boolean | undefined; selectResult?: string | undefined } = {},
-): TestUi {
+function createUi(options: { confirmResults?: boolean[]; selectResult?: string | undefined } = {}): TestUi {
 	const notifications: UiCall[] = [];
 	const selectCalls: SelectCall[] = [];
 	const confirmCalls: Array<{ title: string; message: string }> = [];
@@ -212,23 +215,50 @@ function createUi(
 			confirmCalls.push({ title, message });
 			return confirmResults.shift() ?? false;
 		},
-		async custom<T>() {
+		async custom<T>(): Promise<T> {
 			this.customCalls += 1;
-			return options.customResult as T;
+			throw new Error("custom UI is not used by /mcp command tests");
 		},
 		notify(message, type = "info") {
 			notifications.push({ message, type });
 		},
+		input: async () => undefined,
+		onTerminalInput: () => () => {},
+		setStatus: () => {},
+		setWorkingMessage: () => {},
+		setWorkingVisible: () => {},
+		setWorkingIndicator: () => {},
+		setHiddenThinkingLabel: () => {},
+		setWidget: () => {},
+		setFooter: () => {},
+		setHeader: () => {},
+		setTitle: () => {},
+		pasteToEditor: () => {},
+		setEditorText: () => {},
+		getEditorText: () => "",
+		editor: async () => undefined,
+		addAutocompleteProvider: () => {},
+		setEditorComponent: () => {},
+		getEditorComponent: () => undefined,
+		theme,
+		getAllThemes: () => [],
+		getTheme: () => undefined,
+		setTheme: () => ({ success: false, error: "UI not available" }),
+		getToolsExpanded: () => false,
+		setToolsExpanded: () => {},
 	};
 }
 
-function createCtx(root: TestRoot, ui: TestUi, hasUI = true): ExtensionCommandContext {
-	return {
-		cwd: root.cwd,
-		hasUI,
-		isProjectTrusted: () => true,
-		ui,
-	} as unknown as ExtensionCommandContext;
+function createCtx(root: TestRoot, ui: TestUi): ExtensionCommandContext {
+	const runner = new ExtensionRunner(
+		[],
+		createExtensionRuntime(),
+		root.cwd,
+		SessionManager.inMemory(),
+		ModelRegistry.create(AuthStorage.create(join(root.agentDir, "auth.json"))),
+	);
+	runner.setUIContext(ui, "tui");
+	return runner.createCommandContext();
 }
 
 function normalize(value: string | undefined, root: TestRoot): string {

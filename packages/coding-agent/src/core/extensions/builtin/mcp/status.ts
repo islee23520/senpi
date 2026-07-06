@@ -59,7 +59,13 @@ async function readToolCount(
 	try {
 		const result = await connection.client.listTools({}, { timeout: 500 });
 		return result.tools.length;
-	} catch {
-		return null;
+	} catch (error) {
+		return unavailableToolCount(error instanceof Error ? error : new Error(String(error)));
 	}
+}
+
+function unavailableToolCount(_error: Error): null {
+	// Tool counts are display-only status detail. If a connected server rejects
+	// tools/list, keep /mcp status responsive and render the count as unavailable.
+	return null;
 }
