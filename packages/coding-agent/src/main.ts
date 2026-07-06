@@ -12,6 +12,7 @@ import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
+import { runNeoDaemonLauncher } from "./cli/neo/daemon-launch.ts";
 import { runNeoLauncher } from "./cli/neo/launch.ts";
 import { createProjectTrustContext } from "./cli/project-trust.ts";
 import { selectSession } from "./cli/session-picker.ts";
@@ -618,6 +619,16 @@ export async function main(args: string[], options?: MainOptions) {
 	//     to the classic print-mode path here instead of launching the TUI.
 	if (parsed.neo && !parsed.help && appMode === "interactive") {
 		const exitCode = await runNeoLauncher(parsed);
+		process.exit(exitCode);
+	}
+
+	// Neo daemon supervisor. When `--listen <path>` is present, run the shared
+	// daemon instead of a single runtime: bind the socket, register, and serve one
+	// child rpc worker per connection. Dispatched here (before any runtime or
+	// extension loading) because the supervisor process must NOT construct a
+	// runtime — that belongs to each connection's worker.
+	if (parsed.neoListen !== undefined) {
+		const exitCode = await runNeoDaemonLauncher(parsed);
 		process.exit(exitCode);
 	}
 
