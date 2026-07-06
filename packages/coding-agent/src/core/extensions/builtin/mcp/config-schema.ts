@@ -35,13 +35,13 @@ export const ServerSchema = Type.Object(
 		bearerTokenEnv: Type.Optional(Type.String()),
 		oauth: Type.Optional(OAuthSchema),
 		enabled: Type.Optional(Type.Boolean()),
-		lifecycle: Type.Optional(Type.Union([Type.Literal("lazy"), Type.Literal("eager")])),
+		lifecycle: Type.Optional(Type.Union([Type.Literal("lazy"), Type.Literal("eager"), Type.Literal("keep-alive")])),
 		idleTimeoutMin: Type.Optional(Type.Number()),
 		requestTimeoutMs: Type.Optional(Type.Number()),
 		connectTimeoutMs: Type.Optional(Type.Number()),
 		includeTools: Type.Optional(Type.Array(Type.String())),
 		excludeTools: Type.Optional(Type.Array(Type.String())),
-		directTools: Type.Optional(Type.Array(Type.String())),
+		directTools: Type.Optional(Type.Union([Type.Boolean(), Type.Array(Type.String())])),
 		exposure: Type.Optional(
 			Type.Union([Type.Literal("auto"), Type.Literal("direct"), Type.Literal("search"), Type.Literal("proxy")]),
 		),
@@ -56,7 +56,11 @@ const SettingsSchema = Type.Object(
 		searchThreshold: Type.Optional(Type.Number()),
 		outputGuard: Type.Optional(
 			Type.Object(
-				{ maxBytes: Type.Optional(Type.Number()), maxTokens: Type.Optional(Type.Number()) },
+				{
+					maxBytes: Type.Optional(Type.Number()),
+					maxLines: Type.Optional(Type.Number()),
+					maxTokens: Type.Optional(Type.Number()),
+				},
 				{ additionalProperties: false },
 			),
 		),
@@ -81,7 +85,7 @@ export type McpServerConfig = Static<typeof ServerSchema> & {
 	type: "stdio" | "http";
 	args: string[];
 	enabled: boolean;
-	lifecycle: "lazy" | "eager";
+	lifecycle: "lazy" | "eager" | "keep-alive";
 	connectTimeoutMs: number;
 	requestTimeoutMs: number;
 	idleTimeoutMin: number;

@@ -191,6 +191,65 @@ describe("mcp config", () => {
 		});
 	});
 
+	it("validates and round-trips keep-alive server lifecycle", () => {
+		const root = makeRoot();
+		writeJson(join(root.agentDir, "mcp.json"), {
+			mcpServers: {
+				keepAlive: {
+					command: "node",
+					lifecycle: "keep-alive",
+				},
+			},
+		});
+
+		const result = loadMcpConfig({ agentDir: root.agentDir, cwd: root.cwd, projectTrusted: true });
+
+		expect(result.servers.keepAlive.config).toMatchObject({
+			command: "node",
+			lifecycle: "keep-alive",
+		});
+	});
+
+	it("validates and round-trips boolean directTools", () => {
+		const root = makeRoot();
+		writeJson(join(root.agentDir, "mcp.json"), {
+			mcpServers: {
+				direct: {
+					command: "node",
+					directTools: true,
+				},
+			},
+		});
+
+		const result = loadMcpConfig({ agentDir: root.agentDir, cwd: root.cwd, projectTrusted: true });
+
+		expect(result.servers.direct.config).toMatchObject({
+			command: "node",
+			directTools: true,
+		});
+	});
+
+	it("validates and round-trips output guard maxLines", () => {
+		const root = makeRoot();
+		writeJson(join(root.agentDir, "mcp.json"), {
+			settings: {
+				outputGuard: {
+					maxBytes: 1000,
+					maxLines: 42,
+					maxTokens: 200,
+				},
+			},
+		});
+
+		const result = loadMcpConfig({ agentDir: root.agentDir, cwd: root.cwd, projectTrusted: true });
+
+		expect(result.settings.outputGuard).toEqual({
+			maxBytes: 1000,
+			maxLines: 42,
+			maxTokens: 200,
+		});
+	});
+
 	it("blocks untrusted project servers before interpolation and spawn", () => {
 		const root = makeRoot();
 		writeJson(join(root.agentDir, "mcp.json"), {
