@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
 import { AuthStorage } from "../../src/core/auth-storage.ts";
@@ -17,9 +18,12 @@ import type {
 import { ModelRegistry } from "../../src/core/model-registry.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
 import { theme } from "../../src/modes/interactive/theme/theme.ts";
+import { createHarness, type Harness } from "../suite/harness.ts";
+import { toolResultTexts } from "./fixtures/register-call.ts";
 import { cleanupRoots, makeRoot, setConfig, stdioServer, type TestRoot } from "./fixtures/service-lifecycle.ts";
 
 const cleanupTasks: Array<() => Promise<void>> = [];
+const harnesses: Harness[] = [];
 const originalAgentDir = process.env[ENV_AGENT_DIR];
 
 beforeEach(() => {
@@ -27,6 +31,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+	for (const harness of harnesses.splice(0)) harness.cleanup();
 	await getMcpService().dispose("quit");
 	resetMcpServiceForTests();
 	if (originalAgentDir === undefined) {
@@ -118,6 +123,55 @@ describe("/mcp command suite", () => {
 		);
 	});
 
+	it("removes and refreshes provider-visible MCP tools when /mcp disables and enables a server", async () => {
+		const root = makeCommandRoot("active-tools");
+		setConfig(root, { fx: stdioServer(["--tools", "1"]) });
+		const providerToolNames: string[][] = [];
+		const harness = await createHarness({
+			extensionFactories: [mcpExtension],
+		});
+		harnesses.push(harness);
+
+		harness.setResponses([
+			(context) => {
+				providerToolNames.push((context.tools ?? []).map((toolInfo) => toolInfo.name).sort());
+				return fauxAssistantMessage("initial");
+			},
+		]);
+		await harness.session.prompt("initial MCP tool payload");
+		expect(providerToolNames[0]).toContain("mcp_fx_tool_1");
+		expect(harness.session.getActiveToolNames()).toContain("mcp_fx_tool_1");
+
+		await harness.session.prompt("/mcp disable fx");
+		expect(harness.session.getActiveToolNames()).not.toContain("mcp_fx_tool_1");
+
+		setConfig(root, { fx: stdioServer(["--tools", "2"]) });
+		harness.setResponses([
+			(context) => {
+				providerToolNames.push((context.tools ?? []).map((toolInfo) => toolInfo.name).sort());
+				return fauxAssistantMessage("disabled");
+			},
+		]);
+		await harness.session.prompt("disabled MCP tool payload");
+		expect(providerToolNames[providerToolNames.length - 1]).not.toContain("mcp_fx_tool_1");
+
+		await harness.session.prompt("/mcp enable fx");
+		harness.setResponses([
+			(context) => {
+				providerToolNames.push((context.tools ?? []).map((toolInfo) => toolInfo.name).sort());
+				return fauxAssistantMessage(fauxToolCall("mcp_fx_tool_2", { value: "fresh" }), { stopReason: "toolUse" });
+			},
+			fauxAssistantMessage("done"),
+		]);
+		const firstEnabledPayloadIndex = providerToolNames.length;
+		await harness.session.prompt("call fresh MCP tool 2");
+
+		expect(providerToolNames[firstEnabledPayloadIndex]).toEqual(
+			expect.arrayContaining(["mcp_fx_tool_1", "mcp_fx_tool_2"]),
+		);
+		expect(toolResultTexts(harness, "mcp_fx_tool_2")).toEqual(["fixture tool_2 value=fresh mode=alpha"]);
+	});
+
 	it("reports fixture test success with elapsed milliseconds", async () => {
 		const root = makeCommandRoot("test-ok");
 		setConfig(root, { fx: stdioServer(["--tools", "3"]) });
@@ -164,13 +218,10 @@ async function loadCommand(): Promise<{
 }
 
 function loadMcpExtension(): Promise<Extension> {
-	return loadExtensionFromFactory(
-		mcpExtension,
-		process.cwd(),
-		createEventBus(),
-		createExtensionRuntime(),
-		"<mcp-command-test>",
-	);
+	const runtime = createExtensionRuntime();
+	runtime.getActiveTools = () => [];
+	runtime.setActiveTools = () => {};
+	return loadExtensionFromFactory(mcpExtension, process.cwd(), createEventBus(), runtime, "<mcp-command-test>");
 }
 
 async function emitSessionStart(extension: Extension, root: TestRoot): Promise<void> {

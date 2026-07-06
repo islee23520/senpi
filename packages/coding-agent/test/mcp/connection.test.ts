@@ -62,6 +62,7 @@ describe("ServerConnection state machine", () => {
 		const events = collectEvents(connection);
 
 		const pending = connection.connect();
+		await waitForCounter(counterFile, 1);
 		await connection.bumpGeneration();
 		await expect(pending).rejects.toThrow(/superseded/i);
 
@@ -73,6 +74,54 @@ describe("ServerConnection state machine", () => {
 			"connecting->idle",
 		]);
 		expect(events.tools).toEqual([]);
+		await assertNoFixtureProcessArg(counterFile);
+	});
+
+	it("disposes an in-flight wedged connect before the connect timeout leaks a fixture process", async () => {
+		const root = await tmpRoot("dispose-pending");
+		const counterFile = join(root, "spawns.txt");
+		const connection = createConnection("dispose-pending", root, [
+			"--wedge",
+			"--spawn-counter-file",
+			counterFile,
+			"--slow-start",
+			"10000",
+		]);
+		connections.push(connection);
+
+		const pending = connection.connect();
+		await waitForCounter(counterFile, 1);
+		const disposeStartedAt = Date.now();
+		await connection.dispose();
+		const disposeElapsedMs = Date.now() - disposeStartedAt;
+		await expect(pending).rejects.toThrow(/failed during connect|closed|superseded/i);
+
+		expect(disposeElapsedMs).toBeLessThan(1500);
+		expect(connection.state).toBe("disabled");
+		await assertNoFixtureProcessArg(counterFile);
+	});
+
+	it("disables an in-flight wedged connect before the connect timeout leaks a fixture process", async () => {
+		const root = await tmpRoot("disable-pending");
+		const counterFile = join(root, "spawns.txt");
+		const connection = createConnection("disable-pending", root, [
+			"--wedge",
+			"--spawn-counter-file",
+			counterFile,
+			"--slow-start",
+			"10000",
+		]);
+		connections.push(connection);
+
+		const pending = connection.connect();
+		await waitForCounter(counterFile, 1);
+		const disableStartedAt = Date.now();
+		await connection.disable();
+		const disableElapsedMs = Date.now() - disableStartedAt;
+		await expect(pending).rejects.toThrow(/failed during connect|closed|superseded/i);
+
+		expect(disableElapsedMs).toBeLessThan(1500);
+		expect(connection.state).toBe("disabled");
 		await assertNoFixtureProcessArg(counterFile);
 	});
 
@@ -186,6 +235,20 @@ async function tmpRoot(slug: string): Promise<string> {
 async function readCounter(file: string): Promise<number> {
 	const raw = await readFile(file, "utf8");
 	return Number(raw.trim());
+}
+
+async function waitForCounter(file: string, expected: number): Promise<void> {
+	const deadline = Date.now() + 1500;
+	let lastError: unknown;
+	while (Date.now() < deadline) {
+		try {
+			if ((await readCounter(file)) === expected) return;
+		} catch (error) {
+			lastError = error;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+	throw lastError instanceof Error ? lastError : new Error(`counter did not reach ${expected}: ${file}`);
 }
 
 async function assertNoFixtureProcessArg(arg: string): Promise<void> {

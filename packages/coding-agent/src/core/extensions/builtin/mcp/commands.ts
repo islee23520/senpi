@@ -13,7 +13,7 @@ export function registerMcpCommands(pi: ExtensionAPI): void {
 			SUBCOMMANDS.filter((item) => item.startsWith(prefix)).map((value) => ({ value, label: value })),
 		handler: async (rawArgs, ctx) => {
 			try {
-				await handleMcpCommand(rawArgs, ctx);
+				await handleMcpCommand(rawArgs, ctx, pi);
 			} catch (error) {
 				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 			}
@@ -21,7 +21,7 @@ export function registerMcpCommands(pi: ExtensionAPI): void {
 	});
 }
 
-async function handleMcpCommand(rawArgs: string, ctx: ExtensionCommandContext): Promise<void> {
+async function handleMcpCommand(rawArgs: string, ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {
 	const args = splitCommandArgs(rawArgs);
 	const subcommand = args[0] ?? "";
 	if (subcommand === "") {
@@ -37,7 +37,7 @@ async function handleMcpCommand(rawArgs: string, ctx: ExtensionCommandContext): 
 		return;
 	}
 	if (subcommand === "enable" || subcommand === "disable") {
-		await setServerEnabled(ctx, args[1] ?? "", subcommand === "enable");
+		await setServerEnabled(ctx, pi, args[1] ?? "", subcommand === "enable");
 		return;
 	}
 	if (subcommand === "test") {
@@ -95,14 +95,19 @@ async function addServer(args: readonly string[], ctx: ExtensionCommandContext):
 	ctx.ui.notify(`Added MCP server ${name}`);
 }
 
-async function setServerEnabled(ctx: ExtensionCommandContext, name: string, enabled: boolean): Promise<void> {
+async function setServerEnabled(
+	ctx: ExtensionCommandContext,
+	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">,
+	name: string,
+	enabled: boolean,
+): Promise<void> {
 	if (!ensureKnown(name, ctx)) return;
 	if (!setGlobalMcpServerEnabled(name, enabled)) {
 		ctx.ui.notify(`MCP server ${name} is not in the global config file`, "error");
 		return;
 	}
 	ctx.ui.notify(`MCP server ${name} connecting`);
-	await getMcpService().attachSession({ type: "session_start", reason: "reload" }, ctx);
+	await getMcpService().attachSession({ type: "session_start", reason: "reload" }, ctx, pi);
 	ctx.ui.notify(`${enabled ? "Enabled" : "Disabled"} MCP server ${name}`);
 }
 

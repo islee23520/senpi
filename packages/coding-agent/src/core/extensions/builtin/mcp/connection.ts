@@ -52,11 +52,12 @@ export class ServerConnection {
 	#state: ServerConnectionState;
 	#generation = 0;
 	#connection: McpTransportConnection | undefined;
+	#pendingConnection: McpTransportConnection | undefined;
 	#pendingConnect: Promise<Client> | undefined;
 	#lastError: Error | undefined;
 	readonly #stateListeners = new Set<Listener<ServerConnectionStateChangedEvent>>();
 	readonly #toolsListeners = new Set<Listener<ServerConnectionToolsChangedEvent>>();
-	readonly #shutdownConnections = new Set<McpTransportConnection>();
+	readonly #shutdownConnections = new Map<McpTransportConnection, Promise<void>>();
 
 	constructor(options: ServerConnectionOptions) {
 		this.serverName = options.serverName;
@@ -98,9 +99,11 @@ export class ServerConnection {
 
 		const generation = this.#generation;
 		const connection = this.#createTransportConnection(generation);
+		this.#pendingConnection = connection;
 		this.#setState("connecting");
 		this.#pendingConnect = this.#connectTransport(connection, generation).finally(() => {
 			if (this.#pendingConnect !== undefined && generation === this.#generation) this.#pendingConnect = undefined;
+			if (this.#pendingConnection === connection) this.#pendingConnection = undefined;
 		});
 		return this.#pendingConnect;
 	}
@@ -110,7 +113,7 @@ export class ServerConnection {
 		this.#pendingConnect = undefined;
 		this.#lastError = undefined;
 		if (this.#state !== "disabled") this.#setState("idle");
-		return this.#disposeActiveConnection();
+		return this.#disposeOwnedConnections();
 	}
 
 	disable(): Promise<void> {
@@ -118,14 +121,14 @@ export class ServerConnection {
 		this.#pendingConnect = undefined;
 		this.#lastError = undefined;
 		this.#setState("disabled");
-		return this.#disposeActiveConnection();
+		return this.#disposeOwnedConnections();
 	}
 
 	async dispose(): Promise<void> {
 		this.#generation++;
 		this.#pendingConnect = undefined;
 		this.#setState("disabled");
-		await this.#disposeActiveConnection();
+		await this.#disposeOwnedConnections();
 	}
 
 	markDegraded(error: Error): void {
@@ -183,15 +186,20 @@ export class ServerConnection {
 		try {
 			await connectMcpTransport(connection);
 		} catch (error) {
+			if (this.#pendingConnection === connection) this.#pendingConnection = undefined;
 			await this.#shutdown(connection);
+			if (generation !== this.#generation || this.#state === "disabled") {
+				throw this.#connectError(`MCP server ${this.serverName} connect was superseded`, "connect", true);
+			}
 			const normalized = error instanceof Error ? error : new Error(String(error));
-			if (generation === this.#generation && this.#state !== "disabled") this.markDegraded(normalized);
+			this.markDegraded(normalized);
 			throw normalized;
 		}
 		if (generation !== this.#generation || this.#state === "disabled") {
 			await this.#shutdown(connection);
 			throw this.#connectError(`MCP server ${this.serverName} connect was superseded`, "connect", true);
 		}
+		if (this.#pendingConnection === connection) this.#pendingConnection = undefined;
 		this.#connection = connection;
 		this.#lastError = undefined;
 		this.#setState("connected");
@@ -199,16 +207,29 @@ export class ServerConnection {
 		return connection.client;
 	}
 
-	async #disposeActiveConnection(): Promise<void> {
+	async #disposeOwnedConnections(): Promise<void> {
+		const connections = new Set<McpTransportConnection>();
 		const connection = this.#connection;
 		this.#connection = undefined;
-		if (connection !== undefined) await this.#shutdown(connection);
+		if (connection !== undefined) connections.add(connection);
+		const pendingConnection = this.#pendingConnection;
+		this.#pendingConnection = undefined;
+		if (pendingConnection !== undefined) connections.add(pendingConnection);
+		await Promise.all([...connections].map((item) => this.#shutdown(item)));
 	}
 
 	async #shutdown(connection: McpTransportConnection): Promise<void> {
-		this.#shutdownConnections.add(connection);
-		try {
+		const pending = this.#shutdownConnections.get(connection);
+		if (pending !== undefined) {
+			await pending;
+			return;
+		}
+		const shutdown = (async () => {
 			await shutdownMcpTransport(connection);
+		})();
+		this.#shutdownConnections.set(connection, shutdown);
+		try {
+			await shutdown;
 		} finally {
 			this.#shutdownConnections.delete(connection);
 		}
