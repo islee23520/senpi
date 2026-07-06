@@ -416,3 +416,6 @@ check:neo: packages/neo build+vet+test passed
 
 ## git diff --check scoped files - after scope move
 Mon Jul  6 07:01:18 UTC 2026
+
+## task-12 rb/jl bridge follow-up
+Recorded fix evidence in .omo/evidence/task-12-fix-rb-jl-bridge.txt. Focused rb/jl tests passed (5 passed, 1 Julia live skip because Julia unavailable); npm run check passed; scoped net LOC +88.

@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { startBridgeServer } from "../src/bridge/http-server.ts";
 import { JuliaKernel } from "../src/kernels/jl/kernel.ts";
 
 function hasJulia(): boolean {
@@ -15,42 +16,68 @@ function hasJulia(): boolean {
 }
 
 describe("JuliaKernel", () => {
+	it("routes tool calls through the authenticated loopback bridge contract", async () => {
+		const runner = await readFile(join(import.meta.dirname, "..", "src", "kernels", "jl", "runner.jl"), "utf8");
+		expect(runner).toContain('connect(ip"127.0.0.1", port)');
+		expect(runner).toContain('"POST /call HTTP/1.1"');
+		expect(runner).toContain('"Authorization: Bearer " * string(token)');
+		expect(runner).toContain('"callId" => call_id');
+		expect(runner).toContain('"toolName" => name');
+		expect(runner).not.toContain('"type" => "tool-call"');
+	});
+
 	it("ships the stdlib-only prelude asset", async () => {
 		await expect(
 			access(join(import.meta.dirname, "..", "src", "kernels", "jl", "prelude.jl")),
 		).resolves.toBeUndefined();
 	});
 
-	it.skipIf(!hasJulia())("persists state, displays last expression, and calls one host tool", async () => {
-		const root = await mkdtemp(join(tmpdir(), "senpi-jl-kernel-"));
-		try {
-			const kernel = JuliaKernel.start({
-				cwd: root,
-				sessionId: "jl-live",
-				connection: { port: 39102, token: "live-token" },
+	it.skipIf(!hasJulia())(
+		"persists state, displays last expression, and calls one host tool through the bridge",
+		async () => {
+			const root = await mkdtemp(join(tmpdir(), "senpi-jl-kernel-"));
+			const toolCalls: unknown[] = [];
+			const server = await startBridgeServer({
+				token: "live-token",
+				onCall: async (request) => {
+					toolCalls.push({ callId: request.callId, toolName: request.toolName, args: request.args });
+					return "julia-tool-ok";
+				},
+				onEmit: async () => {},
+				onCompletion: async () => {
+					throw new Error("unexpected completion");
+				},
 			});
 			try {
-				await kernel.run({ cellId: "set", code: "answer = 41", timeoutMs: 8_000 });
-				const persisted = await kernel.run({ cellId: "get", code: "answer + 1", timeoutMs: 8_000 });
-				expect(persisted).toMatchObject({ ok: true, valueRepr: "42" });
-				await kernel.reset();
-				const reset = await kernel.run({ cellId: "reset", code: "@isdefined(answer)", timeoutMs: 8_000 });
-				expect(reset).toMatchObject({ ok: true, valueRepr: "false" });
-				await kernel.run({ cellId: "set-again", code: "answer = 41", timeoutMs: 8_000 });
-
-				const pending = kernel.run({
-					cellId: "tool",
-					code: 'tool.echo(Dict("value" => answer))',
-					timeoutMs: 8_000,
+				const kernel = JuliaKernel.start({
+					cwd: root,
+					sessionId: "jl-live",
+					connection: { port: server.port, token: server.token },
 				});
-				const call = await kernel.nextToolCall();
-				kernel.deliverToolReply({ type: "tool-reply", callId: call.callId, ok: true, value: "julia-tool-ok" });
-				await expect(pending).resolves.toMatchObject({ ok: true, valueRepr: '"julia-tool-ok"' });
+				try {
+					await kernel.run({ cellId: "set", code: "answer = 41", timeoutMs: 8_000 });
+					const persisted = await kernel.run({ cellId: "get", code: "answer + 1", timeoutMs: 8_000 });
+					expect(persisted).toMatchObject({ ok: true, valueRepr: "42" });
+					await kernel.reset();
+					const reset = await kernel.run({ cellId: "reset", code: "@isdefined(answer)", timeoutMs: 8_000 });
+					expect(reset).toMatchObject({ ok: true, valueRepr: "false" });
+					await kernel.run({ cellId: "set-again", code: "answer = 41", timeoutMs: 8_000 });
+
+					await expect(
+						kernel.run({
+							cellId: "tool",
+							code: 'tool.echo(Dict("value" => answer))',
+							timeoutMs: 8_000,
+						}),
+					).resolves.toMatchObject({ ok: true, valueRepr: '"julia-tool-ok"' });
+					expect(toolCalls).toMatchObject([{ toolName: "echo", args: { value: 41 } }]);
+				} finally {
+					await kernel.close();
+				}
 			} finally {
-				await kernel.close();
+				await server.close();
+				await rm(root, { recursive: true, force: true });
 			}
-		} finally {
-			await rm(root, { recursive: true, force: true });
-		}
-	});
+		},
+	);
 });

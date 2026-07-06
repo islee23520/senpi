@@ -1,6 +1,8 @@
 include("prelude.jl")
 
-const senpi_pending_replies = Dict{String, Any}()
+using Sockets
+
+const senpi_connection = Dict{String, Any}()
 
 function senpi_escape(text::AbstractString)
     out = IOBuffer()
@@ -53,31 +55,60 @@ function senpi_parse_bool(line::String, field::String)
     return m.captures[1] == "true"
 end
 
+function senpi_parse_json_value(line::String)
+    value = senpi_parse_string(line, "value")
+    value !== nothing && return value
+    m = match(r""""value"\s*:\s*(true|false)""", line)
+    m !== nothing && return m.captures[1] == "true"
+    m = match(r""""value"\s*:\s*(-?\d+(?:\.\d+)?)""", line)
+    if m !== nothing
+        text = m.captures[1]
+        return occursin(".", text) ? parse(Float64, text) : parse(Int, text)
+    end
+    return nothing
+end
+
+function senpi_parse_error_message(line::String)
+    message = senpi_parse_string(line, "message")
+    return message === nothing ? line : message
+end
+
 function senpi_emit(frame)
     println(senpi_json(frame))
     flush(stdout)
 end
 
 function senpi_call_tool(name::String, args)
+    if !haskey(senpi_connection, "port") || !haskey(senpi_connection, "token")
+        error("Julia tool bridge is not initialized")
+    end
+    port = senpi_connection["port"]
+    token = senpi_connection["token"]
     call_id = string(time_ns())
-    senpi_emit(Dict("type" => "tool-call", "callId" => call_id, "toolName" => name, "args" => args))
-    while true
-        if haskey(senpi_pending_replies, call_id)
-            reply = pop!(senpi_pending_replies, call_id)
-            if reply["ok"]
-                return reply["value"]
-            end
-            error(reply["error"])
+    body = senpi_json(Dict("callId" => call_id, "toolName" => name, "args" => args))
+    socket = connect(ip"127.0.0.1", port)
+    try
+        request = join([
+            "POST /call HTTP/1.1",
+            "Host: 127.0.0.1",
+            "Authorization: Bearer " * string(token),
+            "Content-Type: application/json",
+            "Content-Length: " * string(sizeof(body)),
+            "Connection: close",
+            "",
+            body,
+        ], "\r\n")
+        write(socket, request)
+        flush(socket)
+        response = read(socket, String)
+        parts = split(response, "\r\n\r\n"; limit=2)
+        response_body = length(parts) == 2 ? parts[2] : response
+        if senpi_parse_bool(response_body, "ok") == true
+            return senpi_parse_json_value(response_body)
         end
-        line = readline(stdin)
-        type = senpi_parse_string(line, "type")
-        if type == "tool-reply"
-            senpi_pending_replies[senpi_parse_string(line, "callId")] = Dict(
-                "ok" => senpi_parse_bool(line, "ok"),
-                "value" => senpi_parse_string(line, "value"),
-                "error" => senpi_parse_string(line, "message"),
-            )
-        end
+        error(senpi_parse_error_message(response_body))
+    finally
+        close(socket)
     end
 end
 
@@ -85,6 +116,12 @@ while !eof(stdin)
     line = readline(stdin)
     type = senpi_parse_string(line, "type")
     if type == "init"
+        port_match = match(r""""port"\s*:\s*(\d+)""", line)
+        token = senpi_parse_string(line, "token")
+        if port_match !== nothing && token !== nothing
+            senpi_connection["port"] = parse(Int, port_match.captures[1])
+            senpi_connection["token"] = token
+        end
         senpi_emit(Dict("type" => "ready"))
     elseif type == "run"
         cell_id = senpi_parse_string(line, "cellId")
@@ -100,12 +137,6 @@ while !eof(stdin)
         catch err
             senpi_emit(Dict("type" => "result", "cellId" => cell_id, "ok" => false, "error" => Dict("message" => string(err)), "durationMs" => round(Int, (time() - started) * 1000)))
         end
-    elseif type == "tool-reply"
-        senpi_pending_replies[senpi_parse_string(line, "callId")] = Dict(
-            "ok" => senpi_parse_bool(line, "ok"),
-            "value" => senpi_parse_string(line, "value"),
-            "error" => senpi_parse_string(line, "message"),
-        )
     elseif type == "close"
         senpi_emit(Dict("type" => "closed"))
         exit(0)

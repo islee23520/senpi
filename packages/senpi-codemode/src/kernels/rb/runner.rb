@@ -1,10 +1,12 @@
 require "json"
+require "net/http"
+require "uri"
 require_relative "prelude"
 
 $__senpi_binding = TOPLEVEL_BINDING
-$__senpi_pending_replies = {}
 $__senpi_mutex = Mutex.new
 $__senpi_current_cell = nil
+$__senpi_connection = nil
 
 def __senpi_emit(frame)
   STDOUT.write(JSON.generate(frame))
@@ -17,21 +19,27 @@ def __senpi_error(error)
 end
 
 def __senpi_call_tool(name, args)
+  connection = $__senpi_connection
+  raise "Ruby tool bridge is not initialized" unless connection.is_a?(Hash)
+  port = connection["port"]
+  token = connection["token"]
+  raise "Ruby tool bridge is not initialized" unless port.is_a?(Integer) && token.is_a?(String)
+
   call_id = "#{Time.now.to_i}-#{rand(1_000_000)}"
-  __senpi_emit({ "type" => "tool-call", "callId" => call_id, "toolName" => name, "args" => args })
-  loop do
-    reply = $__senpi_pending_replies.delete(call_id)
-    if reply
-      raise reply["error"]["message"].to_s unless reply["ok"]
-      return reply["value"]
-    end
-    line = STDIN.gets
-    raise "tool bridge closed before #{name} replied" if line.nil?
-    message = JSON.parse(line)
-    if message["type"] == "tool-reply"
-      $__senpi_pending_replies[message["callId"]] = message
-    end
+  uri = URI("http://127.0.0.1:#{port}/call")
+  request = Net::HTTP::Post.new(uri)
+  request["authorization"] = "Bearer #{token}"
+  request["content-type"] = "application/json"
+  request.body = JSON.generate({ "callId" => call_id, "toolName" => name, "args" => args })
+  response = Net::HTTP.start(uri.hostname, uri.port, read_timeout: 60) { |http| http.request(request) }
+  body = JSON.parse(response.body.to_s)
+  return body["value"] if body.is_a?(Hash) && body["ok"] == true
+
+  error = body.is_a?(Hash) ? body["error"] : body
+  if error.is_a?(Hash)
+    raise error["message"].to_s
   end
+  raise error.to_s
 end
 
 def __senpi_run_cell(message)
@@ -64,11 +72,10 @@ STDIN.each_line do |line|
   message = JSON.parse(line)
   case message["type"]
   when "init"
+    $__senpi_connection = message["connection"]
     __senpi_emit({ "type" => "ready" })
   when "run"
     __senpi_run_cell(message)
-  when "tool-reply"
-    $__senpi_pending_replies[message["callId"]] = message
   when "close"
     __senpi_emit({ "type" => "closed" })
     exit 0
