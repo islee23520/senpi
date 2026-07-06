@@ -1,5 +1,21 @@
 # Core Extensions Changes
 
+## 2026-07-06 - Bundled codemode extension
+
+### What changed
+
+- `@code-yeongyu/senpi-codemode` is loaded as a default-on builtin-adjacent extension from its package manifest.
+- `disabledBuiltinExtensions: ["codemode"]` disables the bundled extension, while `--no-extensions` only disables user extension discovery.
+- Interactive permission prompts raised by tools called inside codemode bridge cells suspend the cell until the prompt resolves; denial returns an error reply to the kernel instead of hanging.
+
+### Why
+
+- Codemode must be available by default while still using the normal extension loader, active-tool filtering, hook pipeline, and permission system.
+
+### Expected merge conflict zones
+
+- MEDIUM: `resource-loader.ts` around builtin-adjacent extension ordering and package shadowing.
+
 ## 2026-07-06 - Extension executeTool API
 
 ### What changed

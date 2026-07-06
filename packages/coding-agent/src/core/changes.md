@@ -1,5 +1,21 @@
 # changes
 
+## Bundled codemode extension loading (2026-07-06)
+
+### What changed
+
+- `resource-loader.ts`: added `codemode` as a builtin-adjacent bundled extension loaded from the `@code-yeongyu/senpi-codemode` package manifest.
+- The bundled extension is enabled by default, respects `enabledBuiltinExtensions` and `disabledBuiltinExtensions`, is unaffected by `--no-extensions`, and is still removable from the active tool set through `--exclude-tools eval`.
+- Resolution failures, including compiled Bun binary package-resolution gaps, are reported as extension diagnostics and startup continues without `eval`.
+
+### Why extension system couldn't handle this
+
+- The extension package is shipped with the CLI and must be active before user extension discovery and project-trust resolution. User-installed extension paths cannot model that trusted default-on load order.
+
+### Expected merge conflict zones
+
+- HIGH: `resource-loader.ts` around builtin extension loading, package shadowing, and active builtin id filtering.
+
 ## executeTool active-tool bridge (2026-07-06)
 
 ### What changed

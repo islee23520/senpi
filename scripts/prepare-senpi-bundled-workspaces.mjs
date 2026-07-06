@@ -6,22 +6,30 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 const bundledWorkspaces = [
-	{ source: "packages/agent", targetName: "pi-agent-core" },
-	{ source: "packages/ai", targetName: "pi-ai" },
-	{ source: "packages/tui", targetName: "pi-tui" },
+	{ source: "packages/agent", packageName: "@earendil-works/pi-agent-core", targetParts: ["@earendil-works", "pi-agent-core"], sourceOnly: false },
+	{ source: "packages/ai", packageName: "@earendil-works/pi-ai", targetParts: ["@earendil-works", "pi-ai"], sourceOnly: false },
+	{ source: "packages/tui", packageName: "@earendil-works/pi-tui", targetParts: ["@earendil-works", "pi-tui"], sourceOnly: false },
+	{
+		source: "packages/senpi-codemode",
+		packageName: "@code-yeongyu/senpi-codemode",
+		targetParts: ["@code-yeongyu", "senpi-codemode"],
+		sourceOnly: true,
+	},
 ];
-const internalPackageNames = new Set(bundledWorkspaces.map((workspace) => `@earendil-works/${workspace.targetName}`));
-const bundledWorkspacePackageNames = bundledWorkspaces.map((workspace) => `@earendil-works/${workspace.targetName}`);
+const internalPackageNames = new Set(bundledWorkspaces.map((workspace) => workspace.packageName));
+const bundledWorkspacePackageNames = bundledWorkspaces.map((workspace) => workspace.packageName);
 
-function shouldCopyWorkspaceFile(sourceRoot, sourcePath) {
+function shouldCopyWorkspaceFile(sourceRoot, sourcePath, sourceOnly = false) {
 	const path = relative(sourceRoot, sourcePath);
 	return (
 		path === "" ||
 		path === "package.json" ||
 		path === "README.md" ||
 		path === "CHANGELOG.md" ||
+		path === "LICENSE" ||
 		path === "dist" ||
-		path.startsWith(`dist/`)
+		path.startsWith(`dist/`) ||
+		(sourceOnly && (path === "src" || path.startsWith("src/")))
 	);
 }
 
@@ -71,9 +79,19 @@ export function assertSenpiPackedWorkspaceFiles(packed) {
 	for (const packageName of bundledWorkspacePackageNames) {
 		const packageRoot = `package/node_modules/${packageName}`;
 		const dryRunPackageRoot = `node_modules/${packageName}`;
+		const isCodemode = packageName === "@code-yeongyu/senpi-codemode";
+		const packageRequiredPaths = isCodemode
+			? [
+					["src/index.ts", "src/index.ts"],
+					["src/kernels/py/prelude.py", "src/kernels/py/prelude.py"],
+				]
+			: [["dist/index.js", "dist/index.js"]];
 		for (const [path, dryRunPath] of [
 			[`${packageRoot}/package.json`, `${dryRunPackageRoot}/package.json`],
-			[`${packageRoot}/dist/index.js`, `${dryRunPackageRoot}/dist/index.js`],
+			...packageRequiredPaths.map(([path, dryRunPath]) => [
+				`${packageRoot}/${path}`,
+				`${dryRunPackageRoot}/${dryRunPath}`,
+			]),
 		]) {
 			if (!filePaths.has(path) && !filePaths.has(dryRunPath)) {
 				missing.push(`${path} or ${dryRunPath}`);
@@ -88,21 +106,21 @@ export function assertSenpiPackedWorkspaceFiles(packed) {
 
 export function prepareSenpiBundledWorkspaces(repoRoot = root) {
 	copyPublishDependencies(repoRoot);
-	const codingAgentNodeModules = join(repoRoot, "packages/coding-agent/node_modules/@earendil-works");
+	const codingAgentNodeModules = join(repoRoot, "packages/coding-agent/node_modules");
 
 	for (const workspace of bundledWorkspaces) {
 		const sourceRoot = join(repoRoot, workspace.source);
 		const distPath = join(sourceRoot, "dist");
-		if (!existsSync(distPath)) {
+		if (!workspace.sourceOnly && !existsSync(distPath)) {
 			throw new Error(`Missing ${distPath}. Run npm run build before preparing bundled workspaces.`);
 		}
 
-		const targetRoot = join(codingAgentNodeModules, workspace.targetName);
+		const targetRoot = join(codingAgentNodeModules, ...workspace.targetParts);
 		rmSync(targetRoot, { recursive: true, force: true });
 		mkdirSync(dirname(targetRoot), { recursive: true });
 		cpSync(sourceRoot, targetRoot, {
 			recursive: true,
-			filter: (sourcePath) => shouldCopyWorkspaceFile(sourceRoot, sourcePath),
+			filter: (sourcePath) => shouldCopyWorkspaceFile(sourceRoot, sourcePath, workspace.sourceOnly),
 		});
 	}
 }
