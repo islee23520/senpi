@@ -204,8 +204,14 @@ export class ServerConnection {
 				throw this.#connectError(`MCP server ${this.serverName} connect was superseded`, "connect", true);
 			}
 			const normalized = error instanceof Error ? error : new Error(String(error));
-			this.markDegraded(normalized);
-			throw normalized;
+			const connectError = this.#connectError(
+				`MCP server ${this.serverName} failed during connect: ${normalized.message}`,
+				"connect",
+				true,
+				normalized,
+			);
+			this.markDegraded(connectError);
+			throw connectError;
 		}
 		if (generation !== this.#generation || this.#state === "disabled") {
 			await this.#shutdown(connection);
@@ -272,8 +278,8 @@ export class ServerConnection {
 		this.#setState(state, error);
 	}
 
-	#connectError(message: string, phase: string, retriable?: true): ConnectError {
-		return new ConnectError(message, { phase, retriable, serverName: this.serverName });
+	#connectError(message: string, phase: string, retriable?: true, cause?: unknown): ConnectError {
+		return new ConnectError(message, { cause, phase, retriable, serverName: this.serverName });
 	}
 
 	get #sink(): McpAsyncErrorSink {

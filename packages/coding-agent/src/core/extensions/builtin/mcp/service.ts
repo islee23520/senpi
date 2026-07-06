@@ -25,6 +25,7 @@ import type {
 	McpSessionContext,
 	McpSessionOptions,
 } from "./service-types.ts";
+import { shouldRaceMcpStartup, waitForMcpStartupRace } from "./startup-race.ts";
 
 export { registerToolsPreservingActiveSet } from "./active-set.ts";
 
@@ -35,6 +36,7 @@ export class McpService {
 	#sessionContext: McpSessionContext | null = null;
 	#sessionStartCount = 0;
 	#lastSessionStartReason: SessionStartEvent["reason"] | null = null;
+	#toolRefreshGeneration = 0;
 	#config: ResolvedMcpConfig | null = null;
 	readonly #connections = new Map<string, McpConnectionEntry>();
 	readonly #connectionKeysByName = new Map<string, string>();
@@ -55,7 +57,9 @@ export class McpService {
 			projectTrusted: options.projectTrusted ?? ctx.isProjectTrusted(),
 		});
 		this.#config = config;
-		await this.#syncFromConfig(config, options, event.reason !== "reload");
+		const toolRefreshGeneration = this.#toolRefreshGeneration + 1;
+		this.#toolRefreshGeneration = toolRefreshGeneration;
+		await this.#syncFromConfig(config, options, event.reason !== "reload", _pi, toolRefreshGeneration);
 		if (_pi !== undefined) await this.#registerDirectTools(_pi);
 	}
 
@@ -141,7 +145,13 @@ export class McpService {
 		};
 	}
 
-	async #syncFromConfig(config: ResolvedMcpConfig, options: McpSessionOptions, useCache: boolean): Promise<void> {
+	async #syncFromConfig(
+		config: ResolvedMcpConfig,
+		options: McpSessionOptions,
+		useCache: boolean,
+		pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool"> | undefined,
+		toolRefreshGeneration: number,
+	): Promise<void> {
 		const cache = await readMcpCatalogCache(options.agentDir);
 		const wanted = new Map<string, ResolvedMcpServer>();
 		visitSpawnableMcpServers(config, (name, server) => {
@@ -185,11 +195,26 @@ export class McpService {
 			};
 			this.#connections.set(key, entry);
 			this.#connectionKeysByName.set(name, key);
-			if (cachedCatalog === undefined || server.config.lifecycle === "eager") {
+			if (shouldRaceMcpStartup(server.config.lifecycle)) {
+				connects.push(this.#raceStartupConnect(entry, server.config, pi, toolRefreshGeneration));
+			} else if (cachedCatalog === undefined) {
 				connects.push(this.#connectAndRefresh(entry, server.config));
 			}
 		}
 		await Promise.all(connects);
+	}
+
+	async #raceStartupConnect(
+		entry: McpConnectionEntry,
+		serverConfig: ResolvedMcpServer["config"],
+		pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool"> | undefined,
+		toolRefreshGeneration: number,
+	): Promise<void> {
+		const connect = this.#connectAndRefresh(entry, serverConfig);
+		const result = await waitForMcpStartupRace(connect);
+		if (result === "settled") return;
+		if (pi === undefined) return;
+		void connect.then(() => this.#registerDirectToolsForGeneration(pi, toolRefreshGeneration));
 	}
 
 	async #connect(connection: ServerConnection): Promise<void> {
@@ -235,6 +260,20 @@ export class McpService {
 			};
 		});
 		await registerDirectMcpTools(pi, config, entries);
+	}
+
+	async #registerDirectToolsForGeneration(
+		pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">,
+		toolRefreshGeneration: number,
+	): Promise<void> {
+		if (this.#disposed || this.#toolRefreshGeneration !== toolRefreshGeneration) return;
+		try {
+			await this.#registerDirectTools(pi);
+		} catch (error) {
+			createMcpLogger("service").warn("Failed to refresh MCP tools after startup race", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
 	}
 
 	#serverSnapshot(name: string): McpServerSnapshot {
