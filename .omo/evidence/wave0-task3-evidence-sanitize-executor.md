@@ -34,4 +34,4 @@ Artifacts saved under `local-ignore/qa-evidence/20260706-wave0-task3-evidence-sa
 
 ## Commit
 
-- Commit hash: recorded in the final executor response after this report is committed.
+- Sanitization commit hash: `6bfcc2d99`.
