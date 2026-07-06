@@ -81,7 +81,7 @@ export function getNativePtySentinelExport(packageVersion: string = NATIVE_PTY_P
 }
 
 export function detectNativePtyRuntime(
-	versions: { readonly bun?: unknown } = process.versions as typeof process.versions & { readonly bun?: unknown },
+	versions: NodeJS.ProcessVersions & { readonly bun?: unknown } = process.versions,
 ): NativePtyRuntime {
 	return typeof versions.bun === "string" ? "bun" : "node";
 }
@@ -91,11 +91,10 @@ export function getNativePtyHost(platform: string = process.platform, arch: stri
 }
 
 export function getNativePtyCandidatePaths(options: NativePtyCandidatePathOptions = {}): readonly string[] {
-	const runtime = options.runtime ?? detectNativePtyRuntime();
 	const host = getNativePtyHost(options.platform, options.arch);
 	const moduleDir = options.moduleDir ?? dirname(fileURLToPath(import.meta.url));
 	const execDir = options.execDir ?? dirname(process.execPath);
-	const nativePath = join("native", runtime, "prebuilds", host, `senpi_pty.${host}.node`);
+	const nativePath = join("native", "prebuilds", host, `senpi_pty.${host}.node`);
 
 	return [join(moduleDir, "..", nativePath), join(moduleDir, nativePath), join(execDir, nativePath)];
 }
@@ -135,7 +134,7 @@ export function loadNativePty(options: NativePtyLoaderOptions = {}): NativePtyLo
 }
 
 function assertNativePtyBinding(value: unknown, modulePath: string): NativePtyBinding {
-	if (!isRecord(value)) {
+	if (!isNativePtyBinding(value)) {
 		throw new NativePtySentinelMismatchError(modulePath, getNativePtySentinelExport(), []);
 	}
 
@@ -146,20 +145,28 @@ function assertNativePtyBinding(value: unknown, modulePath: string): NativePtyBi
 
 	const sentinelExport = getNativePtySentinelExport();
 	const sentinel = value[sentinelExport];
-	if (typeof sentinel !== "function") {
+	if (!isUnknownFunction(sentinel)) {
 		throw new NativePtySentinelMismatchError(modulePath, sentinelExport, actualExports);
 	}
 
-	const sentinelValue = (sentinel as () => unknown)();
+	const sentinelValue = sentinel();
 	if (sentinelValue !== NATIVE_PTY_PACKAGE_VERSION) {
 		throw new NativePtySentinelMismatchError(modulePath, sentinelExport, actualExports);
 	}
 
-	return value as NativePtyBinding;
+	return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
+}
+
+function isNativePtyBinding(value: unknown): value is NativePtyBinding {
+	return isRecord(value) && typeof value.PtySession === "function";
+}
+
+function isUnknownFunction(value: unknown): value is () => unknown {
+	return typeof value === "function";
 }
 
 function formatErrorCause(modulePath: string, error: unknown): string {

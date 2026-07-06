@@ -1,98 +1,42 @@
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { loadNativePty, type NativePtyLoadResult, type NativePtyUnavailableDiagnostic } from "./native-loader.ts";
+import { PipeFallbackSession, shouldUsePipeFallback } from "./pipe-fallback.ts";
 import {
-	type PipeFallbackOperationResult,
-	PipeFallbackSession,
-	type PipeFallbackSessionExit,
-	type PipeFallbackSessionOptions,
-	shouldUsePipeFallback,
-} from "./pipe-fallback.ts";
+	exitedOperation,
+	normalizeOperationResult,
+	normalizeTerminalExit,
+	notStartedOperation,
+} from "./session-exit.ts";
+import { getNativeSessionFactory } from "./session-native.ts";
+import { defaultCommand, normalizeRawTailBytes, toNativeOptions, toPipeFallbackOptions } from "./session-options.ts";
+import type {
+	CreateNativeTerminalSession,
+	TerminalSessionBackend,
+	TerminalSessionDataHandler,
+	TerminalSessionDependencies,
+	TerminalSessionExit,
+	TerminalSessionExitState,
+	TerminalSessionHandle,
+	TerminalSessionOperationResult,
+	TerminalSessionOptions,
+	TerminalSessionSignal,
+} from "./session-types.ts";
 
-export type TerminalSessionBackend = "native" | "pipe-fallback";
-export type TerminalSessionDataHandler = (chunk: Buffer) => void;
-
-export interface TerminalSessionOptions {
-	readonly command?: string;
-	readonly args?: readonly string[];
-	readonly cwd?: string;
-	readonly env?: Readonly<Record<string, string | undefined>>;
-	readonly cols?: number;
-	readonly rows?: number;
-	readonly timeoutMs?: number;
-	readonly rawTailBytes?: number;
-}
-
-export interface TerminalSessionNativeOptions {
-	readonly command: string;
-	readonly args: readonly string[];
-	readonly cwd?: string;
-	readonly env?: Readonly<Record<string, string | undefined>>;
-	readonly cols: number;
-	readonly rows: number;
-	readonly timeoutMs?: number;
-}
-
-export interface TerminalSessionOperationResult {
-	readonly ok: boolean;
-	readonly note: string;
-	readonly code?: string;
-	readonly idempotent?: boolean;
-}
-
-export interface TerminalSessionExitError {
-	readonly code: string;
-	readonly message: string;
-}
-
-export interface TerminalSessionExit {
-	readonly backend: TerminalSessionBackend;
-	readonly exitCode: number | null;
-	readonly signal: string | null;
-	readonly cancelled: boolean;
-	readonly timedOut: boolean;
-	readonly error?: TerminalSessionExitError;
-}
-
-export type TerminalSessionExitState =
-	| {
-			readonly status: "not_started" | "running";
-			readonly exit: null;
-	  }
-	| {
-			readonly status: "exited";
-			readonly exit: TerminalSessionExit;
-	  };
-
-export interface TerminalSessionHandle {
-	readonly onData?: (handler: TerminalSessionDataHandler) => () => void;
-	readonly write: (data: string | Uint8Array) => TerminalSessionOperationResult | undefined;
-	readonly resize: (cols: number, rows: number) => TerminalSessionOperationResult | undefined;
-	readonly kill: (signal?: NodeJS.Signals) => TerminalSessionOperationResult | undefined;
-	readonly waitExit?: () => Promise<unknown>;
-	readonly wait?: () => Promise<unknown>;
-}
-
-export type CreateNativeTerminalSession = (
-	options: TerminalSessionNativeOptions,
-	onData: TerminalSessionDataHandler,
-) => TerminalSessionHandle;
-
-export interface TerminalSessionDependencies {
-	readonly nativeLoadResult?: NativePtyLoadResult;
-	readonly createNativeSession?: CreateNativeTerminalSession;
-	readonly env?: Readonly<Record<string, string | undefined>>;
-}
-
-type NativeSessionCreator = (options: TerminalSessionNativeOptions, onData: TerminalSessionDataHandler) => unknown;
-type NativeSessionConstructor = new (
-	options: TerminalSessionNativeOptions,
-	onData: TerminalSessionDataHandler,
-) => unknown;
-
-const DEFAULT_COLS = 80;
-const DEFAULT_ROWS = 24;
-const DEFAULT_RAW_TAIL_BYTES = 64 * 1024;
+export type {
+	CreateNativeTerminalSession,
+	TerminalSessionBackend,
+	TerminalSessionDataHandler,
+	TerminalSessionDependencies,
+	TerminalSessionExit,
+	TerminalSessionExitError,
+	TerminalSessionExitState,
+	TerminalSessionHandle,
+	TerminalSessionNativeOptions,
+	TerminalSessionOperationResult,
+	TerminalSessionOptions,
+	TerminalSessionSignal,
+} from "./session-types.ts";
 
 export class TerminalSession {
 	readonly options: TerminalSessionOptions;
@@ -185,12 +129,16 @@ export class TerminalSession {
 			fallback.start();
 		}
 
-		if (this.backendValue === "native" && this.backendHandle.onData) {
-			this.unsubscribeBackendData = this.backendHandle.onData((chunk) => this.emitData(chunk));
+		const backendHandle = this.backendHandle;
+		const backendValue = this.backendValue;
+		if (backendHandle === null || backendValue === null) {
+			throw new Error("Terminal session backend did not initialize");
 		}
-		this.exitPromise = this.waitBackendExit(this.backendHandle, this.backendValue).then((exit) =>
-			this.settleExit(exit),
-		);
+
+		if (backendValue === "native" && backendHandle.onData) {
+			this.unsubscribeBackendData = backendHandle.onData((chunk) => this.emitData(chunk));
+		}
+		this.exitPromise = this.waitBackendExit(backendHandle, backendValue).then((exit) => this.settleExit(exit));
 		return this;
 	}
 
@@ -219,7 +167,7 @@ export class TerminalSession {
 		return normalizeOperationResult(handle.resize(cols, rows), `Resized terminal session to ${cols}x${rows}.`);
 	}
 
-	kill(signal: NodeJS.Signals = "SIGTERM"): TerminalSessionOperationResult {
+	kill(signal: TerminalSessionSignal = "SIGTERM"): TerminalSessionOperationResult {
 		const handle = this.backendHandle;
 		if (this.killRequested || this.settledExit !== null) {
 			return {
@@ -253,29 +201,7 @@ export class TerminalSession {
 		const wait = handle.waitExit ?? handle.wait;
 		if (!wait) throw new Error("Terminal session backend does not expose waitExit or wait");
 		const exit = await wait.call(handle);
-		return this.normalizeExit(exit, backend);
-	}
-
-	private normalizeExit(exit: unknown, backend: TerminalSessionBackend): TerminalSessionExit {
-		if (isRecord(exit) && exit.backend === "pipe-fallback") {
-			return normalizePipeFallbackExit(exit as unknown as PipeFallbackSessionExit, this.killRequested);
-		}
-		if (backend === "pipe-fallback") {
-			return normalizePipeFallbackExit(exit as PipeFallbackSessionExit, this.killRequested);
-		}
-		const record = isRecord(exit) ? exit : {};
-		const timedOut = readBoolean(record, "timedOut") ?? readBoolean(record, "timed_out") ?? false;
-		return {
-			backend,
-			exitCode: readNullableNumber(record, "exitCode") ?? readNullableNumber(record, "exit_code") ?? null,
-			signal: readNullableString(record, "signal"),
-			cancelled:
-				(readBoolean(record, "cancelled") ?? readBoolean(record, "canceled") ?? false) ||
-				this.killRequested ||
-				timedOut,
-			timedOut,
-			error: readTerminalExitError(record),
-		};
+		return normalizeTerminalExit(exit, backend, this.killRequested);
 	}
 
 	private settleExit(exit: TerminalSessionExit): TerminalSessionExit {
@@ -311,137 +237,4 @@ export function createTerminalSession(
 	dependencies: TerminalSessionDependencies = {},
 ): TerminalSession {
 	return new TerminalSession(options, dependencies).start();
-}
-
-function normalizeRawTailBytes(value: number | undefined): number {
-	if (value === undefined) return DEFAULT_RAW_TAIL_BYTES;
-	if (!Number.isSafeInteger(value) || value < 0) {
-		throw new Error("Invalid rawTailBytes: must be a non-negative safe integer");
-	}
-	return value;
-}
-
-function defaultCommand(): string {
-	if (process.platform === "win32") return process.env.ComSpec ?? "cmd.exe";
-	return process.env.SHELL ?? "sh";
-}
-
-function toNativeOptions(options: TerminalSessionOptions): TerminalSessionNativeOptions {
-	return {
-		command: options.command ?? defaultCommand(),
-		args: [...(options.args ?? [])],
-		cwd: options.cwd,
-		env: options.env ? { ...options.env } : undefined,
-		cols: options.cols ?? DEFAULT_COLS,
-		rows: options.rows ?? DEFAULT_ROWS,
-		timeoutMs: options.timeoutMs,
-	};
-}
-
-function toPipeFallbackOptions(options: TerminalSessionOptions): PipeFallbackSessionOptions {
-	return {
-		command: options.command ?? defaultCommand(),
-		args: options.args ? [...options.args] : undefined,
-		cwd: options.cwd,
-		env: options.env ? { ...options.env } : undefined,
-		timeoutMs: options.timeoutMs,
-	};
-}
-
-function getNativeSessionFactory(loadResult: NativePtyLoadResult): CreateNativeTerminalSession | null {
-	if (loadResult.native === null) return null;
-	const create = loadResult.native.createPtySession ?? loadResult.native.startPtySession;
-	if (isNativeSessionCreator(create)) {
-		return (options, onData) => assertTerminalSessionHandle(create(options, onData));
-	}
-	const PtySession = loadResult.native.PtySession;
-	if (isNativeSessionConstructor(PtySession)) {
-		return (options, onData) => assertTerminalSessionHandle(new PtySession(options, onData));
-	}
-	return null;
-}
-
-function assertTerminalSessionHandle(value: unknown): TerminalSessionHandle {
-	if (!isRecord(value)) throw new Error("Native PTY session factory did not return an object");
-	if (typeof value.write !== "function") throw new Error("Native PTY session handle is missing write()");
-	if (typeof value.resize !== "function") throw new Error("Native PTY session handle is missing resize()");
-	if (typeof value.kill !== "function") throw new Error("Native PTY session handle is missing kill()");
-	if (typeof value.waitExit !== "function" && typeof value.wait !== "function") {
-		throw new Error("Native PTY session handle is missing waitExit() or wait()");
-	}
-	return value as unknown as TerminalSessionHandle;
-}
-
-function isNativeSessionCreator(value: unknown): value is NativeSessionCreator {
-	return typeof value === "function";
-}
-
-function isNativeSessionConstructor(value: unknown): value is NativeSessionConstructor {
-	return typeof value === "function";
-}
-
-function normalizePipeFallbackExit(exit: PipeFallbackSessionExit, killRequested: boolean): TerminalSessionExit {
-	return {
-		backend: "pipe-fallback",
-		exitCode: exit.exitCode,
-		signal: exit.signal,
-		cancelled: killRequested || exit.timedOut,
-		timedOut: exit.timedOut,
-		error: exit.error,
-	};
-}
-
-function normalizeOperationResult(
-	result: TerminalSessionOperationResult | PipeFallbackOperationResult | undefined,
-	defaultNote: string,
-): TerminalSessionOperationResult {
-	if (result === undefined) return { ok: true, note: defaultNote };
-	if ("ok" in result) return result;
-	return { ok: true, note: defaultNote };
-}
-
-function notStartedOperation(operation: string): TerminalSessionOperationResult {
-	return {
-		ok: false,
-		code: "not_started",
-		note: `Cannot ${operation} terminal session: session has not started.`,
-	};
-}
-
-function exitedOperation(operation: string): TerminalSessionOperationResult {
-	return {
-		ok: false,
-		code: "exited",
-		note: `Cannot ${operation} terminal session: session has exited.`,
-	};
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-	return typeof value === "object" && value !== null;
-}
-
-function readNullableNumber(record: Readonly<Record<string, unknown>>, key: string): number | null | undefined {
-	const value = record[key];
-	if (value === null) return null;
-	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function readNullableString(record: Readonly<Record<string, unknown>>, key: string): string | null {
-	const value = record[key];
-	if (value === null) return null;
-	return typeof value === "string" ? value : null;
-}
-
-function readBoolean(record: Readonly<Record<string, unknown>>, key: string): boolean | undefined {
-	const value = record[key];
-	return typeof value === "boolean" ? value : undefined;
-}
-
-function readTerminalExitError(record: Readonly<Record<string, unknown>>): TerminalSessionExitError | undefined {
-	const error = record.error;
-	if (!isRecord(error)) return undefined;
-	const code = typeof error.code === "string" ? error.code : undefined;
-	const message = typeof error.message === "string" ? error.message : undefined;
-	if (!code || !message) return undefined;
-	return { code, message };
 }

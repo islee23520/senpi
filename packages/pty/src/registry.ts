@@ -1,110 +1,42 @@
-export type TerminalSessionState = "live" | "exited";
-export type TerminalSessionSignal = string;
-export type MaybePromise<T> = T | Promise<T>;
-type ProcessPlatform = string;
-type ProcessLike = {
-	readonly platform?: string;
-	readonly kill?: (target: number, signal?: string) => void;
-};
+import { cleanupDetachedChildren, defaultKillProcess, getRuntimePlatform } from "./registry-detached.ts";
+import {
+	isTerminalSessionExited,
+	sessionIdPrefix,
+	stopTerminalSession,
+	waitForTerminalSessionExit,
+} from "./registry-session.ts";
+import type {
+	MaybePromise,
+	SessionRegistryCreateContext,
+	SessionRegistryCreateOptions,
+	SessionRegistryEntry,
+	SessionRegistryOptions,
+	SessionRegistrySession,
+	SessionRegistrySweepOptions,
+	StoredSessionRegistryEntry,
+	TerminalSessionSignal,
+} from "./registry-types.ts";
 
-export interface TrackedDetachedChild {
-	readonly pid?: number;
-	readonly processGroupId?: number;
-	readonly exited?: boolean | (() => boolean);
-	readonly kill?: (signal?: TerminalSessionSignal) => MaybePromise<unknown>;
-}
+export { isTerminalSessionExited, sessionIdPrefix } from "./registry-session.ts";
+export type {
+	InitialSessionRegistryEntry,
+	MaybePromise,
+	SessionRegistryCreateContext,
+	SessionRegistryCreateOptions,
+	SessionRegistryEntry,
+	SessionRegistryOptions,
+	SessionRegistrySession,
+	SessionRegistrySweepOptions,
+	TerminalSessionSignal,
+	TerminalSessionState,
+	TrackedDetachedChild,
+} from "./registry-types.ts";
+export { SessionRegistryCapacityError } from "./registry-types.ts";
 
-export interface SessionRegistrySession {
-	readonly command?: string;
-	readonly exited?: boolean;
-	readonly isExited?: boolean | (() => boolean);
-	readonly exitResult?: unknown;
-	readonly exitState?: { readonly status?: string };
-	readonly status?: string;
-	readonly trackedDetachedChildren?: readonly TrackedDetachedChild[];
-	readonly getTrackedDetachedChildren?: () => readonly TrackedDetachedChild[];
-	readonly onExit?: (handler: () => void) => (() => void) | undefined;
-	readonly stop?: () => MaybePromise<unknown>;
-	readonly kill?: (signal?: TerminalSessionSignal) => MaybePromise<unknown>;
-	readonly signal?: (signal: TerminalSessionSignal) => MaybePromise<unknown>;
-}
-
-export interface SessionRegistryCreateOptions<TSession extends SessionRegistrySession = SessionRegistrySession> {
-	readonly command?: string;
-	readonly args?: readonly string[];
-	readonly cwd?: string;
-	readonly env?: Readonly<Record<string, string | undefined>>;
-	readonly cols?: number;
-	readonly rows?: number;
-	readonly session?: TSession;
-}
-
-export interface SessionRegistryCreateContext {
-	readonly id: string;
-	readonly command: string;
-	readonly args?: readonly string[];
-	readonly cwd?: string;
-	readonly env?: Readonly<Record<string, string | undefined>>;
-	readonly cols?: number;
-	readonly rows?: number;
-}
-
-export interface InitialSessionRegistryEntry<TSession extends SessionRegistrySession = SessionRegistrySession> {
-	readonly id: string;
-	readonly session: TSession;
-	readonly command?: string;
-}
-
-export interface SessionRegistryEntry<TSession extends SessionRegistrySession = SessionRegistrySession> {
-	readonly id: string;
-	readonly command: string;
-	readonly session: TSession;
-	readonly createdAt: number;
-	readonly lastUsedAt: number;
-	readonly state: TerminalSessionState;
-	readonly exitedAt: number | null;
-}
-
-export interface SessionRegistrySweepOptions {
-	readonly remove?: boolean;
-}
-
-export interface SessionRegistryOptions<TSession extends SessionRegistrySession = SessionRegistrySession> {
-	readonly maxSessions?: number;
-	readonly initialSessions?: readonly InitialSessionRegistryEntry<TSession>[];
-	readonly createSession?: (options: SessionRegistryCreateContext) => MaybePromise<TSession>;
-	readonly killProcess?: (target: number, signal: TerminalSessionSignal) => void;
-	readonly now?: () => number;
-	readonly platform?: ProcessPlatform;
-}
-
-type StoredSessionRegistryEntry<TSession extends SessionRegistrySession> = {
-	id: string;
-	command: string;
-	session: TSession;
-	createdAt: number;
-	lastUsedAt: number;
-	state: TerminalSessionState;
-	exitedAt: number | null;
-	unsubscribeExit: (() => void) | null;
-	stopPromise: Promise<boolean> | null;
-	detachedCleanupPromise: Promise<void> | null;
-};
+import { SessionRegistryCapacityError } from "./registry-types.ts";
 
 const DEFAULT_MAX_SESSIONS = 32;
 const DEFAULT_COMMAND = "bash";
-const DEFAULT_SIGNAL: TerminalSessionSignal = "SIGTERM";
-
-export class SessionRegistryCapacityError extends Error {
-	readonly code = "session_registry_capacity";
-	readonly maxSessions: number;
-
-	constructor(maxSessions: number) {
-		super(`Cannot create terminal session: all ${maxSessions} registry slots are live.`);
-		this.name = "SessionRegistryCapacityError";
-		this.maxSessions = maxSessions;
-	}
-}
 
 export class SessionRegistry<TSession extends SessionRegistrySession = SessionRegistrySession> {
 	private readonly entries = new Map<string, StoredSessionRegistryEntry<TSession>>();
@@ -112,7 +44,7 @@ export class SessionRegistry<TSession extends SessionRegistrySession = SessionRe
 	private readonly createSession: ((options: SessionRegistryCreateContext) => MaybePromise<TSession>) | null;
 	private readonly killProcess: (target: number, signal: TerminalSessionSignal) => void;
 	private readonly now: () => number;
-	private readonly platform: ProcessPlatform;
+	private readonly platform: string;
 	private sequence = 0;
 	readonly maxSessions: number;
 
@@ -121,7 +53,7 @@ export class SessionRegistry<TSession extends SessionRegistrySession = SessionRe
 		this.createSession = options.createSession ?? null;
 		this.killProcess = options.killProcess ?? defaultKillProcess;
 		this.now = options.now ?? Date.now;
-		this.platform = options.platform ?? getRuntimeProcess().platform ?? "unknown";
+		this.platform = options.platform ?? getRuntimePlatform();
 
 		for (const initial of options.initialSessions ?? []) {
 			this.addEntry(initial.id, initial.session, initial.command ?? initial.session.command ?? DEFAULT_COMMAND);
@@ -261,7 +193,12 @@ export class SessionRegistry<TSession extends SessionRegistrySession = SessionRe
 		await this.cleanupDetachedChildren(entry);
 		if (entry.state !== "exited") {
 			await stopTerminalSession(entry.session);
-			this.markExited(entry);
+			if (await waitForTerminalSessionExit(entry.session)) {
+				this.markExited(entry);
+			} else {
+				entry.state = "stopping";
+				entry.exitedAt = null;
+			}
 		}
 		return true;
 	}
@@ -273,20 +210,7 @@ export class SessionRegistry<TSession extends SessionRegistrySession = SessionRe
 	}
 
 	private async cleanupDetachedChildrenOnce(session: TSession): Promise<void> {
-		for (const child of getTrackedDetachedChildren(session)) {
-			if (isTrackedDetachedChildExited(child)) continue;
-			if (child.kill) {
-				await child.kill(DEFAULT_SIGNAL);
-				continue;
-			}
-			const target = getDetachedChildKillTarget(child, this.platform);
-			if (target === null) continue;
-			try {
-				this.killProcess(target, DEFAULT_SIGNAL);
-			} catch (error) {
-				if (!isMissingProcessError(error)) throw error;
-			}
-		}
+		await cleanupDetachedChildren(session, this.platform, this.killProcess);
 	}
 
 	private refreshExitedStates(): void {
@@ -334,78 +258,8 @@ export class SessionRegistry<TSession extends SessionRegistrySession = SessionRe
 	}
 }
 
-export function sessionIdPrefix(command: string): string {
-	const parts = command.split(/[\\/]/).filter(Boolean);
-	const baseName = parts[parts.length - 1] ?? DEFAULT_COMMAND;
-	const prefix = baseName
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "_")
-		.replace(/^_+|_+$/g, "");
-	return prefix || "session";
-}
-
-export function isTerminalSessionExited(session: SessionRegistrySession): boolean {
-	if (session.exited === true) return true;
-	if (typeof session.isExited === "boolean") return session.isExited;
-	if (typeof session.isExited === "function" && session.isExited()) return true;
-	if (session.exitState?.status === "exited") return true;
-	if (session.status === "exited" || session.status === "closed" || session.status === "stopped") return true;
-	return session.exitResult !== undefined && session.exitResult !== null;
-}
-
 function normalizeMaxSessions(value: number | undefined): number {
 	if (value === undefined) return DEFAULT_MAX_SESSIONS;
 	if (!Number.isFinite(value) || value < 1) throw new Error("maxSessions must be a positive finite number.");
 	return Math.trunc(value);
-}
-
-async function stopTerminalSession(session: SessionRegistrySession): Promise<void> {
-	if (session.stop) {
-		await session.stop();
-		return;
-	}
-	if (session.kill) {
-		await session.kill(DEFAULT_SIGNAL);
-		return;
-	}
-	if (session.signal) await session.signal(DEFAULT_SIGNAL);
-}
-
-function getTrackedDetachedChildren(session: SessionRegistrySession): readonly TrackedDetachedChild[] {
-	return session.getTrackedDetachedChildren?.() ?? session.trackedDetachedChildren ?? [];
-}
-
-function isTrackedDetachedChildExited(child: TrackedDetachedChild): boolean {
-	if (typeof child.exited === "boolean") return child.exited;
-	if (typeof child.exited === "function") return child.exited();
-	return false;
-}
-
-function getDetachedChildKillTarget(child: TrackedDetachedChild, platform: ProcessPlatform): number | null {
-	if (platform !== "win32" && isPositiveInteger(child.processGroupId)) return -child.processGroupId;
-	if (isPositiveInteger(child.pid)) return child.pid;
-	return null;
-}
-
-function isPositiveInteger(value: number | undefined): value is number {
-	return value !== undefined && Number.isInteger(value) && value > 0;
-}
-
-function defaultKillProcess(target: number, signal: TerminalSessionSignal): void {
-	const kill = getRuntimeProcess().kill;
-	if (!kill) throw new Error("Cannot kill detached child: runtime process.kill is unavailable.");
-	kill(target, signal);
-}
-
-function isMissingProcessError(error: unknown): boolean {
-	if (typeof error !== "object" || error === null) return false;
-	const code = (error as { readonly code?: unknown }).code;
-	return code === "ESRCH";
-}
-
-function getRuntimeProcess(): ProcessLike {
-	if (!("process" in globalThis)) return {};
-	const candidate = (globalThis as { readonly process?: unknown }).process;
-	if (typeof candidate !== "object" || candidate === null) return {};
-	return candidate as ProcessLike;
 }

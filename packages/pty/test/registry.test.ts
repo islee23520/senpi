@@ -129,6 +129,47 @@ describe("SessionRegistry", () => {
 		expect(registry.list().every((entry) => entry.state === "exited")).toBe(true);
 	});
 
+	it("keeps a stopped-but-live session in stopping state until exit is observed", async () => {
+		class SlowStopSession implements SessionRegistrySession {
+			readonly command = "bash";
+			private stopped = false;
+			private exitedFlag = false;
+
+			get isExited(): boolean {
+				return this.exitedFlag;
+			}
+
+			get stopCalled(): boolean {
+				return this.stopped;
+			}
+
+			stop(): void {
+				this.stopped = true;
+			}
+
+			exit(): void {
+				this.exitedFlag = true;
+			}
+		}
+		const session = new SlowStopSession();
+		const registry = new SessionRegistry<SlowStopSession>({
+			initialSessions: [{ id: "bash_1", session, command: "bash" }],
+		});
+
+		await registry.stop("bash_1");
+		const stopping = registry.get("bash_1");
+		const stoppingState = stopping?.state;
+		const stoppingExitedAt = stopping?.exitedAt;
+		session.exit();
+		const exited = registry.get("bash_1");
+
+		expect(session.stopCalled).toBe(true);
+		expect(stoppingState).toBe("stopping");
+		expect(stoppingExitedAt).toBeNull();
+		expect(exited?.state).toBe("exited");
+		expect(exited?.exitedAt).not.toBeNull();
+	});
+
 	it("sweeps exited startup sessions and session-end detached children", async () => {
 		const startupExited = new MockTerminalSession("bash", [{ pid: 301 }]);
 		const startupLive = new MockTerminalSession("bash");

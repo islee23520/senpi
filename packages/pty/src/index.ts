@@ -13,6 +13,22 @@ export {
 	type NativePtyRuntime,
 	NativePtySentinelMismatchError,
 } from "./native-loader.ts";
+export {
+	type InitialSessionRegistryEntry,
+	isTerminalSessionExited,
+	SessionRegistry,
+	SessionRegistryCapacityError,
+	type SessionRegistryCreateContext,
+	type SessionRegistryCreateOptions,
+	type SessionRegistryEntry,
+	type SessionRegistryOptions,
+	type SessionRegistrySession,
+	type SessionRegistrySweepOptions,
+	sessionIdPrefix,
+	type TerminalSessionSignal,
+	type TerminalSessionState,
+	type TrackedDetachedChild,
+} from "./registry.ts";
 export { TerminalScreen, type TerminalScreenOptions, type TerminalScreenSnapshot } from "./screen.ts";
 export {
 	type CreateNativeTerminalSession,

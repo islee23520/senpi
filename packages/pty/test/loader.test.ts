@@ -1,27 +1,36 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
 	getNativePtyCandidatePaths,
+	getNativePtyHost,
 	getNativePtySentinelExport,
 	loadNativePty,
 	type NativePtyBinding,
-	type NativePtyRuntime,
 	NativePtySentinelMismatchError,
 } from "../src/loader.ts";
 
 const moduleDir = path.join(path.sep, "pkg", "dist");
 const execDir = path.join(path.sep, "bundle");
+const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageVersion = "2026.7.5-2";
 const sentinelExport = "__senpiPtyV2026_7_5";
 
-function candidate(runtime: NativePtyRuntime, host: string): string {
-	return path.join(path.sep, "pkg", "native", runtime, "prebuilds", host, `senpi_pty.${host}.node`);
+function candidate(host: string): string {
+	return path.join(path.sep, "pkg", "native", "prebuilds", host, `senpi_pty.${host}.node`);
 }
 
-function missingModuleError(modulePath: string): Error & { code?: string } {
-	const error = new Error(`Cannot find module '${modulePath}'`) as Error & { code?: string };
-	error.code = "MODULE_NOT_FOUND";
-	return error;
+class MissingModuleError extends Error {
+	readonly code = "MODULE_NOT_FOUND";
+
+	constructor(modulePath: string) {
+		super(`Cannot find module '${modulePath}'`);
+	}
+}
+
+function missingModuleError(modulePath: string): MissingModuleError {
+	return new MissingModuleError(modulePath);
 }
 
 describe("loadNativePty", () => {
@@ -40,15 +49,15 @@ describe("loadNativePty", () => {
 			platform: "darwin",
 			requireBinding(modulePath) {
 				attempted.push(modulePath);
-				if (modulePath === candidate("node", host)) return native;
+				if (modulePath === candidate(host)) return native;
 				throw missingModuleError(modulePath);
 			},
 			runtime: "node",
 		});
 
-		expect(result.native).toBe(native);
+		expect(result.native).toStrictEqual(native);
 		expect(result.diagnostic).toBeNull();
-		expect(attempted).toEqual([candidate("node", host)]);
+		expect(attempted).toEqual([candidate(host)]);
 	});
 
 	it("derives the sentinel export from the package version", () => {
@@ -97,8 +106,7 @@ describe("loadNativePty", () => {
 				moduleDir,
 				platform: "darwin",
 				requireBinding(modulePath) {
-					if (modulePath === candidate("node", host))
-						return { PtySession: class PtySession {}, version: () => "0.0.0" };
+					if (modulePath === candidate(host)) return { PtySession: class PtySession {}, version: () => "0.0.0" };
 					throw missingModuleError(modulePath);
 				},
 				runtime: "node",
@@ -112,8 +120,7 @@ describe("loadNativePty", () => {
 				moduleDir,
 				platform: "darwin",
 				requireBinding(modulePath) {
-					if (modulePath === candidate("node", host))
-						return { PtySession: class PtySession {}, version: () => "0.0.0" };
+					if (modulePath === candidate(host)) return { PtySession: class PtySession {}, version: () => "0.0.0" };
 					throw missingModuleError(modulePath);
 				},
 				runtime: "node",
@@ -121,7 +128,7 @@ describe("loadNativePty", () => {
 		} catch (error) {
 			if (!(error instanceof NativePtySentinelMismatchError)) throw error;
 			expect(error.code).toBe("native-sentinel-mismatch");
-			expect(error.modulePath).toBe(candidate("node", host));
+			expect(error.modulePath).toBe(candidate(host));
 			expect(error.expectedExport).toBe(sentinelExport);
 			expect(error.actualExports).toEqual(["PtySession", "version"]);
 		}
@@ -137,7 +144,7 @@ describe("loadNativePty", () => {
 				moduleDir,
 				platform: "darwin",
 				requireBinding(modulePath) {
-					if (modulePath === candidate("node", host)) {
+					if (modulePath === candidate(host)) {
 						return { PtySession: class PtySession {}, [sentinelExport]: () => "0.0.0" };
 					}
 					throw missingModuleError(modulePath);
@@ -147,7 +154,7 @@ describe("loadNativePty", () => {
 		).toThrow(NativePtySentinelMismatchError);
 	});
 
-	it("selects Bun prebuild candidates when the runtime is Bun", () => {
+	it("selects the shipped package prebuild candidates when the runtime is Bun", () => {
 		const paths = getNativePtyCandidatePaths({
 			arch: "x64",
 			execDir,
@@ -157,9 +164,34 @@ describe("loadNativePty", () => {
 		});
 
 		expect(paths).toEqual([
-			path.join(path.sep, "pkg", "native", "bun", "prebuilds", "linux-x64", "senpi_pty.linux-x64.node"),
-			path.join(path.sep, "pkg", "dist", "native", "bun", "prebuilds", "linux-x64", "senpi_pty.linux-x64.node"),
-			path.join(path.sep, "bundle", "native", "bun", "prebuilds", "linux-x64", "senpi_pty.linux-x64.node"),
+			path.join(path.sep, "pkg", "native", "prebuilds", "linux-x64", "senpi_pty.linux-x64.node"),
+			path.join(path.sep, "pkg", "dist", "native", "prebuilds", "linux-x64", "senpi_pty.linux-x64.node"),
+			path.join(path.sep, "bundle", "native", "prebuilds", "linux-x64", "senpi_pty.linux-x64.node"),
 		]);
+		expect(paths.every((candidatePath) => !candidatePath.includes(`${path.sep}bun${path.sep}`))).toBe(true);
+	});
+
+	it("covers the committed native/prebuilds host layout used by the package", () => {
+		const host = getNativePtyHost();
+		const vendoredPath = path.join(packageRoot, "native", "prebuilds", host, `senpi_pty.${host}.node`);
+		const paths = getNativePtyCandidatePaths({
+			execDir,
+			moduleDir: path.join(packageRoot, "dist"),
+			runtime: "node",
+		});
+
+		expect(paths[0]).toBe(vendoredPath);
+		if (!existsSync(vendoredPath)) {
+			expect(paths[0]).toContain(path.join("native", "prebuilds", host));
+			return;
+		}
+
+		const result = loadNativePty({
+			execDir,
+			moduleDir: path.join(packageRoot, "dist"),
+			runtime: "node",
+		});
+		expect(result.diagnostic).toBeNull();
+		expect(result.native).not.toBeNull();
 	});
 });
