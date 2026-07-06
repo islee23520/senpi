@@ -1,3 +1,8 @@
+mod session;
+mod signals;
+
+pub use session::{PtyError, PtyExit, PtyResult, PtySession, PtySessionOptions};
+
 use napi_derive::napi;
 
 #[napi]
@@ -19,3 +24,6 @@ mod tests {
         let _pty_system = portable_pty::native_pty_system();
     }
 }
+
+#[cfg(test)]
+mod session_tests;
