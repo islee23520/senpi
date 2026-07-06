@@ -53,6 +53,14 @@ export interface Args {
 	neoIsolated?: boolean;
 	/** Dev-only override path to the neo binary (hidden from help). */
 	neoBin?: string;
+	/**
+	 * Run the neo shared daemon, listening for JSONL RPC connections on the given
+	 * unix socket (POSIX) or named-pipe (Windows) path. Hidden from help — this is
+	 * an internal handoff target the neo client spawns, not a user-facing flag.
+	 */
+	neoListen?: string;
+	/** Self-register into the neo daemon registry when listening (daemon-internal). */
+	neoRegister?: boolean;
 	messages: string[];
 	fileArgs: string[];
 	/** Unknown flags (potentially extension flags) - map of flag name to value */
@@ -196,6 +204,10 @@ export function parseArgs(args: string[]): Args {
 			result.neoIsolated = true;
 		} else if (arg === "--neo-bin" && i + 1 < args.length) {
 			result.neoBin = args[++i];
+		} else if (arg === "--listen" && i + 1 < args.length) {
+			result.neoListen = args[++i];
+		} else if (arg === "--register") {
+			result.neoRegister = true;
 		} else if (arg.startsWith("@")) {
 			result.fileArgs.push(arg.slice(1)); // Remove @ prefix
 		} else if (arg.startsWith("--")) {
