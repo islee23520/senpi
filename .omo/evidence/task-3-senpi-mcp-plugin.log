@@ -197,7 +197,7 @@ $ npx tsx /tmp/senpi-mcp-config-qa.ts happy
     "globalOnly": {
       "args": [],
       "headers": {
-        "Authorization": "Bearer qa-token"
+        "Authorization": "Bearer [REDACTED_FIXTURE_TOKEN]"
       },
       "source": "global",
       "state": "enabled",
@@ -205,7 +205,7 @@ $ npx tsx /tmp/senpi-mcp-config-qa.ts happy
     },
     "shared": {
       "args": [
-        "qa-token"
+        "[REDACTED_FIXTURE_TOKEN]"
       ],
       "command": "project-shared",
       "source": "project",
