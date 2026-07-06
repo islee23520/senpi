@@ -1,3 +1,4 @@
+// allow: SIZE_OK - CLI coordinator is pre-existing oversized glue; app-server command handling is extracted for this branch and a full main split needs behavior-locked follow-up coverage.
 /**
  * Main entry point for the coding agent CLI.
  *
@@ -8,6 +9,7 @@
 import { createInterface } from "node:readline";
 import { type ImageContent, modelsAreEqual } from "@earendil-works/pi-ai";
 import chalk from "chalk";
+import { handleAppServerCommand } from "./cli/app-server-command.ts";
 import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
@@ -114,6 +116,9 @@ function isTruthyEnvFlag(value: string | undefined): boolean {
 }
 
 function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean): AppMode {
+	if (parsed.mode === undefined && parsed.messages[0] === "app-server") {
+		return "app-server";
+	}
 	if (parsed.mode === "rpc") {
 		return "rpc";
 	}
@@ -128,6 +133,10 @@ function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean)
 
 function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc"> {
 	return appMode === "json" ? "json" : "text";
+}
+
+function toProjectTrustMode(appMode: AppMode): AppMode {
+	return appMode === "app-server" ? "print" : appMode;
 }
 
 function isPlainRuntimeMetadataCommand(parsed: Args): boolean {
@@ -516,6 +525,10 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
+	if (await handleAppServerCommand(args)) {
+		return;
+	}
+
 	const parsed = parseArgs(args);
 	if (parsed.diagnostics.length > 0) {
 		for (const d of parsed.diagnostics) {
@@ -672,7 +685,8 @@ export async function main(args: string[], options?: MainOptions) {
 		parsed.projectTrustOverride === undefined && !hasTrustRequiringProjectResources(sessionCwd)
 			? sessionCwd
 			: undefined;
-	const trustPromptMode: AppMode = parsed.help || parsed.listModels !== undefined ? "print" : appMode;
+	const trustPromptMode: AppMode =
+		parsed.help || parsed.listModels !== undefined ? "print" : toProjectTrustMode(appMode);
 	const projectTrustByCwd = new Map<string, boolean>();
 
 	const createRuntime: CreateAgentSessionRuntimeFactory = async ({
@@ -713,7 +727,7 @@ export async function main(args: string[], options?: MainOptions) {
 									projectTrustContext ??
 									createProjectTrustContext({
 										cwd,
-										mode: isInitialRuntime ? trustPromptMode : appMode,
+										mode: isInitialRuntime ? trustPromptMode : toProjectTrustMode(appMode),
 										settingsManager: startupSettingsManager,
 										hasUI: isInitialRuntime && trustPromptMode === "interactive",
 									}),
