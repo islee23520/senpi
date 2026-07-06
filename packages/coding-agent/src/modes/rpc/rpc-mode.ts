@@ -26,6 +26,7 @@ import {
 } from "../../core/output-guard.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { createRpcConnectionHandler, type RpcConnectionSink } from "./connection-handler.ts";
+import { parseClientCapabilities } from "./custom-capability.ts";
 import { attachJsonlLineReader } from "./jsonl.ts";
 
 // Re-export types for consumers
@@ -49,7 +50,12 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		waitForBackpressure: waitForRawStdoutBackpressure,
 	};
 
-	const handler = createRpcConnectionHandler(runtimeHost, sink);
+	// Client capability flags reach this single-connection stdio host via the
+	// SENPI_RPC_CLIENT_CAPABILITIES env var (comma-separated). The neo daemon sets
+	// it when spawning a per-connection child from the handshake's capabilities; a
+	// plain stdio client that sets nothing gets byte-identical default behavior.
+	const capabilities = parseClientCapabilities(process.env.SENPI_RPC_CLIENT_CAPABILITIES);
+	const handler = createRpcConnectionHandler(runtimeHost, sink, { capabilities });
 
 	let shuttingDown = false;
 	const signalCleanupHandlers: Array<() => void> = [];

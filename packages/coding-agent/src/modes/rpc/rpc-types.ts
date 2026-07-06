@@ -69,7 +69,40 @@ export type RpcCommand =
 	| { id?: string; type: "get_messages" }
 
 	// Commands (available for invocation via prompt)
-	| { id?: string; type: "get_commands" };
+	| { id?: string; type: "get_commands" }
+
+	// Auth (task 13) is additive. get_auth_providers, login_api_key and logout
+	// answer synchronously. login_start responds immediately (flow-started) and
+	// completion is delivered via auth_login_url / auth_login_end EVENTS, because
+	// an interactive OAuth round-trip cannot fit the 30s request timeout.
+	| { id?: string; type: "get_auth_providers" }
+	| { id?: string; type: "login_start"; provider: string }
+	| { id?: string; type: "login_cancel"; provider: string }
+	| { id?: string; type: "login_api_key"; provider: string; key: string }
+	| { id?: string; type: "logout"; provider: string };
+
+// ============================================================================
+// Auth provider info (get_auth_providers response)
+// ============================================================================
+
+/** One provider row for the /login and /logout selectors. */
+export interface RpcAuthProvider {
+	/** Provider id (e.g. "anthropic", "openai"). */
+	id: string;
+	/** Human-readable display name. */
+	name: string;
+	/** How this provider authenticates. */
+	authType: "oauth" | "api_key";
+	/** Auth status without exposing or refreshing any credential. */
+	status: RpcAuthStatus;
+}
+
+/** Auth status mirror (no credential values), from getProviderAuthStatus. */
+export interface RpcAuthStatus {
+	configured: boolean;
+	source?: "stored" | "runtime" | "environment" | "fallback" | "models_json_key" | "models_json_command";
+	label?: string;
+}
 
 // ============================================================================
 // RPC Slash Command (for get_commands response)
@@ -219,6 +252,21 @@ export type RpcResponse =
 			data: { commands: RpcSlashCommand[] };
 	  }
 
+	// Auth (task 13)
+	| {
+			id?: string;
+			type: "response";
+			command: "get_auth_providers";
+			success: true;
+			data: { providers: RpcAuthProvider[] };
+	  }
+	// login_start returns immediately: success:true means the flow has started.
+	// The URL and completion arrive as auth_login_url / auth_login_end events.
+	| { id?: string; type: "response"; command: "login_start"; success: true }
+	| { id?: string; type: "response"; command: "login_cancel"; success: true }
+	| { id?: string; type: "response"; command: "login_api_key"; success: true }
+	| { id?: string; type: "response"; command: "logout"; success: true }
+
 	// Error response (any command can fail)
 	| { id?: string; type: "response"; command: string; success: false; error: string };
 
@@ -262,7 +310,12 @@ export type RpcExtensionUIRequest =
 			widgetPlacement?: "aboveEditor" | "belowEditor";
 	  }
 	| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
-	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string };
+	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string }
+	// Additive (task 13/14): emitted ONLY when the client advertised the
+	// "custom_unsupported" capability. ctx.ui.custom cannot render a third-party
+	// component in RPC mode, so a flagged client gets this notice before custom()
+	// returns undefined. Default clients never see it (byte-identical behavior).
+	| { type: "extension_ui_request"; id: string; method: "custom_unsupported"; extensionName: string };
 
 // ============================================================================
 // Extension UI Commands (stdin)
