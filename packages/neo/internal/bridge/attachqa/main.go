@@ -29,14 +29,24 @@ import (
 	"os"
 )
 
+// main returns the process exit code from runAttachQA. The exit code MUST come
+// back through a return (os.Exit here, once) rather than an os.Exit deep in the
+// body, so runAttachQA's deferred teardown always fires — even on the FAIL path.
+// A QA harness whose failure path skips teardown leaks the very daemon it tested
+// (chaos re-run MINOR 3); routing the code up keeps teardown on every path.
 func main() {
+	os.Exit(runAttachQA())
+}
+
+func runAttachQA() int {
 	scenario := flagArg("--scenario", "all")
 
 	env, err := setupHarness()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "SETUP FAILED: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	// Deferred so it runs on the happy path AND the FAIL return below.
 	defer env.teardown()
 
 	results := map[string]bool{}
@@ -71,10 +81,10 @@ func main() {
 	}
 	if allPass {
 		fmt.Println("RESULT ALL-PASS")
-		return
+		return 0
 	}
 	fmt.Println("RESULT FAIL")
-	os.Exit(1)
+	return 1
 }
 
 func flagArg(name, def string) string {
