@@ -20,9 +20,19 @@
  *   node mock-loop.mjs --run "prompt" [--api ...] [--evidence SLUG]
  */
 
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createChecks, evidenceDir, guardRealAuth, installCleanupHooks, makeSandbox, runCli } from "./lib/common.mjs";
+import { pathToFileURL } from "node:url";
+import {
+	createChecks,
+	evidenceDir,
+	guardRealAuth,
+	installCleanupHooks,
+	makeSandbox,
+	repoRoot,
+	runCli,
+	tsxEntry,
+} from "./lib/common.mjs";
 import { startFakeModelServer } from "./lib/fake-model-server.mjs";
 
 /** Per-API: which provider to override, model id, key, auth header, and how to derive baseUrl. */
@@ -69,14 +79,26 @@ function writeMockModelsJson(agentDir, server, apiName) {
 	writeFileSync(join(agentDir, "models.json"), JSON.stringify(config, null, 2));
 }
 
-async function driveTurn({ apiName, turns, prompt, extraArgs = [], timeoutMs = 90000 }) {
+async function driveTurn({ apiName, turns, prompt, extraArgs = [], prepareSandbox, timeoutMs = 90000 }) {
 	const p = API_PRESETS[apiName];
 	const box = makeSandbox(`mock-loop-${apiName}`);
 	const server = await startFakeModelServer({ turns });
 	writeMockModelsJson(box.agentDir, server, apiName);
-	const args = ["--provider", p.provider, "--model", p.modelId, "--no-context-files", "--no-extensions", ...extraArgs, "--print", prompt];
+	const prepared = prepareSandbox ? await prepareSandbox(box) : {};
+	const args = [
+		"--provider",
+		p.provider,
+		"--model",
+		p.modelId,
+		"--no-context-files",
+		"--no-extensions",
+		...(prepared.extraArgs ?? []),
+		...extraArgs,
+		"--print",
+		prompt,
+	];
 	const result = await runCli(args, { env: hermeticEnv(box.env), cwd: box.cwd, timeoutMs });
-	return { box, server, result, preset: p };
+	return { box, server, result, preset: p, prepared };
 }
 
 /** Assert one API round-trips through the real loop via baseUrl override. */
@@ -122,30 +144,50 @@ async function withTool(apiName) {
 	});
 }
 
-async function withMcpTool(apiName, toolName, toolArgs) {
+async function withMcpTool(apiName, toolName, toolArgs, evidenceSlug) {
+	assertMcpFixtureToolName(toolName);
+	const fixture = mcpFixtureForToolName(toolName);
 	return withNamedTool({
 		apiName,
 		checkName: `mock-loop.mjs --with-mcp-tool ${toolName} (${apiName})`,
 		toolName,
 		toolArgs,
-		marker: `MCP-TOOL-LOOP-OK:${toolName}`,
-		extraArgs: ["--approve"],
+		marker: `MCP-TOOL-LOOP-OK:${toolName}:${fixture.resultPrefix}`,
+		extraArgs: ["--approve", "--tools", toolName],
+		prepareSandbox: (box) => writeMcpFixtureExtension(box, { toolName, fixture }),
+		validateToolResult: ({ prepared, server }) => validateMcpFixtureToolResult({ prepared, server }),
+		evidenceSlug,
 	});
 }
 
-async function withNamedTool({ apiName, checkName, toolName, toolArgs, marker, extraArgs }) {
+async function withNamedTool({
+	apiName,
+	checkName,
+	toolName,
+	toolArgs,
+	marker,
+	extraArgs,
+	prepareSandbox,
+	validateToolResult,
+	evidenceSlug,
+}) {
 	installCleanupHooks();
 	const checks = createChecks(checkName);
 	const guard = guardRealAuth();
-	const { box, server, result } = await driveTurn({
+	const { box, server, result, prepared } = await driveTurn({
 		apiName,
 		turns: [{ toolCalls: [{ name: toolName, args: toolArgs }] }, { text: `Done: ${marker}` }],
 		prompt: `Call the ${toolName} tool and report the output.`,
 		extraArgs,
+		prepareSandbox,
 		timeoutMs: 120000,
 	});
 	checks.ok("CLI completed the multi-step loop", !result.timedOut, `code=${result.code}`);
 	checks.ok("two model turns served (loop iterated)", server.requests.length >= 2, `requests=${server.requests.length}`);
+	if (validateToolResult) {
+		const toolResult = validateToolResult({ prepared, server, result });
+		checks.ok(toolResult.name, toolResult.pass, toolResult.detail);
+	}
 	checks.ok("final assistant text returned", (result.stdout + result.stderr).includes(marker));
 	checks.ok("real auth unchanged", (() => {
 		try {
@@ -154,10 +196,157 @@ async function withNamedTool({ apiName, checkName, toolName, toolArgs, marker, e
 			return false;
 		}
 	})());
+	if (evidenceSlug) writeToolEvidence(evidenceSlug, { apiName, result, server, prepared });
 	if (result.timedOut || server.requests.length < 2) process.stderr.write(`\n--- stderr tail ---\n${result.stderr.slice(-1500)}\n`);
 	await server.stop();
 	box.cleanup();
 	process.exit(checks.finish() ? 0 : 1);
+}
+
+function assertMcpFixtureToolName(toolName) {
+	if (!/^mcp_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+$/.test(toolName)) {
+		throw new Error(`--with-mcp-tool requires an mcp_<server>_<tool> name, got: ${toolName}`);
+	}
+	if (!/^mcp_fx_tool_\d+$/.test(toolName)) {
+		throw new Error(`mock-loop MCP fixture can register mcp_fx_tool_<n> tools only, got: ${toolName}`);
+	}
+}
+
+function mcpFixtureForToolName(toolName) {
+	const match = /^mcp_fx_tool_(\d+)$/.exec(toolName);
+	const toolIndex = Number(match?.[1] ?? "1");
+	return {
+		sourceToolName: `tool_${toolIndex}`,
+		toolCount: toolIndex,
+		resultPrefix: `fixture tool_${toolIndex}`,
+	};
+}
+
+function writeMcpFixtureExtension(box, { toolName, fixture }) {
+	const root = repoRoot();
+	const callLogPath = join(box.dir, "mcp-fixture-calls.jsonl");
+	const extensionPath = join(box.dir, "mcp-fixture-extension.mjs");
+	const typeboxUrl = pathToFileURL(join(root, "node_modules", "typebox", "build", "index.mjs")).href;
+	const clientUrl = pathToFileURL(
+		join(root, "node_modules", "@modelcontextprotocol", "sdk", "dist", "esm", "client", "index.js"),
+	).href;
+	const stdioUrl = pathToFileURL(
+		join(root, "node_modules", "@modelcontextprotocol", "sdk", "dist", "esm", "client", "stdio.js"),
+	).href;
+	const source = `
+import { appendFileSync } from "node:fs";
+import { Type } from ${JSON.stringify(typeboxUrl)};
+import { Client } from ${JSON.stringify(clientUrl)};
+import { StdioClientTransport } from ${JSON.stringify(stdioUrl)};
+
+const toolName = ${JSON.stringify(toolName)};
+const sourceToolName = ${JSON.stringify(fixture.sourceToolName)};
+const callLogPath = ${JSON.stringify(callLogPath)};
+const fixtureCommand = ${JSON.stringify(process.execPath)};
+const fixtureArgs = ${JSON.stringify([
+		tsxEntry(root),
+		"--tsconfig",
+		join(root, "tsconfig.json"),
+		join(root, "packages", "coding-agent", "test", "mcp", "fixtures", "stdio-server.ts"),
+		"--tools",
+		String(fixture.toolCount),
+	])};
+
+export default function(pi) {
+	pi.registerTool({
+		name: toolName,
+		label: "MCP fixture tool",
+		description: "senpi-qa local MCP stdio fixture proxy. Returns deterministic fixture text.",
+		parameters: Type.Object({
+			value: Type.Optional(Type.String()),
+			mode: Type.Optional(Type.String()),
+			nested: Type.Optional(Type.Any())
+		}, { additionalProperties: true }),
+		async execute(toolCallId, params) {
+			const transport = new StdioClientTransport({ command: fixtureCommand, args: fixtureArgs, stderr: "pipe" });
+			const client = new Client({ name: "senpi-qa-mcp-fixture-proxy", version: "0.0.0" });
+			try {
+				await client.connect(transport, { timeout: 3000 });
+				const listed = await client.listTools();
+				if (!listed.tools.some((tool) => tool.name === sourceToolName)) {
+					throw new Error("MCP fixture did not list " + sourceToolName);
+				}
+				const result = await client.callTool({ name: sourceToolName, arguments: params });
+				appendFileSync(callLogPath, JSON.stringify({ toolCallId, toolName, sourceToolName, params, listed: listed.tools.map((tool) => tool.name), result }) + "\\n");
+				return { content: result.content, details: { fixture: "mcp-stdio", sourceToolName, listed: listed.tools.map((tool) => tool.name) } };
+			} finally {
+				await client.close().catch(() => undefined);
+			}
+		}
+	});
+}
+`;
+	writeFileSync(extensionPath, source);
+	return {
+		extraArgs: ["--extension", extensionPath],
+		callLogPath,
+		expectedResultText: fixture.resultPrefix,
+		extensionPath,
+	};
+}
+
+function validateMcpFixtureToolResult({ prepared, server }) {
+	const calls = readFixtureCalls(prepared.callLogPath);
+	const fixtureCall = calls.find((call) => call.toolName && call.sourceToolName);
+	const requestSawResult = server.requests
+		.slice(1)
+		.some((request) => JSON.stringify(request.messages ?? "").includes(prepared.expectedResultText));
+	return {
+		name: "requested MCP fixture tool exists, executed, and fed result back to model",
+		pass: !!fixtureCall && requestSawResult,
+		detail: `callLog=${fixtureCall ? "yes" : "no"} modelSawFixtureResult=${requestSawResult}`,
+	};
+}
+
+function readFixtureCalls(path) {
+	if (!path || !existsSync(path)) return [];
+	return readFileSync(path, "utf8")
+		.split(/\r?\n/)
+		.filter(Boolean)
+		.map((line) => {
+			try {
+				return JSON.parse(line);
+			} catch {
+				return {};
+			}
+		});
+}
+
+function writeToolEvidence(slug, { apiName, result, server, prepared }) {
+	const dir = evidenceDir(slug);
+	writeFileSync(join(dir, `mock-loop-${apiName}-stdout.txt`), result.stdout);
+	writeFileSync(join(dir, `mock-loop-${apiName}-stderr.txt`), result.stderr);
+	writeFileSync(join(dir, `mock-loop-${apiName}-requests.json`), JSON.stringify(sanitizeRequests(server.requests), null, 2));
+	if (prepared.callLogPath && existsSync(prepared.callLogPath)) {
+		writeFileSync(join(dir, "mcp-fixture-calls.jsonl"), readFileSync(prepared.callLogPath, "utf8"));
+	}
+	writeFileSync(
+		join(dir, "summary.json"),
+		JSON.stringify(
+			{
+				command: `node .agents/skills/senpi-qa/scripts/mock-loop.mjs ${process.argv.slice(2).join(" ")}`,
+				apiName,
+				requests: server.requests.length,
+				fixtureCallLog: prepared.callLogPath ? "mcp-fixture-calls.jsonl" : null,
+			},
+			null,
+			2,
+		),
+	);
+	process.stderr.write(`evidence: ${dir}\n`);
+}
+
+function sanitizeRequests(requests) {
+	return requests.map((request) => ({
+		...request,
+		authorization: request.authorization ? "<mock-redacted>" : null,
+		apiKeyHeader: request.apiKeyHeader ? "<mock-redacted>" : null,
+	}));
 }
 
 async function run(prompt, apiName, slug) {
@@ -211,8 +400,8 @@ if (argv[0] === "--self-test") {
 } else if (argv[0] === "--with-mcp-tool") {
 	Promise.resolve()
 		.then(() => {
-			const toolName = argv[1] || flag("--tool-name") || "mcp_fx_tool_1";
-			return withMcpTool(api || "openai-completions", toolName, parseToolArgs());
+			const toolName = flag("--tool-name") || positionalAfter("--with-mcp-tool") || "mcp_fx_tool_1";
+			return withMcpTool(api || "openai-completions", toolName, parseToolArgs(), flag("--evidence"));
 		})
 		.catch((e) => {
 			process.stderr.write(`${e instanceof Error ? e.stack : String(e)}\n`);
@@ -235,4 +424,19 @@ if (argv[0] === "--self-test") {
 			"",
 		].join("\n"),
 	);
+}
+
+function positionalAfter(command) {
+	const start = argv.indexOf(command);
+	if (start < 0) return undefined;
+	const valuedFlags = new Set(["--api", "--tool-name", "--tool-args", "--evidence"]);
+	for (let index = start + 1; index < argv.length; index++) {
+		const arg = argv[index];
+		if (valuedFlags.has(arg)) {
+			index++;
+			continue;
+		}
+		if (!arg.startsWith("--")) return arg;
+	}
+	return undefined;
 }

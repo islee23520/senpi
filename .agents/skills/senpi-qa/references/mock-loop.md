@@ -63,8 +63,11 @@ take precedence for built-in providers and reach even the localhost fake.
 the full loop iterates. It passes `--approve` for project trust.
 
 `--with-mcp-tool <tool> --tool-args '<json object>'` uses the same two-turn
-loop but emits an arbitrary MCP-style tool name such as `mcp_fx_tool_1`. Use it
-after an MCP fixture/runtime has registered that tool in the real CLI:
+loop but requires a fixture MCP-style tool name such as `mcp_fx_tool_1`. The
+script generates a sandbox extension that registers the requested
+`mcp_fx_tool_<n>` as a proxy to the local MCP stdio fixture's `tool_<n>`, then
+asserts both that the proxy wrote its fixture call log and that the model's
+second request contains the fixture result text.
 
 ```bash
 node .agents/skills/senpi-qa/scripts/mock-loop.mjs \
@@ -72,8 +75,12 @@ node .agents/skills/senpi-qa/scripts/mock-loop.mjs \
   --tool-args '{"value":"ok","mode":"alpha"}'
 ```
 
-This proves the model can request a registered MCP tool through the live
-agent-loop surface; it does not start fixture servers by itself.
+This proves the model can request a registered MCP fixture tool through the
+live agent-loop surface. Non-`mcp_*` names and names outside the
+`mcp_fx_tool_<n>` fixture family fail before the CLI run; missing registration
+or a tool-not-found fallback fails because no fixture call log/result appears.
+With `--evidence <slug>`, the script writes sanitized model requests and
+`mcp-fixture-calls.jsonl` under `local-ignore/qa-evidence/<date>-<slug>/`.
 
 ## B. In-process faux provider (for vitest-style assertions)
 
