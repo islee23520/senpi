@@ -29,15 +29,14 @@ export type CreateMcpTransportOptions = {
 };
 
 const SHUTDOWN_GRACE_MS = 100,
-	SHUTDOWN_TERM_WAIT_MS = 400,
-	SHUTDOWN_FINAL_WAIT_MS = 500,
+	SHUTDOWN_TERM_WAIT_MS = 400;
+const SHUTDOWN_FINAL_WAIT_MS = 500,
 	SHUTDOWN_CLOSE_WAIT_MS = 400;
 
 export function createMcpTransport(options: CreateMcpTransportOptions): McpTransportConnection {
 	const connectTimeoutMs = options.config.connectTimeoutMs ?? 15_000;
-	return options.config.type === "stdio"
-		? createStdioConnection(options, connectTimeoutMs)
-		: createHttpConnection(options, connectTimeoutMs);
+	if (options.config.type === "stdio") return createStdioConnection(options, connectTimeoutMs);
+	return createHttpConnection(options, connectTimeoutMs);
 }
 
 export async function connectMcpTransport(connection: McpTransportConnection): Promise<void> {
@@ -46,7 +45,7 @@ export async function connectMcpTransport(connection: McpTransportConnection): P
 	const captureInterval = safeInterval(
 		"transport.captureRootPid",
 		25,
-		() => captureRootPid(connection),
+		() => connection.captureRootPid?.(),
 		connection.asyncErrorSink,
 	);
 	const timeout = safeTimer(
@@ -54,7 +53,7 @@ export async function connectMcpTransport(connection: McpTransportConnection): P
 		connection.connectTimeoutMs,
 		() => {
 			timedOut = true;
-			captureRootPid(connection);
+			connection.captureRootPid?.();
 			controller.abort();
 		},
 		connection.asyncErrorSink,
@@ -171,10 +170,6 @@ function createConnection(
 	};
 }
 
-function captureRootPid(connection: McpTransportConnection): void {
-	connection.captureRootPid?.();
-}
-
 function trackStdioStart(transport: StdioClientTransport, captureRootPid: () => void): void {
 	const start = transport.start.bind(transport);
 	transport.start = async () => {
@@ -268,9 +263,7 @@ interface TerminableHttpTransport {
 	terminateSession(): Promise<void>;
 }
 
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 function ignoreShutdownError(error: unknown): void {
 	void error;
