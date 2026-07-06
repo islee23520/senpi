@@ -59,9 +59,14 @@ export function createFixtureServer(options: FixtureOptions): Server {
 	server.setRequestHandler(ListToolsRequestSchema, (): ListToolsResult => ({ tools }));
 	server.setRequestHandler(CallToolRequestSchema, async (request, extra): Promise<CallToolResult> => {
 		calls++;
+		incrementCounterFile(options.callCounterFile);
 		if (options.slowToolCallMs > 0) {
 			await sendProgress(extra, request.params.name);
 			await delayToolCall(options, request.params.name, extra.signal);
+		}
+		if (options.crashDuringToolCall) {
+			setTimeout(() => process.exit(42), 1).unref();
+			await new Promise<never>(() => undefined);
 		}
 		const result = await callFixtureTool(request.params.name, request.params.arguments ?? {}, options);
 		if (options.emitListChanged) {

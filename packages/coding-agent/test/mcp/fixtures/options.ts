@@ -2,11 +2,13 @@ export interface FixtureOptions {
 	toolCount: number;
 	slowStartMs: number;
 	spawnCounterFile: string | undefined;
+	callCounterFile: string | undefined;
 	pidFile: string | undefined;
 	pingCounterFile: string | undefined;
 	fatalMissingToken: string | undefined;
 	crashOnStart: boolean;
 	crashAfterCalls: number | null;
+	crashDuringToolCall: boolean;
 	wedge: boolean;
 	isErrorTool: boolean;
 	hugeSchemaTool: boolean;
@@ -28,11 +30,13 @@ export function parseFixtureOptions(argv: readonly string[]): FixtureOptions {
 		toolCount: readIntegerFlag(argv, "--tools", 1),
 		slowStartMs: readIntegerFlag(argv, "--slow-start", 0),
 		spawnCounterFile: readStringFlag(argv, "--spawn-counter-file"),
+		callCounterFile: readStringFlag(argv, "--call-counter-file"),
 		pidFile: readStringFlag(argv, "--pid-file"),
 		pingCounterFile: readStringFlag(argv, "--ping-counter-file"),
 		fatalMissingToken: readStringFlag(argv, "--fatal-missing-token"),
 		crashOnStart: argv.includes("--crash-on-start"),
 		crashAfterCalls: readOptionalIntegerFlag(argv, "--crash-after"),
+		crashDuringToolCall: argv.includes("--crash-during-tool-call"),
 		wedge: argv.includes("--wedge"),
 		isErrorTool: argv.includes("--iserror-tool"),
 		hugeSchemaTool: argv.includes("--huge-schema-tool"),
@@ -108,6 +112,7 @@ function validateArgs(argv: readonly string[], options: FixtureOptions): void {
 		"--tools",
 		"--slow-start",
 		"--spawn-counter-file",
+		"--call-counter-file",
 		"--pid-file",
 		"--ping-counter-file",
 		"--fatal-missing-token",
@@ -122,6 +127,7 @@ function validateArgs(argv: readonly string[], options: FixtureOptions): void {
 	const bare = new Set([
 		"--wedge",
 		"--crash-on-start",
+		"--crash-during-tool-call",
 		"--iserror-tool",
 		"--huge-schema-tool",
 		"--binary-output-tool",

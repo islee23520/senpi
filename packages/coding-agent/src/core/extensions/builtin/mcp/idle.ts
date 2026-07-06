@@ -132,11 +132,6 @@ async function keepAlivePingOrRecover(state: McpLifecycleState): Promise<void> {
 	} catch (error) {
 		const normalized = error instanceof Error ? error : new Error(String(error));
 		state.connection.markDegraded(normalized);
-		try {
-			await state.connection.renew();
-		} catch (renewError) {
-			state.connection.markDegraded(renewError instanceof Error ? renewError : new Error(String(renewError)));
-		}
 	}
 }
 
