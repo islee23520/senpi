@@ -31,6 +31,7 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import { prepareAgentToolCall } from "@earendil-works/pi-agent-core";
 import type {
+	Api,
 	AssistantMessage,
 	ImageContent,
 	Message,
@@ -290,6 +291,7 @@ export interface PromptOptions {
 	source?: InputSource;
 	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
 	preflightResult?: (success: boolean) => void;
+	sessionTitlePrompt?: string | false;
 }
 
 /** Result from cycleModel() */
@@ -1396,7 +1398,7 @@ export class AgentSession {
 				expandedText = this._expandSkillCommand(expandedText);
 				expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 			}
-			titlePrompt = text;
+			titlePrompt = options?.sessionTitlePrompt === false ? undefined : (options?.sessionTitlePrompt ?? text);
 
 			// If streaming, queue via steer() or followUp() based on option
 			if (this.isStreaming) {
@@ -1631,7 +1633,7 @@ export class AgentSession {
 
 	private async _generateSessionTitle(
 		firstPrompt: string,
-		model: Model<any>,
+		model: Model<Api>,
 		abortController: AbortController,
 	): Promise<void> {
 		try {
@@ -1821,6 +1823,7 @@ export class AgentSession {
 			streamingBehavior: options?.deliverAs,
 			images,
 			source: "extension",
+			sessionTitlePrompt: false,
 		});
 	}
 

@@ -119,6 +119,21 @@ describe("agent session auto title routing", () => {
 		await expect(sessionName).resolves.toBe("OAuth Mobile Login");
 	});
 
+	it("does not title extension-originated user messages", async () => {
+		const harness = await createAutoTitleHarness();
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage("turn complete"),
+			fauxAssistantMessage("<title>Extension Private Prompt</title>"),
+		]);
+
+		await harness.session.sendUserMessage("PRIVATE EXTENSION PROMPT");
+		await harness.session.waitForSettledSessionWork();
+
+		expect(harness.faux.getCallLog()).toHaveLength(1);
+		expect(harness.sessionManager.getSessionName()).toBeUndefined();
+	});
+
 	it("does not stack title requests while one is already running", async () => {
 		const titleResponse = createDeferred<ReturnType<typeof fauxAssistantMessage>>();
 		const harness = await createAutoTitleHarness();
