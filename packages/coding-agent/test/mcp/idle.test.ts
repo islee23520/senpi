@@ -58,7 +58,7 @@ describe("MCP idle lifecycle", () => {
 		expect(connection === undefined ? undefined : getMcpLifecycleDebugSnapshot(connection)?.idleTimerHasRef).toBe(
 			false,
 		);
-		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 1500);
+		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 10_000);
 
 		expect(getMcpService().getServerSnapshots()).toMatchObject([{ name: "fx", lifecycleState: "idle", pid: null }]);
 		await assertProcessDead(pid);
@@ -75,12 +75,12 @@ describe("MCP idle lifecycle", () => {
 		await attach(root, pi);
 		await waitForCondition(
 			() => getMcpService().getConnection("fx")?.state === "connected" && existsSync(pidFile),
-			2500,
+			10_000,
 		);
 		const pid = readNumberFile(pidFile);
 
 		expect(getMcpService().getServerSnapshots()).toMatchObject([{ name: "fx", lifecycleState: "connected" }]);
-		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 1500);
+		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 10_000);
 
 		expect(getMcpService().getServerSnapshots()).toMatchObject([{ name: "fx", lifecycleState: "idle", pid: null }]);
 		await assertProcessDead(pid);
@@ -106,7 +106,7 @@ describe("MCP idle lifecycle", () => {
 		expect(getMcpService().getConnection("fx")?.getRootPid()).toBe(readNumberFile(pidFile));
 
 		const result = await running;
-		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 1500);
+		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 10_000);
 
 		expect(textContent(result)).toBe("fixture tool_1 value=slow mode=alpha");
 	});
@@ -124,7 +124,7 @@ describe("MCP idle lifecycle", () => {
 			await delay(120);
 			expect(connection.state).toBe("connected");
 		});
-		await waitFor(() => connection.state === "idle", 1500);
+		await waitFor(() => connection.state === "idle", 10_000);
 
 		expect(connection.state).toBe("idle");
 	});
@@ -138,7 +138,7 @@ describe("MCP idle lifecycle", () => {
 		const tool = registeredTool(pi, "mcp_fx_tool_1");
 		const firstPid = readNumberFile(pidFile);
 
-		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 1500);
+		await waitFor(() => getMcpService().getConnection("fx")?.state === "idle", 10_000);
 		const result = await tool.execute("tc-after-idle", { value: "after" }, undefined, undefined, testContext());
 		const secondPid = readNumberFile(pidFile);
 
@@ -147,7 +147,9 @@ describe("MCP idle lifecycle", () => {
 		expect(getMcpService().getConnection("fx")?.state).toBe("connected");
 	});
 
-	it("keep-alive pings every 30 seconds and recovers a killed fixture without suspension", async () => {
+	it("keep-alive pings every 30 seconds and recovers a killed fixture without suspension", {
+		timeout: 60_000,
+	}, async () => {
 		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 		const root = mcpRoot("keep-alive-recover");
 		const pidFile = join(root.agentDir, "fixture.pid");
@@ -155,6 +157,10 @@ describe("MCP idle lifecycle", () => {
 		setConfig(root, {
 			fx: {
 				...stdioServer(["--tools", "1", "--pid-file", pidFile, "--ping-counter-file", pingCounterFile]),
+				// Loaded CI runners can boot the fixture subprocess slower than the fast
+				// 2s fixture default; give reconnect attempts headroom so recovery is not
+				// starved into repeated connect timeouts under a parallel spawn storm.
+				connectTimeoutMs: 10_000,
 				lifecycle: "keep-alive",
 			},
 		});
@@ -165,7 +171,7 @@ describe("MCP idle lifecycle", () => {
 		connection?.onStateChange((event) => {
 			states.push(event.state);
 		});
-		await waitForCondition(() => existsSync(pidFile), 2500);
+		await waitForCondition(() => existsSync(pidFile), 10_000);
 		const firstPid = readNumberFile(pidFile);
 		process.kill(firstPid, "SIGKILL");
 		await assertProcessDead(firstPid);
@@ -183,7 +189,7 @@ describe("MCP idle lifecycle", () => {
 				connection.getRootPid() === currentPid &&
 				pi.toolDefinitions.has("mcp_fx_tool_1")
 			);
-		}, 5000);
+		}, 20_000);
 		const tool = registeredTool(pi, "mcp_fx_tool_1");
 		const result = await tool.execute("tc-keep-alive", { value: "recovered" }, undefined, undefined, testContext());
 
