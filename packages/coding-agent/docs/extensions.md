@@ -2097,6 +2097,21 @@ When pre-tool hooks block, `executeTool` rejects with code `blocked` and the hoo
 
 The optional `signal` and `onUpdate` are forwarded directly to the tool execution callback. Bridge-invoked calls emit `tool_call` and `tool_result` extension events, but do not emit `tool_execution_start`, `tool_execution_update`, or `tool_execution_end` UI events; they are subcalls of the parent extension/tool UI.
 
+The SDK exports `ExecuteToolOptions<TDetails>`, `ExecuteToolResult<TDetails>`, `ExecuteToolUpdateCallback<TDetails>`, `ExecuteToolError`, and `ExecuteToolErrorCode`. `ExecuteToolResult<TDetails>` is the normal `AgentToolResult<TDetails>` returned by the wrapped tool after `tool_result` hooks have run.
+
+```typescript
+try {
+  const result = await pi.executeTool("bash", { command: "pwd" });
+  ctx.ui.notify(result.content);
+} catch (error) {
+  if (error instanceof ExecuteToolError && error.code === "blocked") {
+    ctx.ui.notify(error.message, "warning");
+  } else {
+    throw error;
+  }
+}
+```
+
 ### pi.setModel(model)
 
 Set the current model. Returns `false` if no API key is available for the model. See [models.md](models.md) for configuring custom models.

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added the `pi.executeTool()` extension API so extension code can run active tools through the normal validation, permission, `tool_call`, and `tool_result` pipeline.
+
 ### Changed
 
 ### Fixed
