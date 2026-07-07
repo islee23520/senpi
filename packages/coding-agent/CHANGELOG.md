@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added automatic title generation for unnamed sessions from the first meaningful user prompt, using the active model in a cached forked request.
 - Added the `pi.executeTool()` extension API so extension code can run active tools through the normal validation, permission, `tool_call`, and `tool_result` pipeline.
 
 - Added `senpi app-server` mode for Codex-compatible app-server integrations, including stdio, websocket, and websocket-over-UDS transports, multi-session serving, wire approval requests, daemon subcommands, and protocol documentation.
