@@ -7,6 +7,7 @@
 - Added `senpi app-server` mode for Codex-compatible app-server integrations, including stdio, websocket, and websocket-over-UDS transports, multi-session serving, wire approval requests, daemon subcommands, and protocol documentation.
 - Added the built-in MCP extension skeleton and exact-pinned official MCP SDK dependency groundwork.
 - Added a convention guard that rejects senpi-defined PascalCase tool names in core and builtin extension tool registrations.
+- Added the persistent-terminal tool suite (built-in `terminal` extension): the `bash` tool is now PTY-backed with `run_in_background`, `cols`, and `rows`, plus companion tools `bash_output` (with `wait_for`/`filter`/`view:"screen"`), `bash_input` (stdin + named keys), `bash_resize`, and `kill_bash`. Backed by `@earendil-works/pi-pty` (native ConPTY on Windows, `child_process` pipe fallback otherwise). Adds `SENPI_GIT_BASH_PATH` + shell-kind resolution (cmd `/c`, PowerShell `-NoProfile -Command`), `terminal.*` settings, idle-guarded async completion wake, and permission-gates `bash_input` in the `bash` class. See `docs/terminal-tools.md`.
 
 ### Changed
 
