@@ -1,0 +1,151 @@
+// Tier-B adaptive exposure wiring (todo 32).
+//
+// Completes exposure:"auto": a server whose filtered tool count exceeds
+// searchThreshold enters SEARCH mode — the full catalog is registered but only
+// directTools stay active, and an always-active mcp_search promotes the rest on
+// demand. Prompt-cache mitigations (SPEC §5): stable name sort everywhere;
+// activation turns accept a cache miss (documented); opt-in settings.stubSwap
+// registers 30-70-token stubs so the tools array stays length-stable and only
+// the activated entry's bytes change (stub -> full) on promotion.
+
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import { Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
+import type { ExtensionAPI } from "../../../types.ts";
+import { registerToolsPreservingActiveSet } from "../active-set.ts";
+import type { McpToolCatalogEntry } from "../catalog.ts";
+import type { McpSettings } from "../config-schema.ts";
+import {
+	buildMcpToolDefinitions,
+	type McpToolDefinition,
+	type McpToolDetails,
+	mapMcpCatalogNames,
+} from "./register.ts";
+import { createMcpSearchTool, MCP_SEARCH_TOOL_NAME, type SearchableMcpTool } from "./tool-search.ts";
+
+type McpToolRegistrar = Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">;
+type WarnFn = (message: string) => void;
+
+export interface McpTierBRegistrationInput {
+	/** Full catalog to register (all filtered tools across all servers). */
+	readonly registeredEntries: readonly McpToolCatalogEntry[];
+	/** Subset kept active immediately (direct-mode servers + directTools). */
+	readonly activeEntries: readonly McpToolCatalogEntry[];
+	/** True when at least one server resolved to search mode. */
+	readonly searchMode: boolean;
+	readonly settings: McpSettings;
+}
+
+/** Register MCP tools honouring Tier-B search mode + prompt-cache mitigations.
+ * Returns the searchable catalog (for reuse by /mcp status and list_changed). */
+export function registerMcpTierBTools(
+	pi: McpToolRegistrar,
+	input: McpTierBRegistrationInput,
+	warn?: WarnFn,
+): SearchableMcpTool[] {
+	const named = mapMcpCatalogNames(input.registeredEntries, warn);
+	const searchable: SearchableMcpTool[] = named.map(({ entry, name }) => ({
+		name,
+		toolName: entry.tool,
+		description: entry.description,
+		server: entry.server,
+	}));
+	const fullDefs = buildMcpToolDefinitions(input.registeredEntries, warn);
+	const fullByName = new Map(fullDefs.map((def) => [def.name, def] as const));
+	const activeMcpNames = mapMcpCatalogNames(input.activeEntries).map(({ name }) => name);
+	const reference = pi.getActiveTools();
+	// Base tools carry over; any stale mcp_* names from a prior generation are
+	// dropped (membership = base + the intended mcp set; reference orders only).
+	const currentBase = reference.filter((name) => !name.startsWith("mcp_"));
+
+	if (!input.searchMode) {
+		registerToolsPreservingActiveSet(pi, fullDefs, orderActiveSet([...currentBase, ...activeMcpNames], reference));
+		return searchable;
+	}
+
+	const stubSwap = input.settings.stubSwap === true;
+	const stubbed = new Set<string>();
+	const searchTool = createMcpSearchTool({
+		getSearchableTools: () => searchable,
+		getActiveTools: () => pi.getActiveTools(),
+		setActiveTools: (names) => {
+			if (stubSwap) swapStubsToFull(pi, names, stubbed, fullByName);
+			pi.setActiveTools(orderActiveSet(names, pi.getActiveTools()));
+		},
+	});
+
+	// mcp_search carries a distinct param schema, so register it on its own
+	// rather than mixing it into the broadly-typed catalog def array.
+	pi.registerTool(searchTool);
+
+	if (!stubSwap) {
+		// Default search mode: full defs registered, only directTools + mcp_search
+		// active. Newly promoted tools enter the array on their activation turn
+		// (an accepted cache miss).
+		const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...activeMcpNames], reference);
+		registerToolsPreservingActiveSet(pi, fullDefs, active);
+		return searchable;
+	}
+
+	// stubSwap: every search-mode tool is registered as a tiny stub and kept
+	// active so the tools array is length-stable; direct tools stay full.
+	const directActive = new Set(activeMcpNames);
+	const toRegister: McpToolDefinition[] = fullDefs.map((def) => {
+		if (directActive.has(def.name)) return def;
+		stubbed.add(def.name);
+		return buildMcpStubDefinition(def.name);
+	});
+	const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...fullDefs.map((def) => def.name)], reference);
+	registerToolsPreservingActiveSet(pi, toRegister, active);
+	return searchable;
+}
+
+function swapStubsToFull(
+	pi: McpToolRegistrar,
+	names: readonly string[],
+	stubbed: Set<string>,
+	fullByName: ReadonlyMap<string, McpToolDefinition>,
+): void {
+	for (const name of names) {
+		if (!stubbed.has(name)) continue;
+		const full = fullByName.get(name);
+		if (full === undefined) continue;
+		pi.registerTool(full);
+		stubbed.delete(name);
+	}
+}
+
+/** Order the active set deterministically WITHOUT disturbing non-MCP (base)
+ * tools: base tools keep their existing relative order (by `reference` index,
+ * new ones appended), MCP tools (incl. mcp_search) are sorted for cache
+ * stability. Sorting base tools would churn the system-prompt tool listing. */
+function orderActiveSet(names: readonly string[], reference: readonly string[]): string[] {
+	const unique = [...new Set(names)];
+	const rank = new Map(reference.map((name, index) => [name, index] as const));
+	const base = unique
+		.filter((name) => !name.startsWith("mcp_"))
+		.sort((a, b) => (rank.get(a) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b) ?? Number.MAX_SAFE_INTEGER));
+	const mcp = unique.filter((name) => name.startsWith("mcp_")).sort();
+	return [...base, ...mcp];
+}
+
+/** A 30-70 token placeholder for an inactive search-mode tool. Keeps the tools
+ * array length-stable under stubSwap; guides the model to mcp_search. */
+export function buildMcpStubDefinition(name: string): McpToolDefinition {
+	return {
+		name,
+		label: name,
+		description: `Inactive MCP tool. Run mcp_search to activate ${name}, then call it on your next turn.`,
+		parameters: Type.Object({}),
+		executionMode: "parallel",
+		async execute(): Promise<AgentToolResult<McpToolDetails | undefined>> {
+			return {
+				content: [{ type: "text", text: `${name} is not active. Use mcp_search to activate it, then call it.` }],
+				details: undefined,
+			};
+		},
+		renderCall(_args, theme) {
+			return new Text(theme.fg("toolOutput", `${name} (inactive stub)`), 0, 0);
+		},
+	};
+}

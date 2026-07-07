@@ -5,7 +5,8 @@ import type { ResolvedMcpConfig } from "../config-schema.ts";
 import type { ServerConnection } from "../connection.ts";
 import { createMcpLogger, type McpLogger } from "../log.ts";
 import { computeMcpExposurePolicy } from "./policy.ts";
-import { type McpCatalogRegistrationOptions, registerMcpCatalogTools } from "./register.ts";
+import type { McpCatalogRegistrationOptions } from "./register.ts";
+import { registerMcpTierBTools } from "./tier-b.ts";
 
 export interface McpDirectRegistrationEntry {
 	readonly name: string;
@@ -24,6 +25,7 @@ export async function registerDirectMcpTools(
 ): Promise<void> {
 	const registeredEntries: McpToolCatalogEntry[] = [];
 	const activeEntries: McpToolCatalogEntry[] = [];
+	let searchMode = false;
 	for (const entry of entries) {
 		const server = config.servers[entry.name];
 		if (server?.config === undefined) continue;
@@ -45,14 +47,20 @@ export async function registerDirectMcpTools(
 					);
 		const policy = computeMcpExposurePolicy(catalog, server.config, config.settings);
 		for (const warning of policy.warnings) entry.logger.warn(warning);
+		if (policy.mode === "search") searchMode = true;
 		registeredEntries.push(...policy.registeredEntries);
 		activeEntries.push(...policy.activeEntries);
 	}
-	registerMcpCatalogTools(
-		pi,
-		registeredEntries,
-		activeEntries,
-		(message) => createMcpLogger("service").warn(message),
-		options,
+	// Skip touching the active set only when there is genuinely nothing to do.
+	if (
+		registeredEntries.length === 0 &&
+		activeEntries.length === 0 &&
+		!searchMode &&
+		options.refreshActiveSetWhenEmpty !== true
+	) {
+		return;
+	}
+	registerMcpTierBTools(pi, { activeEntries, registeredEntries, searchMode, settings: config.settings }, (message) =>
+		createMcpLogger("service").warn(message),
 	);
 }

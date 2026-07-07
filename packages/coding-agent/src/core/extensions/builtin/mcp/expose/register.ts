@@ -27,7 +27,7 @@ export interface McpToolDetails {
 }
 
 type McpAgentContent = TextContent | ImageContent;
-type McpToolDefinition = ToolDefinition<TSchema, McpToolDetails | undefined, unknown>;
+export type McpToolDefinition = ToolDefinition<TSchema, McpToolDetails | undefined, unknown>;
 type WarnFn = (message: string) => void;
 
 export interface McpCatalogRegistrationOptions {
@@ -48,13 +48,25 @@ export function registerMcpCatalogTools(
 	registerToolsPreservingActiveSet(pi, tools, [...currentActive, ...mcpNames]);
 }
 
-export function buildMcpToolDefinitions(entries: readonly McpToolCatalogEntry[], warn?: WarnFn): McpToolDefinition[] {
+export interface McpNamedCatalogEntry {
+	readonly entry: McpToolCatalogEntry;
+	readonly name: string;
+}
+
+/** Pair each catalog entry with its stable, collision-resolved mcp tool name.
+ * Shared by the full-tool builder and the Tier-B search catalog so names never
+ * drift between the two. */
+export function mapMcpCatalogNames(entries: readonly McpToolCatalogEntry[], warn?: WarnFn): McpNamedCatalogEntry[] {
 	const sorted = [...entries].sort(compareCatalogEntries);
 	const names = buildMcpToolNames(
 		sorted.map((entry) => ({ serverName: entry.server, toolName: entry.tool })),
 		warn,
 	);
-	return sorted.map((entry, index) => createMcpToolDefinition(entry, names[index] ?? ""));
+	return sorted.map((entry, index) => ({ entry, name: names[index] ?? "" }));
+}
+
+export function buildMcpToolDefinitions(entries: readonly McpToolCatalogEntry[], warn?: WarnFn): McpToolDefinition[] {
+	return mapMcpCatalogNames(entries, warn).map(({ entry, name }) => createMcpToolDefinition(entry, name));
 }
 
 function createMcpToolDefinition(entry: McpToolCatalogEntry, name: string): McpToolDefinition {

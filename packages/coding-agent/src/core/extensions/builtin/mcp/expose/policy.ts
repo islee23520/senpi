@@ -5,8 +5,8 @@ import type { McpServerConfig, McpSettings } from "../config-schema.ts";
 export interface McpExposurePolicyResult {
 	readonly activeEntries: McpToolCatalogEntry[];
 	readonly filteredEntries: McpToolCatalogEntry[];
-	readonly mode: "direct" | "deferred";
-	readonly reason: "explicit" | "threshold" | "directTools" | "pending-W4";
+	readonly mode: "direct" | "search";
+	readonly reason: "explicit" | "threshold" | "directTools";
 	readonly registeredEntries: McpToolCatalogEntry[];
 	readonly warnings: string[];
 }
@@ -39,23 +39,30 @@ export function computeMcpExposurePolicy(
 	if (config.exposure === "direct") {
 		return directResult(filteredEntries, filteredEntries, "explicit");
 	}
+	// Tier-B search mode: register the full catalog but keep only directTools
+	// active; mcp_search promotes the rest on demand. `proxy` behaves like search
+	// until the opt-in proxy tool lands (todo 38).
 	if (config.exposure === "search" || config.exposure === "proxy") {
-		return directResult(filteredEntries, directEntries, "directTools");
+		return searchResult(filteredEntries, directEntries, "explicit");
 	}
 	if (filteredEntries.length <= (settings.searchThreshold ?? 10)) {
 		return directResult(filteredEntries, filteredEntries, "threshold");
 	}
+	return searchResult(filteredEntries, directEntries, "threshold");
+}
+
+function searchResult(
+	filteredEntries: readonly McpToolCatalogEntry[],
+	directEntries: readonly McpToolCatalogEntry[],
+	reason: McpExposurePolicyResult["reason"],
+): McpExposurePolicyResult {
 	return {
-		activeEntries: filteredEntries,
-		filteredEntries,
-		mode: "deferred",
-		reason: "pending-W4",
-		registeredEntries: filteredEntries,
-		warnings: [
-			`MCP server ${serverName(filteredEntries)} has ${filteredEntries.length} exposed tools above searchThreshold ${
-				settings.searchThreshold ?? 10
-			}; Tier-B deferred exposure is pending-W4, so W1 registers all tools directly with no silent truncation.`,
-		],
+		activeEntries: stableSort(directEntries),
+		filteredEntries: stableSort(filteredEntries),
+		mode: "search",
+		reason,
+		registeredEntries: stableSort(filteredEntries),
+		warnings: [],
 	};
 }
 

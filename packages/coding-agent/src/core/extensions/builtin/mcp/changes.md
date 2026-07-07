@@ -6,6 +6,54 @@ extension. Fork-native: upstream pi-mono deliberately ships no MCP support, so
 every file under `builtin/mcp/` is fork-owned. Uses the exact-pinned official
 `@modelcontextprotocol/sdk` and the public `pi.*` extension API only.
 
+## W4 implementation — Tier-B adaptive tool exposure + local tool-search (2026-07-08)
+
+### What changed
+- New `expose/bm25.ts`: zero-dep BM25 (k1=0.9, b=0.4) over tokenised
+  name+description with a server-name field boost; normalised exact-name match
+  (hyphen/underscore/case-insensitive) short-circuits before BM25; snake/camel/
+  kebab tokenizer; deterministic ranking (tie-break by ascending name).
+- New `expose/tool-search.ts`: always-active `mcp_search` tool that ranks the
+  full catalog and promotes matches via `setActiveTools` (union, stable-sorted,
+  effective next turn). Results embed a stable `[mcp_search:activated]` marker;
+  `rehydrateActiveToolsFromHistory` replays activations after compaction/restart,
+  restoring only names still in the catalog.
+- New `expose/tier-b.ts`: completes `exposure:"auto"`. A server above
+  `searchThreshold` enters SEARCH mode — full catalog registered, only
+  directTools active, `mcp_search` active. Prompt-cache mitigations: stable
+  name sort; activation turns accept a cache miss (default mode); opt-in
+  `settings.stubSwap` registers 30-70-token stubs so the tools array is
+  length-stable and only the promoted entry's bytes change (stub -> full).
+- `expose/policy.ts`: `mode` is now `"direct" | "search"`; the W1 `pending-W4`
+  register-all-active fallback + warning is removed. `exposure:"search"|"proxy"`
+  and threshold-exceeded resolve to search mode.
+- `expose/register.ts`: extracted `mapMcpCatalogNames` so the full-tool builder
+  and the Tier-B search catalog share one collision-resolved naming source.
+- `expose/session.ts`: registration routes through `registerMcpTierBTools`.
+- `expose/status.ts`: `/mcp status` reports total exposed tools + a search-mode
+  hint (`N active now, M searchable via mcp_search`).
+
+### Why
+Large MCP servers (30+ tools) blow the context budget if every tool is resident.
+Tier-B keeps inactive tools at ZERO payload contribution (proven by
+before_provider_request/context.tools capture: a 30-tool search-mode server
+resides in <1k tokens) while `mcp_search` gives the model on-demand access. This
+is the provider-agnostic P3 path that ships regardless of the native-search
+spike outcome (todo 29).
+
+### Why extension system couldn't handle this alone
+Nothing in core needed changing: promotion uses the public
+`setActiveTools`/`getActiveTools`/`registerTool` surface and the documented
+next-turn activation semantics. `registerToolsPreservingActiveSet` counters the
+loader's auto-activation of newly registered tools.
+
+### Expected merge conflict zones
+- `expose/policy.ts` (MEDIUM): W1 exposure tests updated to the new search-mode
+  behaviour; a concurrent policy edit would collide.
+- `expose/session.ts` / `expose/register.ts` (LOW): additive routing + one
+  extracted helper.
+- `expose/status.ts` (LOW): status line format.
+
 ## W3 implementation — OAuth 2.1 + token store + bearer/header auth (2026-07-07)
 
 ### What changed

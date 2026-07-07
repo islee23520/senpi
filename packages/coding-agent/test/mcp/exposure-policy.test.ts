@@ -58,7 +58,7 @@ describe("MCP Tier-A exposure policy", () => {
 		expect(starPi.activeTools).toEqual(["mcp_fx_tool_1", "mcp_fx_tool_2", "mcp_fx_tool_3", "mcp_fx_tool_4"]);
 	});
 
-	it("uses the default threshold boundary: 10 filtered tools direct, 11 filtered tools W1 direct with warning", async () => {
+	it("flips at the threshold boundary: 10 filtered tools direct, 11 filtered tools -> search mode", async () => {
 		const tenRoot = mcpRoot("threshold-10");
 		setConfig(tenRoot, { fx: stdioServer(["--tools", "10"]) });
 		const tenPi = capturingPi();
@@ -70,9 +70,12 @@ describe("MCP Tier-A exposure policy", () => {
 		setConfig(elevenRoot, { fx: stdioServer(["--tools", "11"]) });
 		const elevenPi = capturingPi();
 		await attach(elevenRoot, elevenPi);
-		expect(elevenPi.registeredTools).toEqual(toolNames(11));
-		expect(elevenPi.activeTools).toEqual(toolNames(11));
-		expect(logContains("fx", "pending-W4")).toBe(true);
+		// All 11 tools are registered (catalog present) plus mcp_search...
+		expect([...elevenPi.registeredTools].sort()).toEqual([...toolNames(11), "mcp_search"].sort());
+		// ...but only mcp_search is active: the 11 tools cost zero tokens until promoted.
+		expect(elevenPi.activeTools).toEqual(["mcp_search"]);
+		// The W1 pending-W4 warning fallback is gone.
+		expect(logContains("fx", "pending-W4")).toBe(false);
 	});
 
 	it("promotes directTools matches while keeping the policy result deterministic and stable-sorted", async () => {
@@ -88,25 +91,27 @@ describe("MCP Tier-A exposure policy", () => {
 
 		await attach(root, pi);
 
-		expect(pi.activeTools).toEqual(["bash", "mcp_fx_tool_1", "mcp_fx_tool_12", "mcp_fx_tool_2"]);
+		// Search mode keeps directTools active alongside the always-active mcp_search.
+		expect(pi.activeTools).toEqual(["bash", "mcp_fx_tool_1", "mcp_fx_tool_12", "mcp_fx_tool_2", "mcp_search"]);
 		expect(pi.setActiveCalls[pi.setActiveCalls.length - 1]).toEqual([
 			"bash",
 			"mcp_fx_tool_1",
 			"mcp_fx_tool_12",
 			"mcp_fx_tool_2",
+			"mcp_search",
 		]);
 	});
 
-	it("registers all tools for a 30-tool W1 fixture and logs a warning instead of silently dropping tools", async () => {
-		const root = mcpRoot("large-w1");
+	it("registers a 30-tool fixture in search mode: full catalog registered, only mcp_search active", async () => {
+		const root = mcpRoot("large-search");
 		setConfig(root, { fx: stdioServer(["--tools", "30"]) });
 		const pi = capturingPi();
 
 		await attach(root, pi);
 
-		expect(pi.registeredTools).toEqual(toolNames(30));
-		expect(pi.activeTools).toEqual(toolNames(30));
-		expect(logContains("fx", "pending-W4")).toBe(true);
+		expect([...pi.registeredTools].sort()).toEqual([...toolNames(30), "mcp_search"].sort());
+		expect(pi.activeTools).toEqual(["mcp_search"]);
+		expect(logContains("fx", "pending-W4")).toBe(false);
 	});
 
 	it("treats an includeTools filter matching zero tools as a non-error zero-exposure result", async () => {
