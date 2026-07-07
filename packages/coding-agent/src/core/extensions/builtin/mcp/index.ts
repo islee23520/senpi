@@ -1,5 +1,7 @@
 import type { ExtensionAPI } from "../../types.ts";
 import { registerMcpCommands } from "./commands.ts";
+import { AnthropicNativeToolSearchAdapter } from "./expose/native-search.ts";
+import { MCP_SEARCH_TOOL_NAME } from "./expose/tool-search.ts";
 import { injectMcpInstructions, refreshMcpInstructionsForSession } from "./instructions.ts";
 import { createMcpLogger } from "./log.ts";
 import { getMcpService } from "./service.ts";
@@ -16,6 +18,23 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 	};
 
 	registerMcpCommands(pi);
+
+	// Native provider tool-search adapter (todo 33 — Anthropic, spike = GO).
+	// Runs on every request but is a no-op unless settings.nativeToolSearch is
+	// auto|true and the model is anthropic-messages; a 400 disables it for the
+	// session and falls back to the always-registered local mcp_search.
+	const nativeAdapter = new AnthropicNativeToolSearchAdapter({
+		enabled: () => {
+			const setting = getMcpService().getNativeToolSearchSetting();
+			return setting === true || setting === "auto";
+		},
+		isDeferrable: (name) => name.startsWith("mcp_") && name !== MCP_SEARCH_TOOL_NAME,
+		onFallback: (reason) => createMcpLogger("service").warn(reason),
+		searchToolName: MCP_SEARCH_TOOL_NAME,
+	});
+	pi.on("before_provider_request", (event, ctx) => nativeAdapter.applyBeforeRequest(ctx.model?.api, event.payload));
+	pi.on("after_provider_response", (event) => nativeAdapter.noteResponseStatus(event.status));
+
 	pi.on(
 		"session_start",
 		wrapAsync(

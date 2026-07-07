@@ -32,6 +32,17 @@ every file under `builtin/mcp/` is fork-owned. Uses the exact-pinned official
 - `expose/session.ts`: registration routes through `registerMcpTierBTools`.
 - `expose/status.ts`: `/mcp status` reports total exposed tools + a search-mode
   hint (`N active now, M searchable via mcp_search`).
+- New `expose/native-search.ts` (todo 33, Anthropic half — spike verdict
+  GO-pure-extension): `addAnthropicNativeToolSearch` injects the native
+  `tool_search_tool_bm25_20251119` tool + per-tool `defer_loading:true` under
+  the HARD RULES (never defer the search tool, never defer+cache_control on one
+  tool, >=1 non-deferred, <=10k tools), idempotently per rebuilt request;
+  `AnthropicNativeToolSearchAdapter` disables native + falls back to local
+  mcp_search on an injected 400. `index.ts` registers a `before_provider_request`
+  (inject) + `after_provider_response` (400 detector) handler pair — a no-op
+  unless `settings.nativeToolSearch` is auto|true and the model is
+  anthropic-messages. The OpenAI half is deferred (spike = GO-with-ai-seam;
+  needs a feat(ai) seam + sign-off — see native-search-spike.md).
 
 ### Why
 Large MCP servers (30+ tools) blow the context budget if every tool is resident.

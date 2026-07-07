@@ -150,6 +150,56 @@ export function anthropicToolSearchResultBlock(toolUseId = "srvtoolu_spike_1"): 
 	};
 }
 
+// ---------------------------------------------------------------------------
+// Anthropic REQUEST-side validator (todo 33) — mimics the API's tool-search
+// constraint checks and returns a 400 on violation, exactly as the real API
+// would, so the adapter's HARD RULES can be exercised without a real call.
+// ---------------------------------------------------------------------------
+
+export const ANTHROPIC_TOOL_SEARCH_TYPE = "tool_search_tool_bm25_20251119";
+
+export interface AnthropicValidationResult {
+	readonly status: 200 | 400;
+	readonly error?: string;
+}
+
+function isObj(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+export function validateAnthropicToolSearchPayload(payload: unknown): AnthropicValidationResult {
+	if (!isObj(payload)) return { status: 200 };
+	const tools = Array.isArray(payload.tools) ? payload.tools : [];
+	if (tools.length > 10000) return { status: 400, error: "too_many_tools: at most 10000 tools" };
+	const objs = tools.filter(isObj);
+	const deferred = objs.filter((tool) => tool.defer_loading === true);
+	const hasSearchTool = objs.some((tool) => tool.type === ANTHROPIC_TOOL_SEARCH_TYPE);
+	for (const tool of deferred) {
+		if ("cache_control" in tool) {
+			return { status: 400, error: "invalid_request: defer_loading and cache_control on the same tool" };
+		}
+		if (tool.type === ANTHROPIC_TOOL_SEARCH_TYPE) {
+			return { status: 400, error: "invalid_request: the tool-search tool cannot be deferred" };
+		}
+	}
+	if (deferred.length > 0 && !hasSearchTool) {
+		return { status: 400, error: "invalid_request: deferred tools require a tool_search tool" };
+	}
+	if (objs.length > 0 && deferred.length === objs.length) {
+		return { status: 400, error: "invalid_request: at least one tool must be non-deferred" };
+	}
+	return { status: 200 };
+}
+
+/** Simulate the API expanding `tool_reference` blocks inside a tool_result into
+ * the concrete tool names it will surface next turn. */
+export function mockAnthropicExpandToolReferences(block: unknown): string[] {
+	if (!isObj(block) || !Array.isArray(block.content)) return [];
+	return block.content
+		.filter((entry): entry is Record<string, unknown> => isObj(entry) && entry.type === "tool_reference")
+		.map((entry) => String(entry.name));
+}
+
 /** OpenAI `tool_search_call` output item (client-mode intercept target). */
 export function openAiToolSearchCallItem(id = "ts_spike_1"): Record<string, unknown> {
 	return {

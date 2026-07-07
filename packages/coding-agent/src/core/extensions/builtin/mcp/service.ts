@@ -271,6 +271,12 @@ export class McpService {
 	getCachedInstructions(name: string): string | undefined {
 		return this.#entryForName(name)?.cachedCatalog?.instructions;
 	}
+
+	/** Resolved `settings.nativeToolSearch` (auto | true | false | undefined).
+	 * Drives the native provider tool-search adapter gate. */
+	getNativeToolSearchSetting(): "auto" | boolean | undefined {
+		return this.#config?.settings.nativeToolSearch;
+	}
 }
 
 let service: McpService | null = null;
