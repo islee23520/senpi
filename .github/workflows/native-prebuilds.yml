@@ -194,16 +194,31 @@ jobs:
           set -euo pipefail
 
           output_dir="${RUNNER_TEMP}/native-prebuild-output"
+          target_dir="${RUNNER_TEMP}/native-prebuild-target"
 
           test -f "${NATIVE_PACKAGE_DIR}/Cargo.toml"
           test -f "${NATIVE_PACKAGE_DIR}/package.json"
+
+          # @napi-rs/cli 3.7.2 resolves the built artifact from
+          # <target-dir>/<napi-target>/release, but cargo-zigbuild strips the glibc-version suffix
+          # (e.g. ".2.17") from the target before invoking cargo, so cargo actually writes the
+          # artifact to <target-dir>/<plain-triple>/release. That mismatch makes napi's post-build
+          # copy fail with "Internal Error: Failed to copy artifact" even though the compile
+          # succeeded (napi-rs/napi-rs#3176). Bridge the two directory names with a symlink so
+          # napi's copy step resolves. Only glibc-suffixed targets contain a '.'; plain triples
+          # already build into the directory napi expects.
+          if [[ "${NAPI_TARGET}" == *.* ]]; then
+            plain_triple="${NAPI_TARGET%%.*}"
+            mkdir -p "${target_dir}"
+            ln -sfn "${plain_triple}" "${target_dir}/${NAPI_TARGET}"
+          fi
 
           args=(
             build
             --manifest-path "${NATIVE_PACKAGE_DIR}/Cargo.toml"
             --package-json-path "${NATIVE_PACKAGE_DIR}/package.json"
             --target "${NAPI_TARGET}"
-            --target-dir "${RUNNER_TEMP}/native-prebuild-target"
+            --target-dir "${target_dir}"
             --output-dir "${output_dir}"
             --release
             --strip
