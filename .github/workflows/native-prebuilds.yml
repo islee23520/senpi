@@ -46,6 +46,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # cross_compile gates the on-runner test/probe steps (target arch != runner arch).
+          # napi_cross_compile passes --cross-compile to napi, which requires zig (or
+          # cargo-xwin); darwin cross builds use Apple's native toolchain instead, so they
+          # keep napi_cross_compile false.
           - artifact: native-prebuild-win32-x64
             runner: windows-latest
             napi_target: x86_64-pc-windows-msvc
@@ -53,6 +57,7 @@ jobs:
             node_platform: win32
             node_arch: x64
             cross_compile: false
+            napi_cross_compile: false
             linux: false
             best_effort: false
           - artifact: native-prebuild-win32-arm64
@@ -62,6 +67,7 @@ jobs:
             node_platform: win32
             node_arch: arm64
             cross_compile: true
+            napi_cross_compile: true
             linux: false
             best_effort: true
           - artifact: native-prebuild-darwin-x64
@@ -71,6 +77,7 @@ jobs:
             node_platform: darwin
             node_arch: x64
             cross_compile: true
+            napi_cross_compile: false
             linux: false
             best_effort: false
           - artifact: native-prebuild-darwin-arm64
@@ -80,6 +87,7 @@ jobs:
             node_platform: darwin
             node_arch: arm64
             cross_compile: false
+            napi_cross_compile: false
             linux: false
             best_effort: false
           - artifact: native-prebuild-linux-x64
@@ -89,6 +97,7 @@ jobs:
             node_platform: linux
             node_arch: x64
             cross_compile: true
+            napi_cross_compile: true
             linux: true
             best_effort: false
           - artifact: native-prebuild-linux-arm64
@@ -98,6 +107,7 @@ jobs:
             node_platform: linux
             node_arch: arm64
             cross_compile: true
+            napi_cross_compile: true
             linux: true
             best_effort: false
 
@@ -111,7 +121,7 @@ jobs:
       RUST_TARGET: ${{ matrix.rust_target }}
       NODE_PLATFORM: ${{ matrix.node_platform }}
       NODE_ARCH: ${{ matrix.node_arch }}
-      CROSS_COMPILE: ${{ matrix.cross_compile }}
+      NAPI_CROSS_COMPILE: ${{ matrix.napi_cross_compile }}
 
     steps:
       - name: Checkout
@@ -157,7 +167,8 @@ jobs:
               ;;
           esac
 
-          zig_dir="zig-linux-${zig_arch}-${ZIG_VERSION}"
+          # Zig 0.14.1 renamed release tarballs from zig-<os>-<arch> to zig-<arch>-<os>.
+          zig_dir="zig-${zig_arch}-linux-${ZIG_VERSION}"
           curl -fsSLO "https://ziglang.org/download/${ZIG_VERSION}/${zig_dir}.tar.xz"
           tar -xf "${zig_dir}.tar.xz"
           echo "${PWD}/${zig_dir}" >> "${GITHUB_PATH}"
@@ -199,7 +210,7 @@ jobs:
             --platform
           )
 
-          if [[ "${CROSS_COMPILE}" == "true" ]]; then
+          if [[ "${NAPI_CROSS_COMPILE}" == "true" ]]; then
             args+=(--cross-compile)
           fi
 
@@ -211,7 +222,15 @@ jobs:
           set -euo pipefail
 
           output_dir="${RUNNER_TEMP}/native-prebuild-output"
-          mapfile -t node_files < <(find "${output_dir}" -type f -name '*.node' | sort)
+          # macOS runners ship bash 3.2, which lacks mapfile/readarray.
+          node_files=()
+          while IFS= read -r node_file; do
+            node_files+=("${node_file}")
+          done < <(find "${output_dir}" -type f -name '*.node' | sort)
+          if [[ "${#node_files[@]}" -eq 0 ]]; then
+            echo "::error::expected one .node file for lifecycle probe, found none"
+            exit 1
+          fi
           if [[ "${#node_files[@]}" -ne 1 ]]; then
             echo "::error::expected one .node file for lifecycle probe, found ${#node_files[@]}"
             printf '%s\n' "${node_files[@]}"
@@ -228,7 +247,11 @@ jobs:
           output_dir="${RUNNER_TEMP}/native-prebuild-output"
 
           mkdir -p "${artifact_dir}"
-          mapfile -t node_files < <(find "${output_dir}" -type f -name '*.node' | sort)
+          # macOS runners ship bash 3.2, which lacks mapfile/readarray.
+          node_files=()
+          while IFS= read -r node_file; do
+            node_files+=("${node_file}")
+          done < <(find "${output_dir}" -type f -name '*.node' | sort)
 
           if [[ "${#node_files[@]}" -eq 0 ]]; then
             echo "::error::napi build did not produce a .node file for ${NAPI_TARGET}"
