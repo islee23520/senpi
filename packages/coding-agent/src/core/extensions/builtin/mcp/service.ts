@@ -1,4 +1,5 @@
 import type { ExtensionAPI, SessionShutdownEvent, SessionStartEvent } from "../../types.ts";
+import { detectLiteralBearerWarnings, resolveServerAuth } from "./auth/context.ts";
 import { getValidCachedServer, readMcpCatalogCache } from "./catalog-cache.ts";
 import { loadMcpConfig, visitSpawnableMcpServers } from "./config.ts";
 import type { ResolvedMcpConfig, ResolvedMcpServer } from "./config-schema.ts";
@@ -159,7 +160,16 @@ export class McpService {
 			const key = `${name}\0${server.configHash}`;
 			if (this.#connections.has(key)) continue;
 			const logger = createMcpLogger(name, { logDir: options.logDir });
+			const authPlan = resolveServerAuth({
+				agentDir: options.agentDir,
+				config: server.config,
+				env: options.env,
+				logger,
+				serverName: name,
+			});
+			for (const warning of detectLiteralBearerWarnings(name, server.config)) logger.warn(warning);
 			const connection = new ServerConnection({
+				authProvider: authPlan.provider,
 				config: server.config,
 				env: options.env,
 				logger,
@@ -168,6 +178,7 @@ export class McpService {
 			const cachedCatalog = useCache ? getValidCachedServer(cache, name, server.configHash) : undefined;
 			const entry: McpConnectionEntry = {
 				agentDir: options.agentDir,
+				authPlan,
 				cacheRefreshedAfterConnect: false,
 				cachedCatalog,
 				key,
