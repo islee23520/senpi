@@ -17,7 +17,10 @@ import type { McpServerConfig } from "../../src/core/extensions/builtin/mcp/conf
 import { ServerConnection } from "../../src/core/extensions/builtin/mcp/connection.ts";
 import { buildMcpToolDefinitions } from "../../src/core/extensions/builtin/mcp/expose/register.ts";
 import { createMcpLogger } from "../../src/core/extensions/builtin/mcp/log.ts";
-import { testContext } from "./fixtures/register-call.ts";
+import { registerMcpServiceDirectTools } from "../../src/core/extensions/builtin/mcp/service-register.ts";
+import type { McpConnectionEntry } from "../../src/core/extensions/builtin/mcp/service-types.ts";
+import { connectAndRefreshMcpCatalog } from "../../src/core/extensions/builtin/mcp/startup-race.ts";
+import { capturingPi, registeredTool, testContext, textContent } from "./fixtures/register-call.ts";
 import { type IdpFixture, spawnOAuthIdp } from "./fixtures/spawn-idp.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -215,6 +218,104 @@ describe("headless oauth flows", () => {
 		await expect(tool.execute("tc-auth", {}, undefined, undefined, testContext())).rejects.toThrow(
 			/\/mcp auth-start fix/,
 		);
+	});
+
+	it("reports the headless auth-start flow when degraded renew hits OAuth needs_auth", async () => {
+		const fixture = await idp();
+		const dir = await agentDir();
+		const config = makeHarness(dir, fixture.mcpUrl, { hasUI: false }).deps.config;
+		const authPlan = resolveServerAuth({ agentDir: dir, config, serverName: "fix" });
+		const connection = new ServerConnection({
+			authProvider: authPlan.provider,
+			config,
+			logger: createMcpLogger("fix"),
+			serverName: "fix",
+		});
+		cleanups.push(() => connection.dispose());
+		connection.markDegraded(new Error("stale test connection"));
+		const entry: McpToolCatalogEntry = {
+			connection,
+			requestTimeoutMs: config.requestTimeoutMs,
+			schema: { type: "object" },
+			server: "fix",
+			tool: "secure_tool",
+		};
+		const [tool] = buildMcpToolDefinitions([entry]);
+		if (tool === undefined) throw new Error("expected MCP tool definition");
+
+		await expect(tool.execute("tc-renew-auth", {}, undefined, undefined, testContext())).rejects.toThrow(
+			/\/mcp auth-start fix/,
+		);
+	});
+
+	it("refreshes near-expiry OAuth tokens through the real catalog and tool runtime path", async () => {
+		const fixture = await idp(["--rotate-refresh"]);
+		const dir = await agentDir();
+		const harness = makeHarness(dir, fixture.mcpUrl);
+		const redirect = await followAuthorize(await runAuthStart(harness.deps));
+		await runAuthComplete(harness.deps, redirect);
+		await harness.store.update((current) => ({ ...current, expiresAt: Date.now() + 60_000 }));
+		const authPlan = resolveServerAuth({ agentDir: dir, config: harness.deps.config, serverName: "fix" });
+		const connection = new ServerConnection({
+			authProvider: authPlan.provider,
+			config: harness.deps.config,
+			logger: createMcpLogger("fix"),
+			serverName: "fix",
+		});
+		cleanups.push(() => connection.dispose());
+		const entry: McpConnectionEntry = {
+			agentDir: dir,
+			authPlan,
+			cacheRefreshedAfterConnect: false,
+			configHash: "runtime-refresh",
+			connection,
+			counters: { callCount: 0, errorCount: 0, reconnectCount: 0, totalLatencyMs: 0 },
+			createdAtMs: Date.now(),
+			key: "fix\0runtime-refresh",
+			logger: createMcpLogger("fix"),
+			name: "fix",
+		};
+		const beforeCatalog = (await fixture.getLog()).tokenHits;
+
+		await connectAndRefreshMcpCatalog(entry, harness.deps.config);
+
+		const afterCatalog = (await fixture.getLog()).tokenHits;
+		expect(afterCatalog - beforeCatalog).toBe(1);
+		expect(entry.cachedCatalog?.tools.map((tool) => tool.name)).toContain("tool_1");
+		const pi = capturingPi();
+		await registerMcpServiceDirectTools(
+			pi,
+			{
+				diagnostics: [],
+				servers: {
+					fix: {
+						config: harness.deps.config,
+						configHash: entry.configHash,
+						name: "fix",
+						source: "global",
+						sourcePath: "<test>",
+						state: "enabled",
+						transport: "http",
+					},
+				},
+				settings: { outputGuard: { maxBytes: 50 * 1024, maxLines: 2000 }, searchThreshold: 10, toolPrefix: "mcp" },
+			},
+			[entry],
+		);
+		await harness.store.update((current) => ({ ...current, expiresAt: Date.now() + 60_000 }));
+		const tool = registeredTool(pi, "mcp_fix_tool_1");
+		const beforeCalls = (await fixture.getLog()).tokenHits;
+
+		const [first, second] = await Promise.all([
+			tool.execute("tc-runtime-1", { value: "one" }, undefined, undefined, testContext()),
+			tool.execute("tc-runtime-2", { value: "two" }, undefined, undefined, testContext()),
+		]);
+
+		const afterCalls = await fixture.getLog();
+		expect(afterCalls.tokenHits - beforeCalls).toBe(1);
+		expect(afterCalls.familyInvalidated).toBe(false);
+		expect(textContent(first)).toBe("fixture tool_1 value=one mode=alpha");
+		expect(textContent(second)).toBe("fixture tool_1 value=two mode=alpha");
 	});
 });
 

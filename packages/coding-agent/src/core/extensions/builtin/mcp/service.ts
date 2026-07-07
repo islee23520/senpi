@@ -201,6 +201,7 @@ export class McpService {
 				reconnect: async () => {
 					entry.counters.reconnectCount += 1;
 					entry.cacheRefreshedAfterConnect = false;
+					await entry.authPlan?.refresh?.ensureFresh();
 					await entry.connection.renew();
 					await connectAndRefreshMcpCatalog(entry, server.config);
 				},

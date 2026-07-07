@@ -31,6 +31,7 @@ export async function connectAndRefreshMcpCatalog(
 	serverConfig: ResolvedMcpServer["config"],
 ): Promise<void> {
 	if (serverConfig === undefined) return;
+	await entry.authPlan?.refresh?.ensureFresh();
 	await connectMcpServer(entry.connection, entry.logger);
 	if (entry.connection.state !== "connected") return;
 	if (entry.cacheRefreshedAfterConnect) return;

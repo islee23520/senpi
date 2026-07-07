@@ -19,7 +19,13 @@ interface McpHealthState {
 
 const healthByConnection = new WeakMap<ServerConnection, McpHealthState>();
 
-export async function ensureMcpToolCallConnection(connection: ServerConnection): Promise<void> {
+export type McpEnsureFreshAuth = () => Promise<unknown>;
+
+export async function ensureMcpToolCallConnection(
+	connection: ServerConnection,
+	ensureFresh?: McpEnsureFreshAuth,
+): Promise<void> {
+	await ensureFreshAuth(connection, ensureFresh);
 	const health = healthStateFor(connection);
 	if (connection.state !== "connected") {
 		if (connection.state === "idle" || connection.state === "connecting") {
@@ -113,8 +119,30 @@ async function pingOrRenew(connection: ServerConnection, health: McpHealthState)
 }
 
 async function renewConnection(connection: ServerConnection, health: McpHealthState): Promise<void> {
-	await connection.renew();
+	try {
+		await connection.renew();
+	} catch (error) {
+		if (isNeedsAuthError(error)) throw headlessAuthError(connection, error);
+		throw error;
+	}
 	health.lastSuccessfulPingAtMs = Date.now();
+}
+
+async function ensureFreshAuth(
+	connection: ServerConnection,
+	ensureFresh: McpEnsureFreshAuth | undefined,
+): Promise<void> {
+	if (ensureFresh === undefined) return;
+	try {
+		await ensureFresh();
+	} catch (error) {
+		if (isNeedsAuthError(error)) {
+			const authError = error instanceof Error ? error : new Error(String(error));
+			connection.markNeedsAuth(authError);
+			throw headlessAuthError(connection, authError);
+		}
+		throw error;
+	}
 }
 
 function isRetriableFailedSendError(error: unknown): boolean {
