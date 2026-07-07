@@ -100,6 +100,31 @@ export class McpTokenStore<TRecord extends McpStoredAuth = McpStoredAuth> {
 		await this.update(() => record);
 	}
 
+	// Run an async critical section under the cross-process lock. The callback
+	// must use readUnlocked/writeUnlocked (never update/write) to avoid
+	// re-entrant lock acquisition, which proper-lockfile rejects immediately.
+	async withLock<T>(fn: () => Promise<T> | T): Promise<T> {
+		const release = await this.#acquire();
+		try {
+			return await fn();
+		} finally {
+			await release();
+		}
+	}
+
+	readUnlocked(): TRecord | undefined {
+		return this.read();
+	}
+
+	writeUnlocked(record: TRecord | undefined): void {
+		if (record === undefined) {
+			this.#removeTokens();
+			return;
+		}
+		this.#writeAtomic(record);
+		this.#writeIndex();
+	}
+
 	async clear(): Promise<void> {
 		const release = await this.#acquire();
 		try {
