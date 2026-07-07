@@ -110,6 +110,7 @@ import {
 	getLatestCompactionEntry,
 	type SessionHeader,
 } from "./session-manager.ts";
+import { generateSessionTitle, shouldSkipSessionTitle } from "./session-title-generator.ts";
 import { SessionWorkBarrier } from "./session-work-barrier.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
@@ -1408,6 +1409,8 @@ export class AgentSession {
 				throw new Error(formatNoApiKeyFoundMessage(this.model.provider));
 			}
 
+			await this._maybeGenerateSessionTitle(expandedText);
+
 			// Check if we need to compact before sending (catches aborted responses).
 			// The user's new prompt is sent below, so do not call agent.continue() here.
 			const lastAssistant = this._findLastAssistantMessage();
@@ -1582,6 +1585,33 @@ export class AgentSession {
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueFollowUp(expandedText, images);
+	}
+
+	private async _maybeGenerateSessionTitle(firstPrompt: string): Promise<void> {
+		if (this.sessionManager.getSessionName() || shouldSkipSessionTitle(firstPrompt)) {
+			return;
+		}
+		const model = this.model;
+		if (!model) {
+			return;
+		}
+
+		try {
+			const auth = await this._getRequiredRequestAuth(model);
+			const title = await generateSessionTitle({
+				firstPrompt,
+				model,
+				auth,
+				sessionId: this.sessionId,
+			});
+			if (title && !this.sessionManager.getSessionName()) {
+				this.setSessionName(title);
+			}
+		} catch (error) {
+			if (!(error instanceof Error)) {
+				throw error;
+			}
+		}
 	}
 
 	/**
