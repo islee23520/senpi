@@ -34,6 +34,7 @@ export interface AuthCommandDeps {
 }
 
 const PASTE_REDIRECT = "http://127.0.0.1:0/callback";
+const activeInteractiveAuthServers = new Set<string>();
 
 function ensureOAuth(deps: AuthCommandDeps): void {
 	if (deps.config.auth === false || deps.config.type !== "http" || deps.config.url === undefined) {
@@ -87,22 +88,33 @@ export async function runAuth(deps: AuthCommandDeps): Promise<void> {
 }
 
 async function runInteractive(deps: AuthCommandDeps): Promise<void> {
+	if (activeInteractiveAuthServers.has(deps.serverName)) {
+		throw new OAuthFlowError(
+			"needs_auth",
+			`MCP server ${deps.serverName} authorization is already in progress; complete the existing browser flow or retry after it finishes.`,
+			{ serverName: deps.serverName },
+		);
+	}
+	activeInteractiveAuthServers.add(deps.serverName);
 	let provider: McpOAuthProvider | undefined;
-	const channel = await openCallbackChannel({
-		overrideUrl: deps.callbackUrl,
-		serverName: deps.serverName,
-		validateState: (state) => provider?.consumeState(state) ?? false,
-	});
-	provider = buildProvider(deps, channel.redirectUrl, (url) => deps.openBrowser?.(url));
+	let channel: Awaited<ReturnType<typeof openCallbackChannel>> | undefined;
 	try {
+		channel = await openCallbackChannel({
+			overrideUrl: deps.callbackUrl,
+			serverName: deps.serverName,
+			validateState: (state) => provider?.consumeState(state) ?? false,
+		});
+		const loopbackResult = channel.usesLoopback ? channel.waitForCode() : undefined;
+		provider = buildProvider(deps, channel.redirectUrl, (url) => deps.openBrowser?.(url));
 		const begin = await beginAuthorization(provider, deps.flow);
 		if (begin.authorizationUrl !== undefined) deps.notify(`Opening browser to authorize ${deps.serverName}...`);
-		const { code } = await channel.waitForCode();
+		const { code } = await (loopbackResult ?? channel.waitForCode());
 		await finishAuthorization(provider, code, deps.flow);
 		await deps.onReconnect();
 		deps.notify(`MCP server ${deps.serverName} authorized`);
 	} finally {
-		await channel.close();
+		activeInteractiveAuthServers.delete(deps.serverName);
+		await channel?.close();
 	}
 }
 
