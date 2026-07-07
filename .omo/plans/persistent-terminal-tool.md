@@ -202,7 +202,7 @@
   - QA happy: `--print` startup shows updated tool reference. QA failure: n/a (prose) — verify no stale "no background bash" text. Evidence: cli-smoke prompt dump.
   - Commit: `docs(terminal): CC-close prompt guidance for persistent sessions`
 
-- [ ] 22. **[W3.6][verify] `deep` agent hands-on QA of the full tool surface — expect background/stdin/resize/screen/kill all proven via real CLI with evidence.**
+- [x] 22. **[W3.6][verify] `deep` agent hands-on QA of the full tool surface — expect background/stdin/resize/screen/kill all proven via real CLI with evidence.**
   - References: todos 17-21; senpi-qa channels.
   - Acceptance: deep agent runs the 4 canonical scenarios (bg+wait, REPL steer, TUI resize+screen, kill orphan-check) on the host OS, saves evidence.
   - QA: full scenario transcripts. Evidence: qa-evidence dir with per-scenario logs.
