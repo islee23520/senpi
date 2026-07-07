@@ -1,4 +1,6 @@
 use senpi_pty::{PtySession, PtySessionOptions};
+#[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -82,6 +84,15 @@ fn manual_windows_cmd_lifecycle_transcript() {
     )
     .unwrap();
 
+    // Fail fast with forensics if anything below blocks (e.g. a reader-thread join that never
+    // returns): abort well before the 45-minute CI job timeout so the run stays diagnostic.
+    let watchdog_done = Arc::new(AtomicBool::new(false));
+    spawn_windows_test_watchdog(
+        Duration::from_secs(240),
+        Arc::clone(&watchdog_done),
+        Arc::clone(&output),
+    );
+
     session.resize(100, 30).unwrap();
     // portable-pty 0.9.0's ConPTY sets PSEUDOCONSOLE_INHERIT_CURSOR, so on startup ConPTY emits a
     // DSR cursor-position query (ESC[6n) and withholds cmd.exe's rendered prompt until a terminal
@@ -108,6 +119,7 @@ fn manual_windows_cmd_lifecycle_transcript() {
     eprintln!("windows bytes: {:?}", text(&output));
     session.kill().unwrap();
     let exit = session.wait().unwrap();
+    watchdog_done.store(true, Ordering::SeqCst);
     eprintln!(
         "windows exit: exit_code={:?} cancelled={} timed_out={}",
         exit.exit_code, exit.cancelled, exit.timed_out
@@ -197,6 +209,35 @@ fn windows_hex_head(bytes: &[u8], max: usize) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Spawn a detached watchdog that aborts the test process with forensic evidence if `done` is not
+/// set within `limit`. This bounds any unexpected block (a hung reader-thread join, a stuck kill)
+/// so a Windows CI failure surfaces a diagnostic dump instead of silently consuming the 45-minute
+/// job timeout.
+#[cfg(windows)]
+fn spawn_windows_test_watchdog(limit: Duration, done: Arc<AtomicBool>, output: Arc<Mutex<Vec<u8>>>) {
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + limit;
+        while std::time::Instant::now() < deadline {
+            if done.load(Ordering::SeqCst) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        if done.load(Ordering::SeqCst) {
+            return;
+        }
+        let raw = output.lock().unwrap();
+        eprintln!(
+            "WATCHDOG: Windows PTY test exceeded {limit:?} without completing; \
+             received {} bytes; lossy={:?}; hex_head=[{}]",
+            raw.len(),
+            String::from_utf8_lossy(&raw),
+            windows_hex_head(&raw, 256),
+        );
+        std::process::abort();
+    });
 }
 
 #[cfg(unix)]

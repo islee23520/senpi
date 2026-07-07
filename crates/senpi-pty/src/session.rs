@@ -97,7 +97,7 @@ pub struct PtyExit {
 }
 
 pub struct PtySession {
-    master: Box<dyn MasterPty + Send>,
+    master: Option<Box<dyn MasterPty + Send>>,
     writer: Option<Box<dyn Write + Send>>,
     child: Option<Box<dyn Child + Send + Sync>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
@@ -165,7 +165,7 @@ impl PtySession {
         }
 
         Ok(Self {
-            master: pair.master,
+            master: Some(pair.master),
             writer: Some(writer),
             child: Some(child),
             killer,
@@ -193,6 +193,8 @@ impl PtySession {
 
     pub fn resize(&self, cols: u16, rows: u16) -> PtyResult<()> {
         self.master
+            .as_ref()
+            .ok_or_else(|| PtyError::new("pty session is closed"))?
             .resize(PtySize {
                 rows,
                 cols,
@@ -226,6 +228,12 @@ impl PtySession {
         let status = child.wait()?;
         self.finished.store(true, Ordering::SeqCst);
         self.writer.take();
+        // Drop the PTY master before joining the reader thread. On Windows the ConPTY output pipe
+        // never reaches EOF just because the child exited; only closing the pseudo console (by
+        // dropping the master) unblocks the reader's pending read, so joining first would hang
+        // forever. On POSIX the reader already sees EOF once the child closes the slave, so closing
+        // the master here is a harmless early cleanup.
+        self.master.take();
         if let Some(reader_thread) = self.reader_thread.take() {
             let _ = reader_thread.join();
         }
