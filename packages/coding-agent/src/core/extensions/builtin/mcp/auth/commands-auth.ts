@@ -98,9 +98,19 @@ async function runInteractive(deps: AuthCommandDeps): Promise<void> {
 	activeInteractiveAuthServers.add(deps.serverName);
 	let provider: McpOAuthProvider | undefined;
 	let channel: Awaited<ReturnType<typeof openCallbackChannel>> | undefined;
+	const oauth = deps.config.oauth;
+	let callbackPort: number | undefined;
+	if (
+		(deps.callbackUrl === undefined || deps.callbackUrl.length === 0) &&
+		oauth?.clientId !== undefined &&
+		oauth.clientMetadataUrl === undefined
+	) {
+		callbackPort = oauth.callbackPort;
+	}
 	try {
 		channel = await openCallbackChannel({
 			overrideUrl: deps.callbackUrl,
+			port: callbackPort,
 			serverName: deps.serverName,
 			validateState: (state) => provider?.consumeState(state) ?? false,
 		});
@@ -108,6 +118,22 @@ async function runInteractive(deps: AuthCommandDeps): Promise<void> {
 		provider = buildProvider(deps, channel.redirectUrl, (url) => deps.openBrowser?.(url));
 		const begin = await beginAuthorization(provider, deps.flow);
 		if (begin.authorizationUrl !== undefined) deps.notify(`Opening browser to authorize ${deps.serverName}...`);
+		if (!channel.usesLoopback) {
+			deps.pending.set(deps.serverName, provider);
+			if (begin.authorizationUrl === undefined) {
+				throw new OAuthFlowError(
+					"needs_auth",
+					`MCP server ${deps.serverName} did not produce an authorization URL.`,
+					{
+						serverName: deps.serverName,
+					},
+				);
+			}
+			deps.notify(
+				`Complete the browser flow, then run /mcp auth-complete ${deps.serverName} <redirect-url> with the final redirect URL.`,
+			);
+			return;
+		}
 		const { code } = await (loopbackResult ?? channel.waitForCode());
 		await finishAuthorization(provider, code, deps.flow);
 		await deps.onReconnect();
