@@ -57,4 +57,10 @@ export interface McpConnectionEntry {
 	readonly authPlan?: ServerAuthPlan;
 	cachedCatalog?: McpCachedServerCatalog;
 	cacheRefreshedAfterConnect: boolean;
+	/** Full mcp tool names last registered for this server (list_changed diffing). */
+	knownToolNames?: string[];
+	/** Latest `/mcp status` list_changed delta line, e.g. "2 added (inactive), 1 removed". */
+	lastListChangedDelta?: string;
+	/** Teardown for the list_changed coalescer + subscription. */
+	disposeListChanged?: () => void;
 }

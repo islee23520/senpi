@@ -43,6 +43,18 @@ every file under `builtin/mcp/` is fork-owned. Uses the exact-pinned official
   unless `settings.nativeToolSearch` is auto|true and the model is
   anthropic-messages. The OpenAI half is deferred (spike = GO-with-ai-seam;
   needs a feat(ai) seam + sign-off — see native-search-spike.md).
+- New `notifications.ts` (todo 35): closes the codex list_changed gap.
+  `subscribeMcpListChanged` registers tools/resources/prompts list_changed
+  handlers on the SDK client regardless of declared capability (gemini
+  robustness); `connection.ts` calls it on every successful connect so
+  notifications reach `markToolsChanged`. `createMcpListChangeCoalescer`
+  collapses a 300ms burst into one refresh under a max-1/s/server burst guard
+  (uses `safeTimer`). `service.ts` wires a per-server coalescer to
+  `onToolsChanged` and, on refresh, re-lists + re-registers via
+  `registerToolsPreservingActiveSet` so ADDED tools enter INACTIVE (rug-pull
+  defense) and REMOVED tools are tombstoned (`buildMcpTombstoneDefinition` — a
+  stale execute throws "tool no longer available on <server>"); the delta is
+  recorded per server for `/mcp status` (`formatMcpListChangedDelta`).
 
 ### Why
 Large MCP servers (30+ tools) blow the context budget if every tool is resident.

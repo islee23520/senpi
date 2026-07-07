@@ -1,13 +1,21 @@
 import type { ExtensionAPI, SessionShutdownEvent, SessionStartEvent } from "../../types.ts";
 import { detectLiteralBearerWarnings, resolveServerAuth } from "./auth/context.ts";
+import { collectToolCatalog } from "./catalog.ts";
 import { getValidCachedServer, readMcpCatalogCache } from "./catalog-cache.ts";
 import { loadMcpConfig, visitSpawnableMcpServers } from "./config.ts";
 import type { McpServerConfig, ResolvedMcpConfig, ResolvedMcpServer } from "./config-schema.ts";
 import { ServerConnection } from "./connection.ts";
+import { mapMcpCatalogNames } from "./expose/register.ts";
 import type { McpServerExposureStatus } from "./expose/status.ts";
 import { cleanupMcpOutputArtifacts } from "./guard/output-guard.ts";
 import { configureMcpConnectionLifecycle, disposeMcpConnectionLifecycle } from "./idle.ts";
 import { createMcpLogger } from "./log.ts";
+import {
+	buildMcpTombstoneDefinition,
+	createMcpListChangeCoalescer,
+	diffMcpToolNames,
+	formatMcpListChangedDelta,
+} from "./notifications.ts";
 import { configureMcpReconnect, disposeMcpReconnect, reconnectMcpNow } from "./reconnect.ts";
 import { getMcpServiceExposureStatus } from "./service-exposure.ts";
 import { registerMcpServiceDirectTools } from "./service-register.ts";
@@ -37,6 +45,7 @@ export class McpService {
 	#authEnv: Record<string, string | undefined> | undefined;
 	readonly #pendingAuth = new Map<string, import("./auth/oauth-provider.ts").McpOAuthProvider>();
 	#refreshActiveSetWhenNoTools = false;
+	#pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool"> | undefined;
 	readonly #connections = new Map<string, McpConnectionEntry>();
 	readonly #connectionKeysByName = new Map<string, string>();
 
@@ -56,6 +65,7 @@ export class McpService {
 			projectTrusted: options.projectTrusted ?? ctx.isProjectTrusted(),
 		});
 		this.#config = config;
+		this.#pi = _pi;
 		this.#authAgentDir = options.agentDir;
 		this.#authEnv = options.env;
 		const toolRefreshGeneration = this.#toolRefreshGeneration + 1;
@@ -208,6 +218,7 @@ export class McpService {
 			});
 			this.#connections.set(key, entry);
 			this.#connectionKeysByName.set(name, key);
+			this.#wireListChanged(entry);
 			if (shouldRaceMcpStartup(server.config.lifecycle)) {
 				connects.push(
 					raceMcpStartupConnect({
@@ -223,6 +234,43 @@ export class McpService {
 			}
 		}
 		await Promise.all(connects);
+	}
+
+	#wireListChanged(entry: McpConnectionEntry): void {
+		const sink = { logger: { error: (message: string, data?: unknown) => entry.logger.error(message, data) } };
+		const coalescer = createMcpListChangeCoalescer({
+			onRefresh: () => this.#handleServerToolsChanged(entry),
+			scope: `mcp.list_changed.${entry.name}`,
+			sink,
+		});
+		const unsubscribe = entry.connection.onToolsChanged(() => coalescer.notify());
+		entry.disposeListChanged = () => {
+			unsubscribe();
+			coalescer.dispose();
+		};
+	}
+
+	// Re-list a server on a coalesced list_changed and re-register: added tools
+	// enter INACTIVE (registerToolsPreservingActiveSet keeps the active set), and
+	// removed tools are tombstoned so a stale call fails cleanly.
+	async #handleServerToolsChanged(entry: McpConnectionEntry): Promise<void> {
+		const pi = this.#pi;
+		const config = this.#config;
+		if (pi === undefined || config === null) return;
+		const server = config.servers[entry.name];
+		if (server?.config === undefined || entry.connection.state !== "connected") return;
+		const catalog = await collectToolCatalog(entry.name, entry.connection, server.config, {
+			agentDir: entry.agentDir,
+			outputGuard: config.settings.outputGuard,
+		});
+		const newNames = mapMcpCatalogNames(catalog).map(({ name }) => name);
+		const diff = diffMcpToolNames(entry.knownToolNames ?? newNames, newNames);
+		// Tombstone removed tools BEFORE re-registration so the subsequent
+		// setActiveTools (which excludes them) leaves the tombstones inactive.
+		for (const removed of diff.removed) pi.registerTool(buildMcpTombstoneDefinition(removed, entry.name));
+		await this.#registerDirectTools(pi);
+		entry.knownToolNames = newNames;
+		entry.lastListChangedDelta = formatMcpListChangedDelta(diff);
 	}
 
 	async #registerDirectTools(
@@ -293,6 +341,7 @@ export function shouldDisposeMcpService(reason: SessionShutdownEvent["reason"]):
 }
 
 async function disposeEntryConnection(entry: McpConnectionEntry): Promise<void> {
+	entry.disposeListChanged?.();
 	disposeMcpReconnect(entry.connection);
 	disposeMcpConnectionLifecycle(entry.connection);
 	await entry.connection.dispose();
