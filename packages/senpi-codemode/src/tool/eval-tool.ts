@@ -79,7 +79,14 @@ export function createEvalTool(
 				phase: undefined,
 				durationMs: 0,
 			};
-			const kernel = await options.kernelManager.getKernel(
+			// `kernel` is referenced by the onMessage closure below. Subprocess kernels
+			// (py/rb/jl) emit their `ready` frame synchronously from within getKernel's
+			// await, before the binding is assigned — a `const` here would be in the
+			// temporal dead zone and throw. A pre-declared `let` yields `undefined` for
+			// that pre-ready frame instead (which is a control message, never a tool-call,
+			// so the kernel argument is unused for it).
+			let kernel!: EvalKernel;
+			kernel = await options.kernelManager.getKernel(
 				params.language,
 				(message) => void handleMessage(message, kernel, state, options.executeTool, options.complete, ctx),
 			);

@@ -37,6 +37,7 @@ class DefaultCodemodeSessionManager implements CodemodeSessionManager {
 	readonly #options: CreateCodemodeSessionManagerOptions;
 	#bridge: BridgeServerHandle | undefined;
 	#kernels = new Map<EvalLanguage, EvalKernel>();
+	#onMessageRefs = new Map<EvalLanguage, (message: KernelToHostMessage) => void>();
 	#context: ExtensionContext | undefined;
 
 	constructor(options: CreateCodemodeSessionManagerOptions) {
@@ -54,9 +55,15 @@ class DefaultCodemodeSessionManager implements CodemodeSessionManager {
 	}
 
 	async getKernel(language: EvalLanguage, onMessage: (message: KernelToHostMessage) => void): Promise<EvalKernel> {
+		// Persistent kernels are reused across cells, but each cell needs its OWN
+		// onMessage (bound to that cell's streaming state). Rebind on every call via
+		// a stable dispatcher so the 2nd+ cell's text/display/log output is attributed
+		// to the current cell, not the one that first created the kernel.
+		this.#onMessageRefs.set(language, onMessage);
 		const existing = this.#kernels.get(language);
 		if (existing) return existing;
-		const kernel = await this.#createKernel(language, onMessage);
+		const dispatch = (message: KernelToHostMessage): void => this.#onMessageRefs.get(language)?.(message);
+		const kernel = await this.#createKernel(language, dispatch);
 		this.#kernels.set(language, kernel);
 		return kernel;
 	}

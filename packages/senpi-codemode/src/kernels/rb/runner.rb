@@ -1,5 +1,6 @@
 require "json"
 require "net/http"
+require "stringio"
 require "uri"
 require_relative "prelude"
 
@@ -42,11 +43,20 @@ def __senpi_call_tool(name, args)
   raise error.to_s
 end
 
+# Capture the cell's $stdout writes (puts/print) and emit them as `text` frames.
+# $stdout is redirected to a buffer during eval so user output never contaminates
+# the JSONL protocol channel, which __senpi_emit writes to via the STDOUT constant
+# (the STDOUT constant is unaffected by reassigning the $stdout global).
 def __senpi_run_cell(message)
   started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   $__senpi_current_cell = message["cellId"]
+  captured = StringIO.new
+  previous_stdout = $stdout
+  $stdout = captured
   begin
     value = eval(message["code"].to_s, $__senpi_binding, "(senpi-rb)")
+    $stdout = previous_stdout
+    __senpi_flush_stdout(captured)
     frame = {
       "type" => "result",
       "cellId" => message["cellId"],
@@ -56,6 +66,8 @@ def __senpi_run_cell(message)
     frame["valueRepr"] = JSON.generate(value) unless value.nil?
     __senpi_emit(frame)
   rescue Exception => error
+    $stdout = previous_stdout
+    __senpi_flush_stdout(captured)
     __senpi_emit({
       "type" => "result",
       "cellId" => message["cellId"],
@@ -64,8 +76,14 @@ def __senpi_run_cell(message)
       "durationMs" => ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round,
     })
   ensure
+    $stdout = previous_stdout
     $__senpi_current_cell = nil
   end
+end
+
+def __senpi_flush_stdout(captured)
+  data = captured.string
+  __senpi_emit({ "type" => "text", "stream" => "stdout", "data" => data }) unless data.empty?
 end
 
 STDIN.each_line do |line|
