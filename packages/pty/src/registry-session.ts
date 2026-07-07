@@ -6,7 +6,11 @@ export const DEFAULT_SIGNAL: TerminalSessionSignal = "SIGTERM";
 export function sessionIdPrefix(command: string): string {
 	const parts = command.split(/[\\/]/).filter(Boolean);
 	const baseName = parts[parts.length - 1] ?? DEFAULT_COMMAND;
-	const prefix = baseName
+	// Strip a Windows executable extension first so `bash.exe` collapses to the same
+	// `bash` prefix as POSIX `/bin/bash`; otherwise the `.exe` sanitizes to `_exe` and
+	// session ids become `bash_exe_1`, breaking the cross-platform `bash_N` scheme.
+	const withoutExt = baseName.replace(/\.(?:exe|com|bat|cmd|ps1)$/i, "");
+	const prefix = withoutExt
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "_")
 		.replace(/^_+|_+$/g, "");

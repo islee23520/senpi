@@ -3,6 +3,7 @@ import {
 	SessionRegistry,
 	SessionRegistryCapacityError,
 	type SessionRegistrySession,
+	sessionIdPrefix,
 	type TrackedDetachedChild,
 } from "../src/registry.ts";
 
@@ -239,5 +240,20 @@ describe("SessionRegistry", () => {
 		const entry = await registry.create({ command: "bash", session: new ThisBoundSession() });
 		await expect(registry.stop(entry.id)).resolves.toBe(true);
 		expect(registry.get(entry.id)?.state).toBe("exited");
+	});
+});
+
+describe("sessionIdPrefix", () => {
+	it("derives 'bash' from POSIX and Windows shell paths alike", () => {
+		expect(sessionIdPrefix("/bin/bash")).toBe("bash");
+		// Windows shell paths carry a `.exe` extension and backslash separators; the
+		// prefix must still collapse to `bash` so ids stay `bash_N` cross-platform.
+		expect(sessionIdPrefix("C:\\Program Files\\Git\\bin\\bash.exe")).toBe("bash");
+	});
+
+	it("strips executable extensions for other Windows shells", () => {
+		expect(sessionIdPrefix("C:\\Windows\\System32\\cmd.exe")).toBe("cmd");
+		expect(sessionIdPrefix("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")).toBe("powershell");
+		expect(sessionIdPrefix("pwsh.exe")).toBe("pwsh");
 	});
 });
