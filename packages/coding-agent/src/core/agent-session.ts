@@ -1396,7 +1396,7 @@ export class AgentSession {
 				expandedText = this._expandSkillCommand(expandedText);
 				expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 			}
-			titlePrompt = expandedText;
+			titlePrompt = text;
 
 			// If streaming, queue via steer() or followUp() based on option
 			if (this.isStreaming) {
