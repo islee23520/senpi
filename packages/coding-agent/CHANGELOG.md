@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added the `pi.executeTool()` extension API so extension code can run active tools through the normal validation, permission, `tool_call`, and `tool_result` pipeline.
+
 - Added `senpi app-server` mode for Codex-compatible app-server integrations, including stdio, websocket, and websocket-over-UDS transports, multi-session serving, wire approval requests, daemon subcommands, and protocol documentation.
 - Added built-in MCP support as a builtin extension: `mcpServers` config (global, project, and imported Claude
   Desktop configs) with TypeBox validation and env interpolation, `stdio` and streamable `http` transports, bearer
