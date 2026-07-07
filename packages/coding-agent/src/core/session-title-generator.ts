@@ -1,8 +1,16 @@
-import type { Api, AssistantMessage, Model, SimpleStreamOptions, TextContent } from "@earendil-works/pi-ai/compat";
+import type { StreamFn } from "@earendil-works/pi-agent-core";
+import type {
+	Api,
+	AssistantMessage,
+	Context,
+	Model,
+	SimpleStreamOptions,
+	TextContent,
+} from "@earendil-works/pi-ai/compat";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
 
 interface SessionTitleAuth {
-	readonly apiKey: string;
+	readonly apiKey?: string;
 	readonly headers?: Record<string, string>;
 	readonly extraBody?: Record<string, unknown>;
 	readonly env?: Record<string, string>;
@@ -13,6 +21,8 @@ interface GenerateSessionTitleOptions {
 	readonly model: Model<Api>;
 	readonly auth: SessionTitleAuth;
 	readonly sessionId: string;
+	readonly signal?: AbortSignal;
+	readonly streamFn?: StreamFn;
 }
 
 const TITLE_SYSTEM_PROMPT = `Generate a concise title for this coding-agent session.
@@ -52,19 +62,11 @@ export async function generateSessionTitle(options: GenerateSessionTitleOptions)
 		return undefined;
 	}
 
-	const response = await completeSimple(
+	const response = await completeTitle(
 		options.model,
-		{
-			systemPrompt: TITLE_SYSTEM_PROMPT,
-			messages: [
-				{
-					role: "user",
-					content: [{ type: "text", text: options.firstPrompt }],
-					timestamp: Date.now(),
-				},
-			],
-		},
+		buildTitleContext(options.firstPrompt),
 		buildTitleOptions(options),
+		options.streamFn,
 	);
 	if (response.stopReason === "error") {
 		throw new Error(response.errorMessage ?? "Session title generation failed");
@@ -72,13 +74,28 @@ export async function generateSessionTitle(options: GenerateSessionTitleOptions)
 	return parseSessionTitle(response);
 }
 
+function buildTitleContext(firstPrompt: string): Context {
+	return {
+		systemPrompt: TITLE_SYSTEM_PROMPT,
+		messages: [
+			{
+				role: "user",
+				content: [{ type: "text", text: firstPrompt }],
+				timestamp: Date.now(),
+			},
+		],
+	};
+}
+
 function buildTitleOptions(options: GenerateSessionTitleOptions): SimpleStreamOptions {
 	const titleOptions: SimpleStreamOptions = {
-		apiKey: options.auth.apiKey,
 		sessionId: options.sessionId,
 		cacheRetention: options.model.cacheRetention === "none" ? "none" : "short",
 		maxTokens: 64,
 	};
+	if (options.auth.apiKey !== undefined) {
+		titleOptions.apiKey = options.auth.apiKey;
+	}
 	if (options.auth.headers !== undefined) {
 		titleOptions.headers = options.auth.headers;
 	}
@@ -88,7 +105,23 @@ function buildTitleOptions(options: GenerateSessionTitleOptions): SimpleStreamOp
 	if (options.auth.env !== undefined) {
 		titleOptions.env = options.auth.env;
 	}
+	if (options.signal !== undefined) {
+		titleOptions.signal = options.signal;
+	}
 	return titleOptions;
+}
+
+async function completeTitle(
+	model: Model<Api>,
+	context: Context,
+	options: SimpleStreamOptions,
+	streamFn?: StreamFn,
+): Promise<AssistantMessage> {
+	if (streamFn === undefined) {
+		return completeSimple(model, context, options);
+	}
+	const stream = await streamFn(model, context, options);
+	return stream.result();
 }
 
 function parseSessionTitle(message: AssistantMessage): string | undefined {

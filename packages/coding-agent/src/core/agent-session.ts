@@ -368,6 +368,9 @@ export class AgentSession {
 	// Branch summarization state
 	private _branchSummaryAbortController: AbortController | undefined = undefined;
 
+	private _sessionTitleAbortController: AbortController | undefined = undefined;
+	private _sessionTitlePromise: Promise<void> | undefined = undefined;
+
 	// Retry state
 	private _retryAbortController: AbortController | undefined = undefined;
 	private _retryAttempt = 0;
@@ -623,6 +626,15 @@ export class AgentSession {
 
 	private async _waitForSettledSessionWork(): Promise<void> {
 		await this._sessionWorkBarrier.waitForSettled(() => this._agentEventQueue);
+	}
+
+	async waitForSettledSessionWork(): Promise<void> {
+		await this._waitForSettledSessionWork();
+		const titlePromise = this._sessionTitlePromise;
+		if (titlePromise !== undefined) {
+			await titlePromise;
+		}
+		await this._waitForSettledSessionWork();
 	}
 
 	private _modelSelectionChangesContext(previousModel: Model<any> | undefined, nextModel: Model<any>): boolean {
@@ -973,6 +985,7 @@ export class AgentSession {
 			this.abortRetry();
 			this.abortCompaction();
 			this.abortBranchSummary();
+			this.abortSessionTitleGeneration();
 			this.abortBash();
 			this.agent.abort();
 		} catch {
@@ -1594,33 +1607,62 @@ export class AgentSession {
 		if (this.sessionManager.getSessionName() || shouldSkipSessionTitle(firstPrompt)) {
 			return;
 		}
+		if (this._sessionTitleAbortController !== undefined) {
+			return;
+		}
 		const model = this.model;
 		if (!model) {
 			return;
 		}
-		void this._generateSessionTitle(firstPrompt, model);
+		const abortController = new AbortController();
+		this._sessionTitleAbortController = abortController;
+		this._sessionTitlePromise = this._generateSessionTitle(firstPrompt, model, abortController);
 	}
 
-	private async _generateSessionTitle(firstPrompt: string, model: Model<any>): Promise<void> {
+	private async _generateSessionTitle(
+		firstPrompt: string,
+		model: Model<any>,
+		abortController: AbortController,
+	): Promise<void> {
 		try {
-			const auth = await this._getRequiredRequestAuth(model);
+			const auth = await this._getCompactionRequestAuth(model);
 			const title = await generateSessionTitle({
 				firstPrompt,
 				model,
 				auth,
 				sessionId: this.sessionId,
+				signal: abortController.signal,
+				streamFn: this.agent.streamFn,
 			});
+			if (abortController.signal.aborted) {
+				return;
+			}
 			if (title && !this.sessionManager.getSessionName()) {
 				this.setSessionName(title);
 			}
 		} catch (error) {
+			if (abortController.signal.aborted) {
+				return;
+			}
 			const message = error instanceof Error ? error.message : String(error);
 			this._extensionRunner.emitError({
 				extensionPath: "<runtime>",
 				event: "session_title_generation",
 				error: message,
 			});
+		} finally {
+			if (this._sessionTitleAbortController === abortController) {
+				this._sessionTitleAbortController = undefined;
+			}
+			if (this._sessionTitlePromise !== undefined) {
+				this._sessionTitlePromise = undefined;
+			}
 		}
+	}
+
+	private abortSessionTitleGeneration(): void {
+		this._sessionTitleAbortController?.abort();
+		this._sessionTitleAbortController = undefined;
 	}
 
 	/**

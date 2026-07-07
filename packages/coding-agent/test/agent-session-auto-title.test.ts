@@ -1,5 +1,10 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { type FauxResponseFactory, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
+import {
+	type FauxResponseFactory,
+	fauxAssistantMessage,
+	fauxToolCall,
+	streamSimple,
+} from "@earendil-works/pi-ai/compat";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, getAssistantTexts, type Harness } from "./suite/harness.ts";
@@ -171,6 +176,57 @@ describe("agent session auto title", () => {
 
 		expect(harness.faux.getCallLog()[1]?.options).toMatchObject({ cacheRetention: "none" });
 		await expect(sessionName).resolves.toBe("Private Task");
+	});
+
+	it("runs title generation through the session stream function", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		harness.session.agent.streamFn = (model, context, options) => {
+			const streamOptions = {
+				...options,
+				serviceTier: "priority",
+			};
+			return streamSimple({ ...model, id: "upstream-model" }, context, streamOptions);
+		};
+		harness.setResponses([
+			fauxAssistantMessage("turn complete"),
+			fauxAssistantMessage("<title>Aliased Priority Task</title>"),
+		]);
+
+		const sessionName = waitForSessionName(harness);
+		await harness.session.prompt("fix the OAuth login button on mobile");
+		await waitForCallCount(harness, 2);
+
+		expect(harness.faux.getCallLog()[1]?.modelId).toBe("upstream-model");
+		expect(harness.faux.getCallLog()[1]?.options).toMatchObject({
+			serviceTier: "priority",
+			sessionId: harness.session.sessionId,
+			cacheRetention: "short",
+		});
+		await expect(sessionName).resolves.toBe("Aliased Priority Task");
+	});
+
+	it("does not stack title requests while one is already running", async () => {
+		const titleResponse = createDeferred<ReturnType<typeof fauxAssistantMessage>>();
+		const harness = await createHarness();
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage("first turn complete"),
+			() => titleResponse.promise,
+			fauxAssistantMessage("second turn complete"),
+		]);
+
+		const sessionName = waitForSessionName(harness);
+		await harness.session.prompt("fix the OAuth login button on mobile");
+		await waitForCallCount(harness, 2);
+		await harness.session.prompt("add keyboard navigation for the login form");
+
+		expect(getAssistantTexts(harness)).toEqual(["first turn complete", "second turn complete"]);
+		expect(harness.faux.getCallLog()).toHaveLength(3);
+
+		titleResponse.resolve(fauxAssistantMessage("<title>OAuth Mobile Login</title>"));
+		await expect(sessionName).resolves.toBe("OAuth Mobile Login");
+		expect(harness.faux.getCallLog()).toHaveLength(3);
 	});
 
 	it("ignores malformed title responses without a title marker", async () => {

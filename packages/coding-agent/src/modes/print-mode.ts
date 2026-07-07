@@ -149,6 +149,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			}
 		}
 
+		await session.waitForSettledSessionWork();
 		return exitCode;
 	} catch (error: unknown) {
 		console.error(error instanceof Error ? error.message : String(error));
