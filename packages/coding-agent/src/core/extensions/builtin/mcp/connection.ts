@@ -1,5 +1,11 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { McpServerConfig } from "./config-schema.ts";
+import type {
+	ServerConnectionListener,
+	ServerConnectionOptions,
+	ServerConnectionState,
+	ServerConnectionStateChangedEvent,
+	ServerConnectionToolsChangedEvent,
+} from "./connection-types.ts";
 import { diagnoseCapturedMcpConnectFailure, diagnoseMcpConnectFailure } from "./diagnose.ts";
 import { ConnectError } from "./errors.ts";
 import type { McpLogger } from "./log.ts";
@@ -11,53 +17,26 @@ import {
 } from "./transport.ts";
 import { type McpAsyncErrorSink, wrapAsync } from "./wrap.ts";
 
-export type ServerConnectionState =
-	| "disabled"
-	| "idle"
-	| "connecting"
-	| "connected"
-	| "degraded"
-	| "suspended"
-	| "needs_auth"
-	| "needs_client_registration";
-
-export type ServerConnectionStateChangedEvent = {
-	readonly type: "state_changed";
-	readonly serverName: string;
-	readonly generation: number;
-	readonly state: ServerConnectionState;
-	readonly previousState: ServerConnectionState;
-	readonly error?: Error;
-};
-
-export type ServerConnectionToolsChangedEvent = {
-	readonly type: "tools_changed";
-	readonly serverName: string;
-	readonly generation: number;
-};
-
-export interface ServerConnectionOptions {
-	readonly serverName: string;
-	readonly config: McpServerConfig;
-	readonly logger: McpLogger;
-	readonly env?: Record<string, string | undefined>;
-}
-
-type Listener<TEvent> = (event: TEvent) => void | Promise<void>;
+export type {
+	ServerConnectionOptions,
+	ServerConnectionState,
+	ServerConnectionStateChangedEvent,
+	ServerConnectionToolsChangedEvent,
+} from "./connection-types.ts";
 
 export class ServerConnection {
 	readonly serverName: string;
 	readonly #logger: McpLogger;
 	readonly #env: Record<string, string | undefined> | undefined;
-	readonly #config: McpServerConfig;
+	readonly #config: ServerConnectionOptions["config"];
 	#state: ServerConnectionState;
 	#generation = 0;
 	#connection: McpTransportConnection | undefined;
 	#pendingConnection: McpTransportConnection | undefined;
 	#pendingConnect: Promise<Client> | undefined;
 	#lastError: Error | undefined;
-	readonly #stateListeners = new Set<Listener<ServerConnectionStateChangedEvent>>();
-	readonly #toolsListeners = new Set<Listener<ServerConnectionToolsChangedEvent>>();
+	readonly #stateListeners = new Set<ServerConnectionListener<ServerConnectionStateChangedEvent>>();
+	readonly #toolsListeners = new Set<ServerConnectionListener<ServerConnectionToolsChangedEvent>>();
 	readonly #shutdownConnections = new Map<McpTransportConnection, Promise<void>>();
 
 	constructor(options: ServerConnectionOptions) {
@@ -164,12 +143,12 @@ export class ServerConnection {
 		});
 	}
 
-	onStateChange(listener: Listener<ServerConnectionStateChangedEvent>): () => void {
+	onStateChange(listener: ServerConnectionListener<ServerConnectionStateChangedEvent>): () => void {
 		this.#stateListeners.add(listener);
 		return () => this.#stateListeners.delete(listener);
 	}
 
-	onToolsChanged(listener: Listener<ServerConnectionToolsChangedEvent>): () => void {
+	onToolsChanged(listener: ServerConnectionListener<ServerConnectionToolsChangedEvent>): () => void {
 		this.#toolsListeners.add(listener);
 		return () => this.#toolsListeners.delete(listener);
 	}
@@ -280,7 +259,7 @@ export class ServerConnection {
 		});
 	}
 
-	#emit<TEvent>(listeners: Set<Listener<TEvent>>, event: TEvent): void {
+	#emit<TEvent>(listeners: Set<ServerConnectionListener<TEvent>>, event: TEvent): void {
 		for (const listener of listeners) {
 			void wrapAsync("connection.event", listener, this.#sink)(event);
 		}

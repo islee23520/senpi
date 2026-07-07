@@ -52,11 +52,15 @@ describe("MCP-prefixed extension tool allowlist", () => {
 			settingsManager,
 		});
 		await resourceLoader.reload();
+		const model = getModel("anthropic", "claude-sonnet-4-5");
+		if (model === undefined) {
+			throw new Error("Expected claude-sonnet-4-5 test model to be registered");
+		}
 
 		const { session } = await createAgentSession({
 			agentDir,
 			cwd: tempDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			model,
 			resourceLoader,
 			sessionManager,
 			settingsManager,
