@@ -18,6 +18,7 @@
   (`--listen <socket>`: supervisor with atomic registry, token+version handshake, per-connection worker processes,
   and idle shutdown via `neoDaemon.idleShutdownMs`).
 - Added a convention guard that rejects senpi-defined PascalCase tool names in core and builtin extension tool registrations.
+- Added the bundled `@earendil-works/pi-pty` native PTY workspace dependency as persistent-terminal groundwork.
 
 ### Changed
 

@@ -1,5 +1,16 @@
 # Local fork changes
 
+## 2026-07-07 — pi-pty workspace dependency groundwork
+
+- Changed:
+  - `package.json` (+ `npm-shrinkwrap.json`, `install-lock/package-lock.json`): added the fork's
+    `@earendil-works/pi-pty` workspace package to `dependencies` and `bundledDependencies`.
+- Why: groundwork for the persistent-terminal tool; the native PTY runtime (`packages/pty`, `crates/senpi-pty`) is
+  fork-native and ships bundled like the other workspace packages.
+- What changed: dependency wiring only; no coding-agent runtime files consume it yet.
+- Why the extension system could not handle this: bundled workspace dependencies are package-level release surface.
+- Merge-conflict risk: low. `dependencies` / `bundledDependencies` lists in `package.json`.
+
 ## 2026-07-07 — MCP W1 package surface (dependency, tests, fixtures)
 
 - Changed:
