@@ -55,11 +55,24 @@ describe("JuliaKernel", () => {
 					connection: { port: server.port, token: server.token },
 				});
 				try {
-					await kernel.run({ cellId: "set", code: "answer = 41", timeoutMs: 8_000 });
+					// The first cell after start() — and the first after reset(), which
+					// restarts the subprocess — pays Julia's full cold boot (interpreter
+					// startup + prelude/runner compilation), which routinely exceeds 8s on
+					// a loaded CI runner. A cell timeout fires restartProcess(), so a tight
+					// cold-start budget doesn't just fail that cell: it wedges the ones
+					// after it too (observed as flaky "Kernel is closed" / ok:false on
+					// "get"). Cold-start cells get a boot-sized budget; warm cells keep 8s
+					// so steady-state responsiveness stays covered.
+					const coldStartTimeoutMs = 60_000;
+					await kernel.run({ cellId: "set", code: "answer = 41", timeoutMs: coldStartTimeoutMs });
 					const persisted = await kernel.run({ cellId: "get", code: "answer + 1", timeoutMs: 8_000 });
 					expect(persisted).toMatchObject({ ok: true, valueRepr: "42" });
 					await kernel.reset();
-					const reset = await kernel.run({ cellId: "reset", code: "@isdefined(answer)", timeoutMs: 8_000 });
+					const reset = await kernel.run({
+						cellId: "reset",
+						code: "@isdefined(answer)",
+						timeoutMs: coldStartTimeoutMs,
+					});
 					expect(reset).toMatchObject({ ok: true, valueRepr: "false" });
 					await kernel.run({ cellId: "set-again", code: "answer = 41", timeoutMs: 8_000 });
 
