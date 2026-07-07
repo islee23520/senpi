@@ -15,10 +15,6 @@ interface GenerateSessionTitleOptions {
 	readonly sessionId: string;
 }
 
-type TitleGenerationOptions = SimpleStreamOptions & {
-	readonly disableReasoning: boolean;
-};
-
 const TITLE_SYSTEM_PROMPT = `Generate a concise title for this coding-agent session.
 
 Rules:
@@ -70,16 +66,18 @@ export async function generateSessionTitle(options: GenerateSessionTitleOptions)
 		},
 		buildTitleOptions(options),
 	);
+	if (response.stopReason === "error") {
+		throw new Error(response.errorMessage ?? "Session title generation failed");
+	}
 	return parseSessionTitle(response);
 }
 
-function buildTitleOptions(options: GenerateSessionTitleOptions): TitleGenerationOptions {
-	const titleOptions: TitleGenerationOptions = {
+function buildTitleOptions(options: GenerateSessionTitleOptions): SimpleStreamOptions {
+	const titleOptions: SimpleStreamOptions = {
 		apiKey: options.auth.apiKey,
 		sessionId: options.sessionId,
-		cacheRetention: "short",
+		cacheRetention: options.model.cacheRetention === "none" ? "none" : "short",
 		maxTokens: 64,
-		disableReasoning: true,
 	};
 	if (options.auth.headers !== undefined) {
 		titleOptions.headers = options.auth.headers;
@@ -100,7 +98,10 @@ function parseSessionTitle(message: AssistantMessage): string | undefined {
 		.join("")
 		.trim();
 	const match = text.match(/<title>\s*([\s\S]*?)\s*<\/title>/i);
-	const rawTitle = match?.[1] ?? text;
+	const rawTitle = match?.[1];
+	if (rawTitle === undefined) {
+		return undefined;
+	}
 	const title = sanitizeTitle(rawTitle);
 	if (!title || title.toLowerCase() === "none") {
 		return undefined;
@@ -110,7 +111,11 @@ function parseSessionTitle(message: AssistantMessage): string | undefined {
 
 function sanitizeTitle(text: string): string {
 	return text
+		.replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
+		.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+		.replace(/\u001b[\u0020-\u002f]*[\u0030-\u007e]/g, "")
 		.replace(/[\r\n]+/g, " ")
+		.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ")
 		.replace(/\s+/g, " ")
 		.replace(/^["'`]+|["'`.!?]+$/g, "")
 		.trim()

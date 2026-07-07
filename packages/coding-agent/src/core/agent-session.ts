@@ -1333,6 +1333,7 @@ export class AgentSession {
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
 		let messages: AgentMessage[] | undefined;
+		let titlePrompt: string | undefined;
 
 		try {
 			// Handle extension commands first (execute immediately, even during streaming)
@@ -1372,6 +1373,7 @@ export class AgentSession {
 				expandedText = this._expandSkillCommand(expandedText);
 				expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 			}
+			titlePrompt = expandedText;
 
 			// If streaming, queue via steer() or followUp() based on option
 			if (this.isStreaming) {
@@ -1408,8 +1410,6 @@ export class AgentSession {
 				}
 				throw new Error(formatNoApiKeyFoundMessage(this.model.provider));
 			}
-
-			await this._maybeGenerateSessionTitle(expandedText);
 
 			// Check if we need to compact before sending (catches aborted responses).
 			// The user's new prompt is sent below, so do not call agent.continue() here.
@@ -1483,6 +1483,9 @@ export class AgentSession {
 			await this._waitForSettledSessionWork();
 		} else {
 			await this.agent.waitForIdle();
+		}
+		if (titlePrompt !== undefined) {
+			this._startSessionTitleGeneration(titlePrompt);
 		}
 	}
 
@@ -1587,7 +1590,7 @@ export class AgentSession {
 		await this._queueFollowUp(expandedText, images);
 	}
 
-	private async _maybeGenerateSessionTitle(firstPrompt: string): Promise<void> {
+	private _startSessionTitleGeneration(firstPrompt: string): void {
 		if (this.sessionManager.getSessionName() || shouldSkipSessionTitle(firstPrompt)) {
 			return;
 		}
@@ -1595,7 +1598,10 @@ export class AgentSession {
 		if (!model) {
 			return;
 		}
+		void this._generateSessionTitle(firstPrompt, model);
+	}
 
+	private async _generateSessionTitle(firstPrompt: string, model: Model<any>): Promise<void> {
 		try {
 			const auth = await this._getRequiredRequestAuth(model);
 			const title = await generateSessionTitle({
@@ -1608,9 +1614,12 @@ export class AgentSession {
 				this.setSessionName(title);
 			}
 		} catch (error) {
-			if (!(error instanceof Error)) {
-				throw error;
-			}
+			const message = error instanceof Error ? error.message : String(error);
+			this._extensionRunner.emitError({
+				extensionPath: "<runtime>",
+				event: "session_title_generation",
+				error: message,
+			});
 		}
 	}
 
