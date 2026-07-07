@@ -34,6 +34,28 @@
 - MEDIUM: `loader.ts` and `runner.ts` around `bindCore` action wiring.
 - MEDIUM: `agent-session.ts` around tool hook installation and active tool dispatch.
 
+## 2026-07-06 - MCP builtin extension skeleton
+
+### What changed
+
+- Added builtin extension id `mcp` at the end of the builtin registration list, with a no-op lifecycle skeleton and
+  official MCP SDK wrap point.
+
+### Why
+
+- MCP support needs to ship as a builtin extension so future server lifecycle, tool exposure, and provider-payload
+  handling stay out of the high-conflict core session runtime.
+
+### Why extension system couldn't handle this alone
+
+- This is the builtin extension registration itself. The skeleton uses existing extension lifecycle hooks and does not
+  add new public extension API surface.
+
+### Expected merge conflict zones
+
+- LOW: `builtin/index.ts` registration order near the final builtin entries.
+- LOW: `builtin/mcp/` as later MCP implementation phases fill in the skeleton.
+
 ## 2026-07-02 - Extension entry renderer sync
 
 ### What changed
@@ -83,11 +105,11 @@
 - LOW: `agent-session.ts` `extendResourcesFromExtensions()` resource handoff.
 - LOW: `builtin/index.ts` registration order near `permission-system`.
 
-## 2026-06-15 - Remove kimi-web-search builtin; fold Kimi search into pi-websearch
+## 2026-06-15 - Remove legacy Kimi-specific web-search builtin; fold Kimi search into pi-websearch
 
 ### What changed
 
-- Removed `builtin/kimi-web-search/` and its registration in `builtin/index.ts`. The `kimi_search_web` / `kimi_fetch_url` tools no longer exist.
+- Removed the legacy Kimi-specific web-search builtin and its registration in `builtin/index.ts`. Its search/fetch tools no longer exist.
 - Kimi search is now a `pi-websearch` provider (`kimi`, vendored at 0.2.0). On a `kimi-coding` model the native auto-route prepends a `kimi` entry (api.kimi.com/coding/v1/search) using the model API key, so `web_search` works zero-config and falls back to the configured chain. URL fetching is handled by the `webfetch` builtin.
 - `test/suite/regressions/3592-...test.ts`: dropped `kimi_search_web` / `kimi_fetch_url` from the tool-list expectations.
 
@@ -202,38 +224,6 @@
 ### Expected merge conflict zones
 
 - LOW: `builtin/system-messages.ts`, `builtin/todotools/system-messages.ts`, and `builtin/todotools/state.ts` if upstream or vendored builtins rename these helper surfaces.
-## 2026-05-14 - Add kimi-web-search builtin extension
-
-### What changed
-
-- Added `builtin/kimi-web-search/index.ts`: New builtin extension that registers `SearchWeb` and `FetchURL` tools for Kimi Code platform.
-- Registers tools via `pi.registerTool()` (not provider-native injection like anthropic-web-search/openai-web-search).
-- Calls Kimi Code service endpoints:
-  - Search: `POST https://api.kimi.com/coding/v1/search` with `{text_query, limit, enable_page_crawling, timeout_seconds}`
-  - Fetch: `POST https://api.kimi.com/coding/v1/fetch` with `{url}`
-- Passes `Authorization: Bearer <api_key>` and `X-Msh-Tool-Call-Id` headers matching Kimi CLI behavior.
-- Fallback to local HTTP fetch when Kimi fetch service returns error.
-- Configurable via env vars: `PI_KIMI_WEB_SEARCH`, `PI_KIMI_SEARCH_BASE_URL`, `PI_KIMI_FETCH_BASE_URL`.
-- Registered in `builtin/index.ts` as builtin extension id `kimi-web-search`.
-
-### Why
-
-- Kimi Code platform provides official SearchWeb/FetchURL services (`moonshot_search`/`moonshot_fetch`), but senpi had no integration.
-- The existing `anthropic-web-search` extension incorrectly injected Anthropic-native `web_search_20250305` into kimi-coding requests (because both use `api: "anthropic-messages"`), which Kimi API does not support.
-
-### Why extension system couldn't handle this alone
-
-- While this *could* be a user extension, it requires deep integration with:
-  - `ctx.modelRegistry.getApiKeyAndHeaders()` for auth resolution
-  - Knowledge of Kimi Code service URL conventions
-  - Proper `X-Msh-Tool-Call-Id` header passing
-- As a builtin, it stays consistent with anthropic-web-search/openai-web-search and can be maintained alongside provider updates.
-
-### Expected merge conflict zones
-
-- LOW: `builtin/index.ts` extension registration list.
-- LOW: `builtin/kimi-web-search/index.ts` if Kimi Code service API changes.
-
 ## 2026-05-14 - Native Web Tool UI Cleanup Hooks
 
 ### What changed

@@ -176,7 +176,13 @@ export type AgentSessionEvent =
 			errorMessage?: string;
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
-	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string };
+	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	// Auth login flow (task 13) is additive with event-only completion. The
+	// login_start command responds immediately, then the OAuth URL and the
+	// terminal result arrive here, because an interactive browser round-trip
+	// cannot fit inside the request timeout.
+	| { type: "auth_login_url"; provider: string; url: string }
+	| { type: "auth_login_end"; provider: string; success: boolean; error?: string };
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;

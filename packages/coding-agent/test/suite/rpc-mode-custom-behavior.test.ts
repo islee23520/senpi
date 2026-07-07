@@ -2,31 +2,34 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { buildCustomUnsupportedRequest, CUSTOM_UNSUPPORTED_CAPABILITY } from "../../src/modes/rpc/custom-capability.ts";
 
 // Additive characterization test for the RPC-mode ctx.ui.custom behavior.
 //
 // Task 14 (neo) reimplements the 5 builtin ctx.ui.custom extensions natively in
-// Go and adds a Go-side "custom_unsupported" notice dialog. The audit asked for
-// an ADDITIVE TS test asserting the CURRENT behavior of ctx.ui.custom in RPC
-// mode (rpc-mode.ts, the `async custom()` method): it returns undefined
-// synchronously with NO wire message emitted — there is nothing for a default
-// RPC client to render a dialog FROM today. This test documents exactly that.
+// Go and adds a Go-side "custom_unsupported" notice dialog. Task 13 wired the
+// additive, capability-gated emission on the TS side: `async custom()` now lives
+// in the per-connection handler (connection-handler.ts, where
+// createExtensionUIContext moved when the daemon core was extracted). Its body is
+// GATED — for a DEFAULT (unflagged) client it still returns undefined with NO
+// wire message (byte-identical), and ONLY when the client advertised the
+// custom_unsupported capability does it emit an additive
+// extension_ui_request{method:"custom_unsupported"} before returning undefined.
 //
-// It is intentionally kept off-main and additive: it neither imports the private
-// createExtensionUIContext closure nor changes production code. Instead it (1)
-// pins the real source body of `async custom()` so the characterization cannot
-// silently drift, then (2) exercises a context whose `custom` mirrors that body
-// byte-for-byte, proving the two observable properties (undefined result, no
-// output() call).
+// This test (1) pins the real source body of `async custom()` so the
+// characterization cannot silently drift, then (2) exercises the pure gate helper
+// (buildCustomUnsupportedRequest) proving BOTH observable properties: unflagged =
+// no request; flagged = exactly one additive request. The gate is the single
+// source of truth the handler calls.
 
 const thisDir = dirname(fileURLToPath(import.meta.url));
-const rpcModePath = join(thisDir, "..", "..", "src", "modes", "rpc", "rpc-mode.ts");
+const connectionHandlerPath = join(thisDir, "..", "..", "src", "modes", "rpc", "connection-handler.ts");
 
-/** Extract the body of the `async custom() { ... }` method from rpc-mode.ts. */
+/** Extract the body of the `async custom() { ... }` method from connection-handler.ts. */
 function extractCustomBody(source: string): string {
 	const marker = "async custom() {";
 	const start = source.indexOf(marker);
-	if (start === -1) throw new Error("async custom() not found in rpc-mode.ts");
+	if (start === -1) throw new Error("async custom() not found in connection-handler.ts");
 	const bodyStart = start + marker.length;
 	let depth = 1;
 	let index = bodyStart;
@@ -40,41 +43,31 @@ function extractCustomBody(source: string): string {
 }
 
 describe("rpc-mode ctx.ui.custom characterization", () => {
-	it("source: async custom() returns undefined and emits no wire message", () => {
-		const source = readFileSync(rpcModePath, "utf-8");
+	it("source: async custom() returns undefined and gates the notice on the capability flag", () => {
+		const source = readFileSync(connectionHandlerPath, "utf-8");
 		const body = extractCustomBody(source);
 
-		// The current body is a comment plus `return undefined as never;`.
+		// Still returns undefined.
 		expect(body).toContain("return undefined as never");
-		// No extension_ui_request (or any output) is emitted from custom().
-		expect(body).not.toContain("output(");
-		expect(body).not.toContain("extension_ui_request");
+		// The emission is GATED through the pure gate helper — no unconditional
+		// output(): the only output happens inside the `if (request)` guard.
+		expect(body).toContain("buildCustomUnsupportedRequest");
+		expect(body).toContain("if (request)");
 	});
 
-	it("behavior: custom() resolves to undefined synchronously without calling output", async () => {
-		const emitted: unknown[] = [];
-		const output = (obj: unknown): void => {
-			emitted.push(obj);
-		};
+	it("behavior (unflagged): the gate yields no request — byte-identical default", () => {
+		// A default client sends no capabilities: the gate returns undefined, so the
+		// handler emits NOTHING and custom() resolves to undefined.
+		expect(buildCustomUnsupportedRequest(undefined, "ext")).toBeUndefined();
+		expect(buildCustomUnsupportedRequest([], "ext")).toBeUndefined();
+	});
 
-		// Mirror of rpc-mode.ts `async custom()` — the same no-op that returns
-		// undefined and touches neither `output` nor the wire.
-		const ui = {
-			async custom<T>(): Promise<T | undefined> {
-				// Custom UI not supported in RPC mode
-				return undefined;
-			},
-		};
-
-		// A stub extension calling ctx.ui.custom in RPC mode: the factory is never
-		// invoked because there is no host to render it.
-		const factoryInvoked = false;
-		const result = await ui.custom<string>();
-
-		expect(result).toBeUndefined();
-		expect(factoryInvoked).toBe(false);
-		// The request never reaches the wire: output() is never called.
-		expect(emitted).toEqual([]);
-		void output; // output exists to prove it is never invoked
+	it("behavior (flagged): the gate yields exactly one additive custom_unsupported request", () => {
+		const request = buildCustomUnsupportedRequest([CUSTOM_UNSUPPORTED_CAPABILITY], "third-party-ext");
+		expect(request).toMatchObject({
+			type: "extension_ui_request",
+			method: "custom_unsupported",
+			extensionName: "third-party-ext",
+		});
 	});
 });

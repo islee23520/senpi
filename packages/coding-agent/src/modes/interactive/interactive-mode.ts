@@ -8,15 +8,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import {
-	type AssistantMessage,
-	getProviders,
-	type ImageContent,
-	type Message,
-	type Model,
-	type OAuthProviderId,
-	type OAuthSelectPrompt,
-	type TextContent,
+import type {
+	AssistantMessage,
+	ImageContent,
+	Message,
+	Model,
+	OAuthProviderId,
+	OAuthSelectPrompt,
+	TextContent,
 } from "@earendil-works/pi-ai/compat";
 import type {
 	AutocompleteItem,
@@ -62,6 +61,7 @@ import {
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
+import { isApiKeyLoginProvider } from "../../core/auth-providers.ts";
 import type {
 	AutocompleteProviderFactory,
 	EditorFactory,
@@ -85,7 +85,6 @@ import {
 	resolveModelScope,
 	type ScopedModel,
 } from "../../core/model-resolver.ts";
-import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
@@ -318,21 +317,11 @@ function hasDefaultModelProvider(providerId: string): providerId is keyof typeof
 
 const BEDROCK_PROVIDER_ID = "amazon-bedrock";
 
-const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
-
-export function isApiKeyLoginProvider(
-	providerId: string,
-	oauthProviderIds: ReadonlySet<string>,
-	builtInProviderIds: ReadonlySet<string> = BUILT_IN_MODEL_PROVIDERS,
-): boolean {
-	if (BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId]) {
-		return true;
-	}
-	if (builtInProviderIds.has(providerId)) {
-		return false;
-	}
-	return !oauthProviderIds.has(providerId);
-}
+// isApiKeyLoginProvider now lives in core/auth-providers.ts so the RPC login path
+// (neo) and the classic selectors share ONE source of truth. Re-exported here to
+// keep the existing public import (test/oauth-selector.test.ts) working, and used
+// locally by getLoginProviderOptions below.
+export { isApiKeyLoginProvider };
 
 /**
  * Options for InteractiveMode initialization.
@@ -4494,6 +4483,7 @@ export class InteractiveMode {
 					onHttpIdleTimeoutMsChange: (timeoutMs) => {
 						this.settingsManager.setHttpIdleTimeoutMs(timeoutMs);
 						configureHttpDispatcher(timeoutMs);
+						this.session.agent.timeoutMs = this.settingsManager.getAgentStreamIdleTimeoutMs();
 						this.showStatus(`HTTP idle timeout: ${formatHttpIdleTimeoutMs(timeoutMs)}`);
 					},
 					onThinkingLevelChange: (level) => {

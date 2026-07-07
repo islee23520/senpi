@@ -1,3 +1,4 @@
+// allow: SIZE_OK - extension loading, bundled aliases, and discovery are pre-existing cohesive runtime glue; this branch only scopes the extension cache by cwd.
 /**
  * Extension loader - loads TypeScript extension modules using jiti.
  *
@@ -171,28 +172,46 @@ type HandlerFn = (...args: unknown[]) => Promise<unknown>;
 type ExtensionModuleImporter = ReturnType<typeof createJiti>;
 export type ExtensionFactoryResolver = (extensionPath: string, resolvedPath: string) => ExtensionFactory | undefined;
 
-let extensionCacheCwd: string | undefined;
-let extensionCacheGeneration = 0;
-const extensionCache = new Map<string, ExtensionFactory>();
+const MAX_EXTENSION_CACHE_CWD_ENTRIES = 16;
+let nextExtensionCacheGeneration = 0;
+const extensionCacheByCwd = new Map<string, ExtensionCacheEntry>();
 
 interface ExtensionCacheToken {
 	cwd: string;
 	generation: number;
 }
 
+interface ExtensionCacheEntry {
+	cwd: string;
+	generation: number;
+	factories: Map<string, ExtensionFactory>;
+}
+
 export function clearExtensionCache(): void {
-	extensionCache.clear();
-	extensionCacheCwd = undefined;
-	extensionCacheGeneration++;
+	extensionCacheByCwd.clear();
 }
 
 function useExtensionCacheCwd(cwd: string): ExtensionCacheToken {
 	const resolvedCwd = resolvePath(cwd);
-	if (extensionCacheCwd !== undefined && extensionCacheCwd !== resolvedCwd) {
-		clearExtensionCache();
+	const existingEntry = extensionCacheByCwd.get(resolvedCwd);
+	if (existingEntry) {
+		extensionCacheByCwd.delete(resolvedCwd);
+		extensionCacheByCwd.set(resolvedCwd, existingEntry);
+		return { cwd: existingEntry.cwd, generation: existingEntry.generation };
 	}
-	extensionCacheCwd = resolvedCwd;
-	return { cwd: resolvedCwd, generation: extensionCacheGeneration };
+	if (extensionCacheByCwd.size >= MAX_EXTENSION_CACHE_CWD_ENTRIES) {
+		const leastRecentlyUsedCwd = extensionCacheByCwd.keys().next().value;
+		if (leastRecentlyUsedCwd !== undefined) {
+			extensionCacheByCwd.delete(leastRecentlyUsedCwd);
+		}
+	}
+	const entry: ExtensionCacheEntry = {
+		cwd: resolvedCwd,
+		generation: nextExtensionCacheGeneration++,
+		factories: new Map<string, ExtensionFactory>(),
+	};
+	extensionCacheByCwd.set(resolvedCwd, entry);
+	return { cwd: entry.cwd, generation: entry.generation };
 }
 
 /**
@@ -429,11 +448,9 @@ function createExtensionModuleImporter(): ExtensionModuleImporter {
 }
 
 function isCurrentCacheToken(cacheToken: ExtensionCacheToken | undefined): cacheToken is ExtensionCacheToken {
-	return (
-		cacheToken !== undefined &&
-		extensionCacheCwd === cacheToken.cwd &&
-		extensionCacheGeneration === cacheToken.generation
-	);
+	if (cacheToken === undefined) return false;
+	const cacheEntry = extensionCacheByCwd.get(cacheToken.cwd);
+	return cacheEntry?.generation === cacheToken.generation;
 }
 
 async function loadExtensionModule(
@@ -442,7 +459,7 @@ async function loadExtensionModule(
 	cacheToken?: ExtensionCacheToken,
 ) {
 	if (isCurrentCacheToken(cacheToken)) {
-		const cachedFactory = extensionCache.get(extensionPath);
+		const cachedFactory = extensionCacheByCwd.get(cacheToken.cwd)?.factories.get(extensionPath);
 		if (cachedFactory) {
 			return cachedFactory;
 		}
@@ -454,7 +471,7 @@ async function loadExtensionModule(
 		return undefined;
 	}
 	if (isCurrentCacheToken(cacheToken)) {
-		extensionCache.set(extensionPath, factory);
+		extensionCacheByCwd.get(cacheToken.cwd)?.factories.set(extensionPath, factory);
 	}
 	return factory;
 }
