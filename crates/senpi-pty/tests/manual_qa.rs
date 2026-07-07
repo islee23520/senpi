@@ -12,7 +12,7 @@ fn manual_cat_resize_kill_transcript() {
     })
     .unwrap();
     cat.write(b"manual-cat-round-trip\n").unwrap();
-    wait_until(Duration::from_secs(2), || {
+    wait_until(Duration::from_secs(2), "manual-cat-round-trip output", || {
         text(&cat_output).contains("manual-cat-round-trip")
     });
     eprintln!("cat bytes: {:?}", text(&cat_output));
@@ -52,7 +52,9 @@ fn manual_cat_resize_kill_transcript() {
     eprintln!("spawned child pid: {child_pid}");
     session.kill().unwrap();
     let kill_exit = session.wait().unwrap();
-    wait_until(Duration::from_secs(3), || !process_exists(child_pid));
+    wait_until(Duration::from_secs(3), "child process exit", || {
+        !process_exists(child_pid)
+    });
     eprintln!(
         "kill exit: exit_code={:?} cancelled={} timed_out={} child_alive={}",
         kill_exit.exit_code,
@@ -69,20 +71,29 @@ fn manual_cat_resize_kill_transcript() {
 fn manual_windows_cmd_lifecycle_transcript() {
     let output = Arc::new(Mutex::new(Vec::new()));
     let seen = Arc::clone(&output);
+    // The timeout is only a hang guard: ConPTY startup on shared CI runners can take tens of
+    // seconds, so it must stay far above the wait_until deadlines below.
     let mut session = PtySession::start(
         PtySessionOptions::new("cmd.exe")
             .arg("/d")
             .arg("/q")
-            .timeout(Duration::from_secs(5)),
+            .timeout(Duration::from_secs(120)),
         move |chunk| seen.lock().unwrap().extend_from_slice(chunk),
     )
     .unwrap();
 
     session.resize(100, 30).unwrap();
-    session.write(b"echo manual-windows-round-trip\r\n").unwrap();
-    wait_until(Duration::from_secs(3), || {
-        text(&output).contains("manual-windows-round-trip")
+    // Unlike a POSIX pty, ConPTY spawns a conhost process and cmd.exe initializes console I/O
+    // asynchronously; wait for the first prompt so the round trip starts from a ready shell.
+    wait_until(Duration::from_secs(60), "initial cmd.exe prompt", || {
+        text(&output).contains('>')
     });
+    session.write(b"echo manual-windows-round-trip\r\n").unwrap();
+    wait_until(
+        Duration::from_secs(30),
+        "manual-windows-round-trip output",
+        || text(&output).contains("manual-windows-round-trip"),
+    );
     eprintln!("windows bytes: {:?}", text(&output));
     session.kill().unwrap();
     let exit = session.wait().unwrap();
@@ -101,7 +112,7 @@ fn text(output: &Arc<Mutex<Vec<u8>>>) -> String {
 
 fn wait_for_child_pid(output: &Arc<Mutex<Vec<u8>>>) -> u32 {
     let mut child_pid = None;
-    wait_until(Duration::from_secs(2), || {
+    wait_until(Duration::from_secs(2), "child pid output", || {
         child_pid = text(output)
             .split_whitespace()
             .find_map(|part| part.strip_prefix("child=")?.parse().ok());
@@ -110,7 +121,7 @@ fn wait_for_child_pid(output: &Arc<Mutex<Vec<u8>>>) -> u32 {
     child_pid.expect("child pid output")
 }
 
-fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
+fn wait_until(timeout: Duration, what: &str, mut predicate: impl FnMut() -> bool) {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
         if predicate() {
@@ -118,7 +129,7 @@ fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(predicate());
+    assert!(predicate(), "timed out after {timeout:?} waiting for {what}");
 }
 
 #[cfg(unix)]

@@ -63,7 +63,7 @@ fn pty_session_writes_stdin_round_trip() {
     .unwrap();
 
     session.write(b"cat-round-trip\n").unwrap();
-    wait_until(Duration::from_secs(2), || {
+    wait_until(Duration::from_secs(2), "cat-round-trip output", || {
         String::from_utf8_lossy(&output.lock().unwrap()).contains("cat-round-trip")
     });
     session.kill().unwrap();
@@ -103,7 +103,7 @@ fn pty_session_sends_signal_to_process_group() {
     )
     .unwrap();
 
-    wait_until(Duration::from_secs(2), || {
+    wait_until(Duration::from_secs(2), "ready output", || {
         String::from_utf8_lossy(&output.lock().unwrap()).contains("ready")
     });
     session.signal("term").unwrap();
@@ -129,7 +129,9 @@ fn pty_session_kill_removes_child_process_tree() {
     session.kill().unwrap();
     let exit = session.wait().unwrap();
     assert!(exit.cancelled);
-    wait_until(Duration::from_secs(3), || !process_exists(child_pid));
+    wait_until(Duration::from_secs(3), "child process exit", || {
+        !process_exists(child_pid)
+    });
     assert!(!process_exists(child_pid), "child pid {child_pid} still exists");
 }
 
@@ -146,7 +148,7 @@ fn pty_session_write_after_exit_returns_benign_error() {
 
 fn wait_for_child_pid(output: &Arc<Mutex<Vec<u8>>>) -> u32 {
     let mut child_pid = None;
-    wait_until(Duration::from_secs(2), || {
+    wait_until(Duration::from_secs(2), "child pid output", || {
         let text = String::from_utf8_lossy(&output.lock().unwrap()).into_owned();
         child_pid = text
             .split_whitespace()
@@ -161,18 +163,25 @@ fn wait_for_child_pid(output: &Arc<Mutex<Vec<u8>>>) -> u32 {
 fn windows_pty_session_writes_resizes_kills_and_reports_exit() {
     let output = Arc::new(Mutex::new(Vec::new()));
     let seen = Arc::clone(&output);
+    // The timeout is only a hang guard: ConPTY startup on shared CI runners can take tens of
+    // seconds, so it must stay far above the wait_until deadlines below.
     let mut session = PtySession::start(
         PtySessionOptions::new("cmd.exe")
             .arg("/d")
             .arg("/q")
-            .timeout(Duration::from_secs(5)),
+            .timeout(Duration::from_secs(120)),
         move |chunk| seen.lock().unwrap().extend_from_slice(chunk),
     )
     .unwrap();
 
     session.resize(100, 30).unwrap();
+    // Unlike a POSIX pty, ConPTY spawns a conhost process and cmd.exe initializes console I/O
+    // asynchronously; wait for the first prompt so the round trip starts from a ready shell.
+    wait_until(Duration::from_secs(60), "initial cmd.exe prompt", || {
+        String::from_utf8_lossy(&output.lock().unwrap()).contains('>')
+    });
     session.write(b"echo windows-pty-round-trip\r\n").unwrap();
-    wait_until(Duration::from_secs(3), || {
+    wait_until(Duration::from_secs(30), "windows-pty-round-trip output", || {
         String::from_utf8_lossy(&output.lock().unwrap()).contains("windows-pty-round-trip")
     });
     session.kill().unwrap();
@@ -182,7 +191,7 @@ fn windows_pty_session_writes_resizes_kills_and_reports_exit() {
     assert!(String::from_utf8_lossy(&output.lock().unwrap()).contains("windows-pty-round-trip"));
 }
 
-fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
+fn wait_until(timeout: Duration, what: &str, mut predicate: impl FnMut() -> bool) {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
         if predicate() {
@@ -190,7 +199,7 @@ fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(predicate());
+    assert!(predicate(), "timed out after {timeout:?} waiting for {what}");
 }
 
 #[cfg(unix)]
