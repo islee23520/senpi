@@ -176,6 +176,15 @@ describe("MCP idle lifecycle", () => {
 		process.kill(firstPid, "SIGKILL");
 		await assertProcessDead(firstPid);
 
+		// The stdio transport's close event (which flips the connection off
+		// "connected" via markDegraded) is delivered asynchronously and is NOT gated
+		// on the faked keep-alive interval. Wait for that transition before ticking
+		// the timer: keepAlivePingOrRecover reconnects only when the state has already
+		// left "connected"; if it fires while still "connected" it merely pings the
+		// dead server, and — because setInterval is faked and advanced exactly once —
+		// no further tick would ever retry, wedging the recovery wait (a flake).
+		await waitFor(() => connection?.state !== undefined && connection.state !== "connected", 10_000);
+
 		expect(
 			connection === undefined ? undefined : getMcpLifecycleDebugSnapshot(connection)?.keepAliveTimerHasRef,
 		).toBe(false);
