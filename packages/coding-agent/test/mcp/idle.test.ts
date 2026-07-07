@@ -148,7 +148,7 @@ describe("MCP idle lifecycle", () => {
 	});
 
 	it("keep-alive pings every 30 seconds and recovers a killed fixture without suspension", {
-		timeout: 120_000,
+		timeout: 60_000,
 	}, async () => {
 		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 		const root = mcpRoot("keep-alive-recover");
@@ -160,10 +160,7 @@ describe("MCP idle lifecycle", () => {
 				// Loaded CI runners can boot the fixture subprocess slower than the fast
 				// 2s fixture default; give reconnect attempts headroom so recovery is not
 				// starved into repeated connect timeouts under a parallel spawn storm.
-				// 10s was still exhausted on GitHub-hosted runners (recovery timed out
-				// while every attempt lost the race), so give a single respawn+connect
-				// enough room to win under load.
-				connectTimeoutMs: 25_000,
+				connectTimeoutMs: 10_000,
 				lifecycle: "keep-alive",
 			},
 		});
@@ -179,6 +176,15 @@ describe("MCP idle lifecycle", () => {
 		process.kill(firstPid, "SIGKILL");
 		await assertProcessDead(firstPid);
 
+		// The stdio transport's close event (which flips the connection off
+		// "connected" via markDegraded) is delivered asynchronously and is NOT gated
+		// on the faked keep-alive interval. Wait for that transition before ticking
+		// the timer: keepAlivePingOrRecover reconnects only when the state has already
+		// left "connected"; if it fires while still "connected" it merely pings the
+		// dead server, and — because setInterval is faked and advanced exactly once —
+		// no further tick would ever retry, wedging the recovery wait (a flake).
+		await waitFor(() => connection?.state !== undefined && connection.state !== "connected", 10_000);
+
 		expect(
 			connection === undefined ? undefined : getMcpLifecycleDebugSnapshot(connection)?.keepAliveTimerHasRef,
 		).toBe(false);
@@ -192,7 +198,7 @@ describe("MCP idle lifecycle", () => {
 				connection.getRootPid() === currentPid &&
 				pi.toolDefinitions.has("mcp_fx_tool_1")
 			);
-		}, 60_000);
+		}, 20_000);
 		const tool = registeredTool(pi, "mcp_fx_tool_1");
 		const result = await tool.execute("tc-keep-alive", { value: "recovered" }, undefined, undefined, testContext());
 
