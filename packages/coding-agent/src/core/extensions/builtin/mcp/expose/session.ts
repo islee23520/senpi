@@ -6,7 +6,7 @@ import type { ServerConnection } from "../connection.ts";
 import { createMcpLogger, type McpLogger } from "../log.ts";
 import { computeMcpExposurePolicy } from "./policy.ts";
 import type { McpCatalogRegistrationOptions } from "./register.ts";
-import { registerMcpTierBTools } from "./tier-b.ts";
+import { type McpTierBRegistration, registerMcpTierBTools } from "./tier-b.ts";
 
 export interface McpDirectRegistrationEntry {
 	readonly name: string;
@@ -22,7 +22,7 @@ export async function registerDirectMcpTools(
 	config: ResolvedMcpConfig,
 	entries: Iterable<McpDirectRegistrationEntry>,
 	options: McpCatalogRegistrationOptions = {},
-): Promise<void> {
+): Promise<McpTierBRegistration | undefined> {
 	const registeredEntries: McpToolCatalogEntry[] = [];
 	const activeEntries: McpToolCatalogEntry[] = [];
 	let searchMode = false;
@@ -58,9 +58,11 @@ export async function registerDirectMcpTools(
 		!searchMode &&
 		options.refreshActiveSetWhenEmpty !== true
 	) {
-		return;
+		return undefined;
 	}
-	registerMcpTierBTools(pi, { activeEntries, registeredEntries, searchMode, settings: config.settings }, (message) =>
-		createMcpLogger("service").warn(message),
+	return registerMcpTierBTools(
+		pi,
+		{ activeEntries, registeredEntries, searchMode, settings: config.settings },
+		(message) => createMcpLogger("service").warn(message),
 	);
 }

@@ -7,6 +7,7 @@ import type { McpServerConfig, ResolvedMcpConfig, ResolvedMcpServer } from "./co
 import { ServerConnection } from "./connection.ts";
 import { mapMcpCatalogNames } from "./expose/register.ts";
 import type { McpServerExposureStatus } from "./expose/status.ts";
+import type { McpTierBRegistration } from "./expose/tier-b.ts";
 import { cleanupMcpOutputArtifacts } from "./guard/output-guard.ts";
 import { configureMcpConnectionLifecycle, disposeMcpConnectionLifecycle } from "./idle.ts";
 import { createMcpLogger } from "./log.ts";
@@ -45,6 +46,8 @@ export class McpService {
 	#authEnv: Record<string, string | undefined> | undefined;
 	readonly #pendingAuth = new Map<string, import("./auth/oauth-provider.ts").McpOAuthProvider>();
 	#refreshActiveSetWhenNoTools = false;
+	#tierBRegistration: McpTierBRegistration | undefined;
+	#historyScanned = false;
 	#pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool"> | undefined;
 	readonly #connections = new Map<string, McpConnectionEntry>();
 	readonly #connectionKeysByName = new Map<string, string>();
@@ -278,9 +281,33 @@ export class McpService {
 	): Promise<void> {
 		const config = this.#config;
 		if (config === null) return;
-		await registerMcpServiceDirectTools(pi, config, this.#connections.values(), {
+		this.#tierBRegistration = await registerMcpServiceDirectTools(pi, config, this.#connections.values(), {
 			refreshActiveSetWhenEmpty: this.#refreshActiveSetWhenNoTools,
 		});
+		// A (re-)registration recomputes the active set from config alone, so any
+		// promotions recorded in history are worth replaying on the next scan.
+		this.#historyScanned = false;
+	}
+
+	/**
+	 * Replay mcp_search activation markers from session history through the
+	 * live tier-B activation path (see tool-search.ts). Returns newly activated
+	 * names; safe to call repeatedly (already-active names are skipped).
+	 */
+	rehydrateActiveToolsFromHistory(messages: readonly unknown[]): string[] {
+		this.#historyScanned = true;
+		return this.#tierBRegistration?.rehydrateFromHistory(messages) ?? [];
+	}
+
+	/**
+	 * Once-per-registration variant for per-turn context events: scanning the
+	 * full history each turn would cost O(history) JSON serialization, and a
+	 * live session's active set only drifts from history when a (re-)registration
+	 * rebuilt it — so scan once after each registration and skip otherwise.
+	 */
+	maybeRehydrateFromHistory(messages: readonly unknown[]): string[] {
+		if (this.#historyScanned) return [];
+		return this.rehydrateActiveToolsFromHistory(messages);
 	}
 
 	#serverSnapshot(name: string): McpServerSnapshot {

@@ -21,7 +21,13 @@ import {
 	type McpToolDetails,
 	mapMcpCatalogNames,
 } from "./register.ts";
-import { createMcpSearchTool, MCP_SEARCH_TOOL_NAME, type SearchableMcpTool } from "./tool-search.ts";
+import {
+	createMcpSearchTool,
+	MCP_SEARCH_TOOL_NAME,
+	rehydrateActiveToolsFromHistory,
+	type SearchableMcpTool,
+	unionStable,
+} from "./tool-search.ts";
 
 type McpToolRegistrar = Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">;
 type WarnFn = (message: string) => void;
@@ -36,13 +42,26 @@ export interface McpTierBRegistrationInput {
 	readonly settings: McpSettings;
 }
 
-/** Register MCP tools honouring Tier-B search mode + prompt-cache mitigations.
- * Returns the searchable catalog (for reuse by /mcp status and list_changed). */
+export interface McpTierBRegistration {
+	/** Searchable catalog (for reuse by /mcp status and list_changed). */
+	readonly searchable: SearchableMcpTool[];
+	/**
+	 * Replay activation markers found in session history through the SAME
+	 * activation path mcp_search uses (stub swap + stable ordering), so a
+	 * resumed/compacted session restores its promoted tools without
+	 * re-searching. Returns the newly activated names (empty when nothing new).
+	 */
+	rehydrateFromHistory(messages: readonly unknown[]): string[];
+}
+
+const NOOP_REHYDRATE = (): string[] => [];
+
+/** Register MCP tools honouring Tier-B search mode + prompt-cache mitigations. */
 export function registerMcpTierBTools(
 	pi: McpToolRegistrar,
 	input: McpTierBRegistrationInput,
 	warn?: WarnFn,
-): SearchableMcpTool[] {
+): McpTierBRegistration {
 	const named = mapMcpCatalogNames(input.registeredEntries, warn);
 	const searchable: SearchableMcpTool[] = named.map(({ entry, name }) => ({
 		name,
@@ -60,19 +79,30 @@ export function registerMcpTierBTools(
 
 	if (!input.searchMode) {
 		registerToolsPreservingActiveSet(pi, fullDefs, orderActiveSet([...currentBase, ...activeMcpNames], reference));
-		return searchable;
+		// Direct mode: everything registerable is already active, nothing to replay.
+		return { searchable, rehydrateFromHistory: NOOP_REHYDRATE };
 	}
 
 	const stubSwap = input.settings.stubSwap === true;
 	const stubbed = new Set<string>();
+	const activateMcpTools = (names: readonly string[]): void => {
+		if (stubSwap) swapStubsToFull(pi, names, stubbed, fullByName);
+		pi.setActiveTools(orderActiveSet(names, pi.getActiveTools()));
+	};
 	const searchTool = createMcpSearchTool({
 		getSearchableTools: () => searchable,
 		getActiveTools: () => pi.getActiveTools(),
-		setActiveTools: (names) => {
-			if (stubSwap) swapStubsToFull(pi, names, stubbed, fullByName);
-			pi.setActiveTools(orderActiveSet(names, pi.getActiveTools()));
-		},
+		setActiveTools: activateMcpTools,
 	});
+	const registeredNames = new Set(fullDefs.map((def) => def.name));
+	const rehydrateFromHistory = (messages: readonly unknown[]): string[] => {
+		const restored = rehydrateActiveToolsFromHistory(messages, registeredNames);
+		const current = pi.getActiveTools();
+		const fresh = restored.filter((name) => !current.includes(name));
+		if (fresh.length === 0) return [];
+		activateMcpTools(unionStable(current, fresh));
+		return fresh;
+	};
 
 	// mcp_search carries a distinct param schema, so register it on its own
 	// rather than mixing it into the broadly-typed catalog def array.
@@ -84,7 +114,7 @@ export function registerMcpTierBTools(
 		// (an accepted cache miss).
 		const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...activeMcpNames], reference);
 		registerToolsPreservingActiveSet(pi, fullDefs, active);
-		return searchable;
+		return { searchable, rehydrateFromHistory };
 	}
 
 	// stubSwap: every search-mode tool is registered as a tiny stub and kept
@@ -97,7 +127,7 @@ export function registerMcpTierBTools(
 	});
 	const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...fullDefs.map((def) => def.name)], reference);
 	registerToolsPreservingActiveSet(pi, toRegister, active);
-	return searchable;
+	return { searchable, rehydrateFromHistory };
 }
 
 function swapStubsToFull(
