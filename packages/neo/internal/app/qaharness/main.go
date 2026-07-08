@@ -54,7 +54,7 @@ var isolatedArgv = []string{
 }
 
 func main() {
-	scene := flag.String("scene", "welcome", "scene: welcome | session-turn | session-kill | login-flow")
+	scene := flag.String("scene", "welcome", "scene: welcome | session-turn | session-kill | login-flow | status-retry")
 	flag.Parse()
 
 	switch *scene {
@@ -66,6 +66,8 @@ func main() {
 		os.Exit(runSessionKill())
 	case "login-flow":
 		os.Exit(runLoginFlow())
+	case "status-retry":
+		runStatusRetry()
 	default:
 		fmt.Fprintln(os.Stderr, "unknown scene:", *scene)
 		os.Exit(2)
@@ -369,3 +371,48 @@ func (stubResponder) RespondExtensionUI(bridge.ExtensionUIResponse) error { retu
 type stubSink struct{}
 
 func (stubSink) ApplyDirective(extui.Directive) {}
+
+// runStatusRetry drives the todo-7 shell wiring with synthetic retry events
+// (plan task 7 QA): it injects an auto_retry_start EventMsg through the
+// ShellWire, prints the digit-bearing countdown status line, then injects
+// auto_retry_end and prints the cleared confirmation. Machine-checkable stdout
+// like the session scenes — the surface under test is the event→status-stack
+// wiring, not a live program.
+func runStatusRetry() {
+	const width = 120
+
+	th, err := theme.Load(theme.Options{Name: theme.DefaultThemeName})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "theme.Load:", err)
+		os.Exit(1)
+	}
+	keys := keybindings.NewManager(nil)
+	cwd, _ := os.Getwd()
+
+	sh := shell.New(th, firstKey(keys, "app.message.dequeue"), appName)
+	wire := app.NewShellWire(sh, app.ShellWireConfig{
+		Theme:   th,
+		Keys:    keys,
+		AppName: appName,
+		Cwd:     cwd,
+		Home:    os.Getenv("HOME"),
+	})
+
+	start := app.EventMsg{Event: bridge.Event{
+		Type:    "auto_retry_start",
+		Payload: json.RawMessage(`{"type":"auto_retry_start","attempt":2,"maxAttempts":5,"delayMs":5000,"errorMessage":"synthetic overload"}`),
+	}}
+	_ = wire.HandleEvent(start)
+	for _, line := range sh.AboveEditor(width) {
+		fmt.Println(line)
+	}
+
+	end := app.EventMsg{Event: bridge.Event{
+		Type:    "auto_retry_end",
+		Payload: json.RawMessage(`{"type":"auto_retry_end","success":true,"attempt":2}`),
+	}}
+	_ = wire.HandleEvent(end)
+	if len(sh.AboveEditor(width)) == 0 {
+		fmt.Println("retry-status-cleared")
+	}
+}
