@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "../../types.ts";
 import { registerMcpCommands } from "./commands.ts";
+import { setMcpElicitationUiProvider } from "./elicitation.ts";
 import { AnthropicNativeToolSearchAdapter } from "./expose/native-search.ts";
 import { MCP_SEARCH_TOOL_NAME } from "./expose/tool-search.ts";
 import { injectMcpInstructions, refreshMcpInstructionsForSession } from "./instructions.ts";
@@ -119,6 +120,8 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 	);
 	pi.on("before_agent_start", async (event, ctx) => {
 		try {
+			// Elicitation (todo 41): point mid-call forms at the live session UI.
+			setMcpElicitationUiProvider(() => ctx.ui);
 			await (attachPromise ?? attach({ type: "session_start", reason: "startup" }, ctx));
 			const skills = (event.systemPromptOptions.skills ?? []) as readonly SkillLike[];
 			if (skills.length > 0) {

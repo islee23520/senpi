@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { McpOAuthProvider } from "./auth/oauth-provider.ts";
 import type { McpServerConfig } from "./config-schema.ts";
+import { configureMcpElicitation, MCP_CLIENT_ELICITATION_CAPABILITY } from "./elicitation.ts";
 import { AuthError, ConnectError, TimeoutError } from "./errors.ts";
 import type { McpLogger } from "./log.ts";
 import { delay, reapProcessTree } from "./process-tree.ts";
@@ -155,7 +156,7 @@ function createConnection(
 	if (transport instanceof StdioClientTransport) trackStdioStart(transport, captureRootPid);
 	return {
 		captureRootPid,
-		client: new Client({ name: "senpi-mcp-client", version: "0.0.0" }),
+		client: buildMcpClient(),
 		connectTimeoutMs,
 		asyncErrorSink,
 		getRootPid: () => {
@@ -267,3 +268,15 @@ function isTerminableHttpTransport(
 }
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+function buildMcpClient(): Client {
+	// Elicitation capability is declared EMPTY on purpose (form mode only;
+	// Spring-AI servers reject richer shapes) and the create-handler is wired
+	// before any connect so mid-call requests never race registration.
+	const client = new Client(
+		{ name: "senpi-mcp-client", version: "0.0.0" },
+		{ capabilities: MCP_CLIENT_ELICITATION_CAPABILITY },
+	);
+	configureMcpElicitation(client);
+	return client;
+}
