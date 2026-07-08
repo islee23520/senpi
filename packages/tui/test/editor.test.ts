@@ -38,6 +38,8 @@ async function flushAutocomplete(): Promise<void> {
 	await new Promise((resolve) => setImmediate(resolve));
 }
 
+const EXPLICIT_NEWLINE = "\x1b[13;2u";
+
 describe("Editor component", () => {
 	describe("Prompt history navigation", () => {
 		it("does nothing on Up arrow when history is empty", () => {
@@ -313,6 +315,34 @@ describe("Editor component", () => {
 	});
 
 	describe("Backslash+Enter newline workaround", () => {
+		it("submits when the terminal sends LF for plain Enter", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
+
+			editor.setText("hello from lf enter");
+			editor.handleInput("\n");
+
+			assert.strictEqual(submitted, "hello from lf enter");
+			assert.strictEqual(editor.getText(), "");
+		});
+
+		it("inserts newline for backslash followed by LF Enter", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			let submitted = false;
+			editor.onSubmit = () => {
+				submitted = true;
+			};
+
+			editor.handleInput("\\");
+			editor.handleInput("\n");
+
+			assert.strictEqual(editor.getText(), "\n");
+			assert.strictEqual(submitted, false);
+		});
+
 		it("inserts backslash immediately (no buffering)", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 
@@ -503,7 +533,7 @@ describe("Editor component", () => {
 			editor.handleInput("ä");
 			editor.handleInput("ö");
 			editor.handleInput("ü");
-			editor.handleInput("\n"); // new line
+			editor.handleInput(EXPLICIT_NEWLINE);
 			editor.handleInput("Ä");
 			editor.handleInput("Ö");
 			editor.handleInput("Ü");
@@ -1447,7 +1477,7 @@ describe("Editor component", () => {
 			editor.setText("");
 			editor.handleInput("a");
 			editor.handleInput("b");
-			editor.handleInput("\n");
+			editor.handleInput(EXPLICIT_NEWLINE);
 			editor.handleInput("c");
 			editor.handleInput("d");
 			// Move to end of first line
@@ -1631,7 +1661,7 @@ describe("Editor component", () => {
 			editor.handleInput("l");
 			editor.handleInput("l");
 			editor.handleInput("o");
-			editor.handleInput("\n");
+			editor.handleInput(EXPLICIT_NEWLINE);
 			editor.handleInput("w");
 			editor.handleInput("o");
 			editor.handleInput("r");
@@ -3905,11 +3935,11 @@ describe("Editor component", () => {
 			// Line 3: "" (empty)
 			// Line 4: "abcdefghijklmnop" (16 chars)
 			for (const ch of "1234567890123456") editor.handleInput(ch);
-			editor.handleInput("\n");
-			editor.handleInput("\n");
+			editor.handleInput(EXPLICIT_NEWLINE);
+			editor.handleInput(EXPLICIT_NEWLINE);
 			editor.handleInput(`\x1b[200~${"x".repeat(2000)}\x1b[201~`);
-			editor.handleInput("\n");
-			editor.handleInput("\n");
+			editor.handleInput(EXPLICIT_NEWLINE);
+			editor.handleInput(EXPLICIT_NEWLINE);
 			for (const ch of "abcdefghijklmnop") editor.handleInput(ch);
 			editor.render(30);
 
@@ -3958,7 +3988,7 @@ describe("Editor component", () => {
 			const bigContent = "line\n".repeat(100).trimEnd();
 			editor.handleInput(`\x1b[200~${bigContent}\x1b[201~`);
 			for (const ch of "ijklmnopqr") editor.handleInput(ch);
-			editor.handleInput("\n");
+			editor.handleInput(EXPLICIT_NEWLINE);
 			for (const ch of "123456789012345678") editor.handleInput(ch);
 			editor.render(20);
 
@@ -4013,7 +4043,7 @@ describe("Editor component", () => {
 			const bigContent = "line\n".repeat(100).trimEnd();
 			editor.handleInput(`\x1b[200~${bigContent}\x1b[201~`);
 			for (const ch of "ijklmnopqr") editor.handleInput(ch);
-			editor.handleInput("\n");
+			editor.handleInput(EXPLICIT_NEWLINE);
 			for (const ch of "123456789012345678") editor.handleInput(ch);
 			editor.render(20);
 
