@@ -300,7 +300,11 @@ func TestTranscriptStreamingPerf500Deltas(t *testing.T) {
 		feed.Render(100)
 	}
 	elapsed := time.Since(start)
-	if elapsed >= 2*time.Second {
+	if raceDetectorEnabled {
+		// The race detector multiplies wall-clock ~5-10x; the budget calibrates
+		// uninstrumented builds. Functional + goroutine assertions still run.
+		t.Logf("race build: skipping time budget (took %v)", elapsed)
+	} else if elapsed >= 2*time.Second {
 		t.Fatalf("500 message_update deltas took %v (budget 2s)", elapsed)
 	}
 
