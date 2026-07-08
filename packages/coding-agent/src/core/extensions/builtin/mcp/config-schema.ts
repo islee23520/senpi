@@ -15,6 +15,7 @@ export const LogLevelSchema = Type.Union([
 const OAuthSchema = Type.Object(
 	{
 		clientId: Type.Optional(Type.String()),
+		callbackPort: Type.Optional(Type.Integer({ minimum: 0, maximum: 65_535 })),
 		scopes: Type.Optional(Type.Array(Type.String())),
 		clientMetadataUrl: Type.Optional(Type.String()),
 		flow: Type.Optional(Type.Union([Type.Literal("code"), Type.Literal("client_credentials")])),
@@ -135,4 +136,8 @@ export function getServerEndpointValidationError(config: RawConfig): string | un
 }
 
 export const validateConfig = Compile(ConfigSchema);
-export const defaultSettings: McpSettings = { searchThreshold: 10, toolPrefix: "mcp" };
+export const defaultSettings: McpSettings = {
+	outputGuard: { maxBytes: 50 * 1024, maxLines: 2000 },
+	searchThreshold: 10,
+	toolPrefix: "mcp",
+};

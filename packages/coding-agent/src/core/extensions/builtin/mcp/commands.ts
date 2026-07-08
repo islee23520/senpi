@@ -1,10 +1,25 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "../../types.ts";
+import { handleMcpAuthCommand } from "./auth/commands-auth-dispatch.ts";
 import { addGlobalMcpServer, setGlobalMcpServerEnabled } from "./config-edit.ts";
 import type { McpServerConfig } from "./config-schema.ts";
 import { getMcpService } from "./service.ts";
 import { buildMcpStatusRows, formatMcpStatus } from "./status.ts";
 
-const SUBCOMMANDS = ["status", "add", "enable", "disable", "test", "logs", "reconnect"] as const;
+const SUBCOMMANDS = [
+	"status",
+	"add",
+	"enable",
+	"disable",
+	"test",
+	"logs",
+	"reconnect",
+	"auth",
+	"auth-start",
+	"auth-complete",
+	"logout",
+] as const;
+
+const AUTH_SUBCOMMANDS = new Set(["auth", "auth-start", "auth-complete", "logout"]);
 
 export function registerMcpCommands(pi: ExtensionAPI): void {
 	pi.registerCommand("mcp", {
@@ -28,6 +43,10 @@ async function handleMcpCommand(rawArgs: string, ctx: ExtensionCommandContext, p
 		await showPanel(ctx);
 		return;
 	}
+	if (AUTH_SUBCOMMANDS.has(subcommand)) {
+		await handleMcpAuthCommand(subcommand, args.slice(1), ctx, pi);
+		return;
+	}
 	if (subcommand === "status") {
 		await notifyStatus(ctx);
 		return;
@@ -49,7 +68,7 @@ async function handleMcpCommand(rawArgs: string, ctx: ExtensionCommandContext, p
 		return;
 	}
 	if (subcommand === "reconnect") {
-		reconnectStub(args[1] ?? "", ctx);
+		await reconnectServer(args[1] ?? "", ctx, pi);
 		return;
 	}
 	ctx.ui.notify(`Unknown /mcp subcommand: ${subcommand}`, "error");
@@ -141,9 +160,21 @@ function showLogs(name: string, ctx: ExtensionCommandContext): void {
 	ctx.ui.notify(lines.length === 0 ? `MCP logs for ${name}: (empty)` : lines.join("\n"));
 }
 
-function reconnectStub(name: string, ctx: ExtensionCommandContext): void {
+async function reconnectServer(
+	name: string,
+	ctx: ExtensionCommandContext,
+	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool">,
+): Promise<void> {
 	if (!ensureKnown(name, ctx)) return;
-	ctx.ui.notify(`MCP reconnect for ${name} is not available until W2.`, "warning");
+	try {
+		const service = getMcpService();
+		await service.reconnectServer(name);
+		await service.attachSession({ type: "session_start", reason: "reload" }, ctx, pi);
+		ctx.ui.notify(`MCP reconnect ${name} connected`);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		ctx.ui.notify(`MCP reconnect ${name} failed: ${message}`, "error");
+	}
 }
 
 function ensureKnown(name: string, ctx: ExtensionCommandContext): boolean {

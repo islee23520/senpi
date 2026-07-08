@@ -1,5 +1,15 @@
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { McpServerConfig } from "./config-schema.ts";
+import { OAuthFlowError } from "./auth/oauth-errors.ts";
+import type { McpOAuthProvider } from "./auth/oauth-provider.ts";
+import type {
+	ServerConnectionListener,
+	ServerConnectionOptions,
+	ServerConnectionState,
+	ServerConnectionStateChangedEvent,
+	ServerConnectionToolsChangedEvent,
+} from "./connection-types.ts";
+import { diagnoseCapturedMcpConnectFailure, diagnoseMcpConnectFailure } from "./diagnose.ts";
 import { ConnectError } from "./errors.ts";
 import type { McpLogger } from "./log.ts";
 import {
@@ -10,53 +20,27 @@ import {
 } from "./transport.ts";
 import { type McpAsyncErrorSink, wrapAsync } from "./wrap.ts";
 
-export type ServerConnectionState =
-	| "disabled"
-	| "idle"
-	| "connecting"
-	| "connected"
-	| "degraded"
-	| "suspended"
-	| "needs_auth"
-	| "needs_client_registration";
-
-export type ServerConnectionStateChangedEvent = {
-	readonly type: "state_changed";
-	readonly serverName: string;
-	readonly generation: number;
-	readonly state: ServerConnectionState;
-	readonly previousState: ServerConnectionState;
-	readonly error?: Error;
-};
-
-export type ServerConnectionToolsChangedEvent = {
-	readonly type: "tools_changed";
-	readonly serverName: string;
-	readonly generation: number;
-};
-
-export interface ServerConnectionOptions {
-	readonly serverName: string;
-	readonly config: McpServerConfig;
-	readonly logger: McpLogger;
-	readonly env?: Record<string, string | undefined>;
-}
-
-type Listener<TEvent> = (event: TEvent) => void | Promise<void>;
+export type {
+	ServerConnectionOptions,
+	ServerConnectionState,
+	ServerConnectionStateChangedEvent,
+	ServerConnectionToolsChangedEvent,
+} from "./connection-types.ts";
 
 export class ServerConnection {
 	readonly serverName: string;
 	readonly #logger: McpLogger;
 	readonly #env: Record<string, string | undefined> | undefined;
-	readonly #config: McpServerConfig;
+	readonly #config: ServerConnectionOptions["config"];
+	readonly #authProvider: McpOAuthProvider | undefined;
 	#state: ServerConnectionState;
 	#generation = 0;
 	#connection: McpTransportConnection | undefined;
 	#pendingConnection: McpTransportConnection | undefined;
 	#pendingConnect: Promise<Client> | undefined;
 	#lastError: Error | undefined;
-	readonly #stateListeners = new Set<Listener<ServerConnectionStateChangedEvent>>();
-	readonly #toolsListeners = new Set<Listener<ServerConnectionToolsChangedEvent>>();
+	readonly #stateListeners = new Set<ServerConnectionListener<ServerConnectionStateChangedEvent>>();
+	readonly #toolsListeners = new Set<ServerConnectionListener<ServerConnectionToolsChangedEvent>>();
 	readonly #shutdownConnections = new Map<McpTransportConnection, Promise<void>>();
 
 	constructor(options: ServerConnectionOptions) {
@@ -64,6 +48,7 @@ export class ServerConnection {
 		this.#config = options.config;
 		this.#logger = options.logger;
 		this.#env = options.env;
+		this.#authProvider = options.authProvider;
 		this.#state = options.config.enabled ? "idle" : "disabled";
 	}
 
@@ -106,6 +91,17 @@ export class ServerConnection {
 			if (this.#pendingConnection === connection) this.#pendingConnection = undefined;
 		});
 		return this.#pendingConnect;
+	}
+
+	async renew(): Promise<Client> {
+		if (this.#state === "disabled") {
+			throw this.#connectError(`MCP server ${this.serverName} is disabled`, "renew");
+		}
+		this.#generation++;
+		this.#pendingConnect = undefined;
+		this.#setState("idle");
+		await this.#disposeOwnedConnections();
+		return this.connect();
 	}
 
 	bumpGeneration(): Promise<void> {
@@ -152,18 +148,19 @@ export class ServerConnection {
 		});
 	}
 
-	onStateChange(listener: Listener<ServerConnectionStateChangedEvent>): () => void {
+	onStateChange(listener: ServerConnectionListener<ServerConnectionStateChangedEvent>): () => void {
 		this.#stateListeners.add(listener);
 		return () => this.#stateListeners.delete(listener);
 	}
 
-	onToolsChanged(listener: Listener<ServerConnectionToolsChangedEvent>): () => void {
+	onToolsChanged(listener: ServerConnectionListener<ServerConnectionToolsChangedEvent>): () => void {
 		this.#toolsListeners.add(listener);
 		return () => this.#toolsListeners.delete(listener);
 	}
 
 	#createTransportConnection(generation: number): McpTransportConnection {
 		const connection = createMcpTransport({
+			authProvider: this.#authProvider,
 			config: this.#config,
 			env: this.#env,
 			logger: this.#logger,
@@ -173,6 +170,19 @@ export class ServerConnection {
 			"connection.transport.onclose",
 			() => {
 				if (this.#shutdownConnections.has(connection)) return;
+				if (connection === this.#pendingConnection && this.#state === "connecting") {
+					const closeError = this.#connectError(`MCP server ${this.serverName} transport closed`, "close", true);
+					const capturedError = diagnoseCapturedMcpConnectFailure({
+						config: this.#config,
+						cause: closeError,
+						env: this.#env,
+						logger: this.#logger,
+						serverName: this.serverName,
+					});
+					if (capturedError !== null) this.markDegraded(capturedError);
+					return;
+				}
+				if (connection !== this.#connection && connection !== this.#pendingConnection) return;
 				if (generation === this.#generation && this.#state !== "disabled") {
 					this.markDegraded(this.#connectError(`MCP server ${this.serverName} transport closed`, "close", true));
 				}
@@ -191,9 +201,20 @@ export class ServerConnection {
 			if (generation !== this.#generation || this.#state === "disabled") {
 				throw this.#connectError(`MCP server ${this.serverName} connect was superseded`, "connect", true);
 			}
-			const normalized = error instanceof Error ? error : new Error(String(error));
-			this.markDegraded(normalized);
-			throw normalized;
+			if (isNeedsAuthError(error)) {
+				const authError = error instanceof Error ? error : new Error(String(error));
+				this.markNeedsAuth(authError);
+				throw authError;
+			}
+			const connectError = await diagnoseMcpConnectFailure({
+				config: this.#config,
+				cause: error instanceof Error ? error : new Error(String(error)),
+				env: this.#env,
+				logger: this.#logger,
+				serverName: this.serverName,
+			});
+			this.markDegraded(connectError);
+			throw connectError;
 		}
 		if (generation !== this.#generation || this.#state === "disabled") {
 			await this.#shutdown(connection);
@@ -249,7 +270,7 @@ export class ServerConnection {
 		});
 	}
 
-	#emit<TEvent>(listeners: Set<Listener<TEvent>>, event: TEvent): void {
+	#emit<TEvent>(listeners: Set<ServerConnectionListener<TEvent>>, event: TEvent): void {
 		for (const listener of listeners) {
 			void wrapAsync("connection.event", listener, this.#sink)(event);
 		}
@@ -260,11 +281,21 @@ export class ServerConnection {
 		this.#setState(state, error);
 	}
 
-	#connectError(message: string, phase: string, retriable?: true): ConnectError {
-		return new ConnectError(message, { phase, retriable, serverName: this.serverName });
+	#connectError(message: string, phase: string, retriable?: true, cause?: unknown): ConnectError {
+		return new ConnectError(message, { cause, phase, retriable, serverName: this.serverName });
 	}
 
 	get #sink(): McpAsyncErrorSink {
 		return { logger: this.#logger };
 	}
+}
+
+function isNeedsAuthError(error: unknown, depth = 0): boolean {
+	if (error instanceof UnauthorizedError) return true;
+	if (error instanceof OAuthFlowError) return error.terminal;
+	// connectMcpTransport wraps the SDK error in a ConnectError; unwrap the cause.
+	if (depth < 5 && error !== null && typeof error === "object" && "cause" in error) {
+		return isNeedsAuthError((error as { cause?: unknown }).cause, depth + 1);
+	}
+	return false;
 }
