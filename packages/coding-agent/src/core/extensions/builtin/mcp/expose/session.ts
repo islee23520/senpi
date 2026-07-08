@@ -4,12 +4,16 @@ import type { McpCachedServerCatalog } from "../catalog-cache.ts";
 import type { ResolvedMcpConfig } from "../config-schema.ts";
 import type { ServerConnection } from "../connection.ts";
 import { createMcpLogger, type McpLogger } from "../log.ts";
+import type { McpPromptServer } from "../prompts.ts";
 import { createMcpResourceTools, type McpResourceServer } from "../resources.ts";
 import { computeMcpExposurePolicy } from "./policy.ts";
 import type { McpCatalogRegistrationOptions } from "./register.ts";
 import { type McpTierBRegistration, registerMcpTierBTools } from "./tier-b.ts";
 
-export type McpSessionRegistration = McpTierBRegistration & { resourceServers: McpResourceServer[] };
+export type McpSessionRegistration = McpTierBRegistration & {
+	resourceServers: McpResourceServer[];
+	promptServers: McpPromptServer[];
+};
 
 export interface McpDirectRegistrationEntry {
 	readonly name: string;
@@ -32,6 +36,7 @@ export async function registerDirectMcpTools(
 	let searchMode = false;
 	const proxyGateways: { server: string; entries: McpToolCatalogEntry[] }[] = [];
 	const resourceServers: McpResourceServer[] = [];
+	const promptServers: McpPromptServer[] = [];
 	for (const entry of entries) {
 		const server = config.servers[entry.name];
 		if (server?.config === undefined) continue;
@@ -56,6 +61,15 @@ export async function registerDirectMcpTools(
 							outputGuard: config.settings.outputGuard,
 						},
 					);
+		const cachedPrompts = entry.cachedCatalog?.prompts ?? [];
+		if (cachedPrompts.length > 0) {
+			promptServers.push({
+				connection: entry.connection,
+				prompts: cachedPrompts,
+				requestTimeoutMs: server.config.requestTimeoutMs,
+				server: entry.name,
+			});
+		}
 		const cachedResources = entry.cachedCatalog?.resources ?? [];
 		if (cachedResources.length > 0) {
 			resourceServers.push({
@@ -90,5 +104,5 @@ export async function registerDirectMcpTools(
 		{ activeEntries, proxyGateways, registeredEntries, searchMode, settings: config.settings, utilityTools },
 		(message) => createMcpLogger("service").warn(message),
 	);
-	return { ...registration, resourceServers };
+	return { ...registration, promptServers, resourceServers };
 }

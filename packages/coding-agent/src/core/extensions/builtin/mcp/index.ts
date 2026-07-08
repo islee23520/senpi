@@ -4,6 +4,7 @@ import { AnthropicNativeToolSearchAdapter } from "./expose/native-search.ts";
 import { MCP_SEARCH_TOOL_NAME } from "./expose/tool-search.ts";
 import { injectMcpInstructions, refreshMcpInstructionsForSession } from "./instructions.ts";
 import { createMcpLogger } from "./log.ts";
+import { registerMcpPromptCommands } from "./prompts.ts";
 import { expandMcpResourceMentions } from "./resources.ts";
 import { getMcpService } from "./service.ts";
 import {
@@ -108,6 +109,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 			const service = getMcpService();
 			await service.attachSession(event, ctx, pi);
 			refreshMcpInstructionsForSession(service);
+			registerMcpPromptCommands(pi, service.getMcpPromptServers());
 		})();
 		return attachPromise;
 	};

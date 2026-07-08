@@ -135,6 +135,11 @@ export class McpService {
 		return this.#tierBRegistration?.searchable ?? [];
 	}
 
+	/** Connected servers that list prompts (todo 40), for slash registration. */
+	getMcpPromptServers(): readonly import("./prompts.ts").McpPromptServer[] {
+		return this.#tierBRegistration?.promptServers ?? [];
+	}
+
 	/** Connected servers that list resources (todo 39), for mention expansion. */
 	getMcpResourceServers(): readonly McpResourceServer[] {
 		return this.#tierBRegistration?.resourceServers ?? [];
