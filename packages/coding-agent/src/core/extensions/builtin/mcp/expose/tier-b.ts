@@ -15,6 +15,7 @@ import type { ExtensionAPI } from "../../../types.ts";
 import { registerToolsPreservingActiveSet } from "../active-set.ts";
 import type { McpToolCatalogEntry } from "../catalog.ts";
 import type { McpSettings } from "../config-schema.ts";
+import { createMcpProxyTool } from "./proxy.ts";
 import {
 	buildMcpToolDefinitions,
 	type McpToolDefinition,
@@ -39,6 +40,8 @@ export interface McpTierBRegistrationInput {
 	readonly activeEntries: readonly McpToolCatalogEntry[];
 	/** True when at least one server resolved to search mode. */
 	readonly searchMode: boolean;
+	/** Tier-C proxy servers (todo 38): one always-active gateway tool each. */
+	readonly proxyGateways?: readonly { server: string; entries: readonly McpToolCatalogEntry[] }[];
 	readonly settings: McpSettings;
 }
 
@@ -74,7 +77,13 @@ export function registerMcpTierBTools(
 	}));
 	const fullDefs = buildMcpToolDefinitions(input.registeredEntries, warn);
 	const fullByName = new Map(fullDefs.map((def) => [def.name, def] as const));
-	const activeMcpNames = mapMcpCatalogNames(input.activeEntries).map(({ name }) => name);
+	const gatewayNames: string[] = [];
+	for (const gateway of input.proxyGateways ?? []) {
+		const tool = createMcpProxyTool(gateway.server, gateway.entries);
+		pi.registerTool(tool);
+		gatewayNames.push(tool.name);
+	}
+	const activeMcpNames = [...mapMcpCatalogNames(input.activeEntries).map(({ name }) => name), ...gatewayNames];
 	const reference = pi.getActiveTools();
 	// Base tools carry over; any stale mcp_* names from a prior generation are
 	// dropped (membership = base + the intended mcp set; reference orders only).

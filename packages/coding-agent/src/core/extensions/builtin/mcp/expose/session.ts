@@ -27,6 +27,7 @@ export async function registerDirectMcpTools(
 	const registeredEntries: McpToolCatalogEntry[] = [];
 	const activeEntries: McpToolCatalogEntry[] = [];
 	let searchMode = false;
+	const proxyGateways: { server: string; entries: McpToolCatalogEntry[] }[] = [];
 	for (const entry of entries) {
 		const server = config.servers[entry.name];
 		if (server?.config === undefined) continue;
@@ -54,6 +55,7 @@ export async function registerDirectMcpTools(
 		const policy = computeMcpExposurePolicy(catalog, server.config, config.settings);
 		for (const warning of policy.warnings) entry.logger.warn(warning);
 		if (policy.mode === "search") searchMode = true;
+		if (policy.mode === "proxy") proxyGateways.push({ entries: [...policy.filteredEntries], server: entry.name });
 		registeredEntries.push(...policy.registeredEntries);
 		activeEntries.push(...policy.activeEntries);
 	}
@@ -62,13 +64,14 @@ export async function registerDirectMcpTools(
 		registeredEntries.length === 0 &&
 		activeEntries.length === 0 &&
 		!searchMode &&
+		proxyGateways.length === 0 &&
 		options.refreshActiveSetWhenEmpty !== true
 	) {
 		return undefined;
 	}
 	return registerMcpTierBTools(
 		pi,
-		{ activeEntries, registeredEntries, searchMode, settings: config.settings },
+		{ activeEntries, proxyGateways, registeredEntries, searchMode, settings: config.settings },
 		(message) => createMcpLogger("service").warn(message),
 	);
 }
