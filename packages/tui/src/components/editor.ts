@@ -860,6 +860,23 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 
+		// Submit (Enter)
+		if (kb.matches(data, "tui.input.submit")) {
+			if (this.disableSubmit) return;
+
+			// Workaround for terminals without Shift+Enter support:
+			// If char before cursor is \, delete it and insert newline instead of submitting.
+			const currentLine = this.state.lines[this.state.cursorLine] || "";
+			if (this.state.cursorCol > 0 && currentLine[this.state.cursorCol - 1] === "\\") {
+				this.handleBackspace();
+				this.addNewLine();
+				return;
+			}
+
+			this.submitValue();
+			return;
+		}
+
 		// New line
 		if (
 			kb.matches(data, "tui.input.newLine") ||
@@ -875,23 +892,6 @@ export class Editor implements Component, Focusable {
 				return;
 			}
 			this.addNewLine();
-			return;
-		}
-
-		// Submit (Enter)
-		if (kb.matches(data, "tui.input.submit")) {
-			if (this.disableSubmit) return;
-
-			// Workaround for terminals without Shift+Enter support:
-			// If char before cursor is \, delete it and insert newline instead of submitting.
-			const currentLine = this.state.lines[this.state.cursorLine] || "";
-			if (this.state.cursorCol > 0 && currentLine[this.state.cursorCol - 1] === "\\") {
-				this.handleBackspace();
-				this.addNewLine();
-				return;
-			}
-
-			this.submitValue();
 			return;
 		}
 
