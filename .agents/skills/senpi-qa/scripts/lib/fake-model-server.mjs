@@ -47,6 +47,12 @@ export function startFakeModelServer({ port = 0, turns = [{ text: "OK" }] } = {}
 				model: body.model,
 				stream: !!body.stream,
 				messages: body.messages,
+				// body.tools is the exact tool set the CLI put on the wire this turn.
+				// Every provider senpi speaks (OpenAI chat/responses, Anthropic) carries
+				// the active tool array here, so capturing it lets mock-loop QA prove
+				// payload-level claims — inactive tools cost 0, cross-turn promotion —
+				// against the REAL request bytes, not an in-process context.tools tap.
+				tools: Array.isArray(body.tools) ? body.tools : null,
 			});
 
 			const url = req.url || "";

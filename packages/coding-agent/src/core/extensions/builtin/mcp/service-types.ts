@@ -6,7 +6,14 @@ import type { ServerConnection, ServerConnectionState } from "./connection.ts";
 import type { McpLogger } from "./log.ts";
 
 export type McpDisposeReason = Extract<SessionShutdownEvent["reason"], "quit" | "reload">;
-export type McpSessionContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted">;
+export type McpSessionContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted"> & {
+	/**
+	 * Session history access, present on the real ExtensionContext. Only
+	 * getEntries is needed (attach-time promotion rehydration); keeping the
+	 * requirement narrow lets tests pass a two-line fake.
+	 */
+	sessionManager?: Pick<ExtensionContext["sessionManager"], "getEntries">;
+};
 
 export interface McpSessionOptions {
 	readonly agentDir?: string;
@@ -57,4 +64,10 @@ export interface McpConnectionEntry {
 	readonly authPlan?: ServerAuthPlan;
 	cachedCatalog?: McpCachedServerCatalog;
 	cacheRefreshedAfterConnect: boolean;
+	/** Full mcp tool names last registered for this server (list_changed diffing). */
+	knownToolNames?: string[];
+	/** Latest `/mcp status` list_changed delta line, e.g. "2 added (inactive), 1 removed". */
+	lastListChangedDelta?: string;
+	/** Teardown for the list_changed coalescer + subscription. */
+	disposeListChanged?: () => void;
 }

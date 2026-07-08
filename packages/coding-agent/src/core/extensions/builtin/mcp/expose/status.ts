@@ -6,6 +6,7 @@ import { computeMcpExposurePolicy } from "./policy.ts";
 export interface McpServerExposureStatus {
 	readonly hint?: string;
 	readonly toolCount: number | null;
+	readonly mode?: "direct" | "search";
 }
 
 export function getMcpCatalogExposureStatus(
@@ -14,10 +15,15 @@ export function getMcpCatalogExposureStatus(
 	settings: McpSettings,
 ): McpServerExposureStatus {
 	const policy = computeMcpExposurePolicy(catalog, serverConfig, settings);
-	return {
-		hint: policy.filteredEntries.length === 0 ? "No MCP tools matched includeTools/excludeTools filters." : undefined,
-		toolCount: policy.activeEntries.length,
-	};
+	if (policy.filteredEntries.length === 0) {
+		return { hint: "No MCP tools matched includeTools/excludeTools filters.", toolCount: 0, mode: policy.mode };
+	}
+	// Report the total exposed tools; in search mode note how many are active now.
+	const hint =
+		policy.mode === "search"
+			? `search mode: ${policy.activeEntries.length} active now, ${policy.registeredEntries.length} searchable via mcp_search`
+			: undefined;
+	return { hint, toolCount: policy.registeredEntries.length, mode: policy.mode };
 }
 
 export async function getMcpServerExposureStatus(
