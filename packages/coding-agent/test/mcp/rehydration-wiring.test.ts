@@ -75,6 +75,27 @@ describe("mcp_search rehydration wiring", () => {
 		expect(pi.getActiveTools()).toEqual(activeAfter);
 	});
 
+	it("replays history at attach time so the FIRST turn's payload carries restored tools", async () => {
+		const root = mcpRoot("rehydrate-attach");
+		setConfig(root, { fx: { ...stdioServer(["--tools", "3"]), exposure: "search" } });
+		const pi = capturingPi();
+		// Simulate a resumed session: history (with an activation marker) is
+		// already present on the session manager when the extension attaches.
+		await getMcpService().attachSession(
+			{ type: "session_start", reason: "resume" },
+			{
+				cwd: root.cwd,
+				isProjectTrusted: () => true,
+				sessionManager: { getEntries: () => historyWithActivation("mcp_fx_tool_2") as never },
+			},
+			pi,
+			{ agentDir: root.agentDir },
+		);
+		// No explicit rehydrate call: attach itself must have replayed history.
+		expect(pi.getActiveTools()).toContain("mcp_fx_tool_2");
+		expect(pi.getActiveTools()).toContain("mcp_search");
+	});
+
 	it("marks history as scanned so per-turn context events stay cheap", async () => {
 		const root = mcpRoot("rehydrate-once");
 		setConfig(root, { fx: { ...stdioServer(["--tools", "3"]), exposure: "search" } });

@@ -6,7 +6,14 @@ import type { ServerConnection, ServerConnectionState } from "./connection.ts";
 import type { McpLogger } from "./log.ts";
 
 export type McpDisposeReason = Extract<SessionShutdownEvent["reason"], "quit" | "reload">;
-export type McpSessionContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted">;
+export type McpSessionContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted"> & {
+	/**
+	 * Session history access, present on the real ExtensionContext. Only
+	 * getEntries is needed (attach-time promotion rehydration); keeping the
+	 * requirement narrow lets tests pass a two-line fake.
+	 */
+	sessionManager?: Pick<ExtensionContext["sessionManager"], "getEntries">;
+};
 
 export interface McpSessionOptions {
 	readonly agentDir?: string;

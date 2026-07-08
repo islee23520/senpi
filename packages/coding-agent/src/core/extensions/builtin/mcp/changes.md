@@ -6,6 +6,42 @@ extension. Fork-native: upstream pi-mono deliberately ships no MCP support, so
 every file under `builtin/mcp/` is fork-owned. Uses the exact-pinned official
 `@modelcontextprotocol/sdk` and the public `pi.*` extension API only.
 
+## Rehydration wiring + single-flight attach (2026-07-08)
+
+### What changed
+- `expose/tier-b.ts`: `registerMcpTierBTools` now returns a
+  `McpTierBRegistration` handle (`searchable` + `rehydrateFromHistory`) instead
+  of a bare searchable array; the rehydrate closure replays history activation
+  markers through the SAME activation path `mcp_search` uses (stub swap +
+  stable ordering), skipping already-active names.
+- `service.ts`: stores the tier-B handle per registration and exposes
+  `rehydrateActiveToolsFromHistory(messages)` plus a once-per-registration
+  `maybeRehydrateFromHistory` for per-turn context events. Attach now replays
+  session history (via the new optional `sessionManager.getEntries` on
+  `McpSessionContext`) right after direct-tool registration, so a resumed
+  (`--continue`) session's FIRST wire payload already carries previously
+  promoted tools — the per-turn context event replay alone landed one turn
+  late because the request tool snapshot precedes it.
+- `index.ts`: attach is single-flight. `session_start` handlers are dispatched
+  fire-and-forget, so a cold server's attach (awaited catalog collection) could
+  still be in flight when `before_agent_start` fired; the old `attached`
+  boolean then started a SECOND concurrent attach that registered an empty
+  catalog for turn 1. `before_agent_start` now awaits the memoized in-flight
+  attach promise. Also subscribes `context` as the rehydration safety net.
+
+### Why
+- `rehydrateActiveToolsFromHistory` was exported and unit-tested but never
+  invoked from the session lifecycle — resumed sessions lost all promotions
+  (W4 real-surface QA driver, CLAIM 5). The double-attach race intermittently
+  left ALL MCP tools off the wire for the first turns of any cold session
+  (CLAIMs 1/3 flaking). Both were invisible to in-process tests and caught
+  only by asserting on captured `body.tools` wire payloads.
+
+### Expected merge conflict zones
+- MEDIUM: `service.ts` around `attachSession`/`#registerDirectTools` (W5 will
+  touch registration for skills-carry-MCP).
+- LOW: `expose/tier-b.ts` return-shape consumers; `index.ts` event wiring.
+
 ## W4 implementation — Tier-B adaptive tool exposure + local tool-search (2026-07-08)
 
 ### What changed

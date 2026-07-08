@@ -75,6 +75,18 @@ export class McpService {
 		this.#toolRefreshGeneration = toolRefreshGeneration;
 		await this.#syncFromConfig(config, options, event.reason !== "reload", _pi, toolRefreshGeneration);
 		if (_pi !== undefined) await this.#registerDirectTools(_pi);
+		// Replay promotion markers from the (possibly resumed) session history
+		// BEFORE the first turn: the request tool snapshot is taken before the
+		// per-turn context event fires, so the context-event replay alone lands
+		// one turn late. Doing it here puts restored tools on the very first
+		// wire payload after a --continue/resume.
+		if (_pi !== undefined) this.#rehydrateFromSessionHistory(ctx);
+	}
+
+	#rehydrateFromSessionHistory(ctx: McpSessionContext): void {
+		const entries = ctx.sessionManager?.getEntries() ?? [];
+		if (entries.length === 0) return;
+		this.rehydrateActiveToolsFromHistory(entries);
 	}
 
 	async handleSessionShutdown(event: SessionShutdownEvent): Promise<void> {
