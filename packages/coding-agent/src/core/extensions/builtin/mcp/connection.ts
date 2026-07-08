@@ -12,6 +12,7 @@ import type {
 import { diagnoseCapturedMcpConnectFailure, diagnoseMcpConnectFailure } from "./diagnose.ts";
 import { ConnectError } from "./errors.ts";
 import type { McpLogger } from "./log.ts";
+import { subscribeMcpServerLogging } from "./logging.ts";
 import { subscribeMcpListChanged } from "./notifications.ts";
 import { subscribeMcpResourceUpdated } from "./resources.ts";
 import {
@@ -231,6 +232,9 @@ export class ServerConnection {
 		// Resource updates ride the same refresh path: the service re-collects the
 		// catalog (tools AND resources) on tools-changed.
 		subscribeMcpResourceUpdated(connection.client, () => this.markToolsChanged());
+		// Server logging notifications (todo 42): RFC-5424 → the per-server
+		// logger, filtered by config.logLevel, burst-capped.
+		subscribeMcpServerLogging(connection.client, { logLevel: this.#config.logLevel, logger: this.#logger });
 		this.#setState("connected");
 		this.markToolsChanged();
 		return connection.client;
