@@ -5,6 +5,12 @@ import { MCP_SEARCH_TOOL_NAME } from "./expose/tool-search.ts";
 import { injectMcpInstructions, refreshMcpInstructionsForSession } from "./instructions.ts";
 import { createMcpLogger } from "./log.ts";
 import { getMcpService } from "./service.ts";
+import {
+	parseSkillMcpDeclarations,
+	type SkillLike,
+	type SkillMcpDeclarations,
+	skillActivationTargets,
+} from "./skills.ts";
 import { reportMcpAsyncError, wrapAsync } from "./wrap.ts";
 
 export default function mcpExtension(pi: ExtensionAPI): void {
@@ -44,6 +50,36 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 		getMcpService().maybeRehydrateFromHistory(event.messages);
 	});
 
+	// skills-carry-MCP (todo 37): skills declaring MCP servers (mcp.json
+	// sidecar or SKILL.md frontmatter) register lazily with tools hidden;
+	// loading a skill — /skill:<name> input or the model reading its SKILL.md —
+	// reveals that skill's includeTools matches for the rest of the session.
+	let skillDecls: SkillMcpDeclarations = { servers: new Map(), warnings: [] };
+	let skillsByName = new Map<string, SkillLike>();
+	const loadedSkills = new Set<string>();
+	const revealSkill = (skillName: string): void => {
+		if (loadedSkills.has(skillName) || !skillsByName.has(skillName)) return;
+		loadedSkills.add(skillName);
+		const service = getMcpService();
+		const registered = service.getTierBSearchable();
+		const targets = skillActivationTargets(skillDecls, skillName, registered);
+		if (targets.length > 0) service.activateSkillMcpTools(targets);
+	};
+	pi.on("input", (event) => {
+		const match = /^\s*\/skill:([A-Za-z0-9._-]+)/.exec(event.text);
+		if (match) revealSkill(match[1]);
+		return undefined;
+	});
+	pi.on("tool_call", (event) => {
+		if (event.toolName !== "read") return undefined;
+		const path = (event.input as { path?: string }).path;
+		if (path === undefined) return undefined;
+		for (const [name, skill] of skillsByName) {
+			if (path === skill.filePath || path.endsWith(skill.filePath)) revealSkill(name);
+		}
+		return undefined;
+	});
+
 	// Attach is SINGLE-FLIGHT. session_start handlers are dispatched
 	// fire-and-forget, so a slow attach (a cold MCP server's boot + catalog
 	// collection is awaited inside attachSession) can still be in flight when
@@ -70,6 +106,19 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", async (event, ctx) => {
 		try {
 			await (attachPromise ?? attach({ type: "session_start", reason: "startup" }, ctx));
+			const skills = (event.systemPromptOptions.skills ?? []) as readonly SkillLike[];
+			if (skills.length > 0) {
+				skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
+				skillDecls = parseSkillMcpDeclarations(skills);
+				const declared = new Map(
+					[...skillDecls.servers].map(([name, decl]) => [name, { raw: decl.raw, sourcePath: decl.sourcePath }]),
+				);
+				const warnings = [
+					...skillDecls.warnings,
+					...(declared.size > 0 ? await getMcpService().attachSkillMcpServers(declared) : []),
+				];
+				for (const warning of warnings) createMcpLogger("skills").warn(warning);
+			}
 			const systemPrompt = injectMcpInstructions(event.systemPrompt);
 			return systemPrompt === undefined ? undefined : { systemPrompt };
 		} catch (error) {

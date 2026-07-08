@@ -203,6 +203,29 @@ function readServerNames(raw: unknown): string[] {
 	return Object.keys(servers);
 }
 
+/**
+ * Resolve a skill-declared MCP server (mcp.json sidecar or SKILL.md
+ * frontmatter). Exposure is forced to search with no directTools so the
+ * catalog registers with ZERO active tools until the owning skill loads
+ * (0 pre-load payload tokens); lifecycle stays lazy.
+ */
+export function resolveSkillMcpServer(
+	name: string,
+	raw: NonNullable<RawConfig["mcpServers"]>[string],
+	sourcePath: string,
+): ResolvedMcpServer {
+	const config = { ...normalizeServer(raw), directTools: [], exposure: "search" as const };
+	return {
+		config,
+		configHash: hashConfig(config),
+		name,
+		source: "skill",
+		sourcePath,
+		state: config.enabled ? "enabled" : "disabled",
+		transport: config.type,
+	};
+}
+
 function normalizeServer(server: NonNullable<RawConfig["mcpServers"]>[string]): McpServerConfig {
 	const type = server.type ?? (server.url ? "http" : "stdio");
 	return {

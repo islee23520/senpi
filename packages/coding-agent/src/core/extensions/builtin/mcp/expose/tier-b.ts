@@ -52,6 +52,9 @@ export interface McpTierBRegistration {
 	 * re-searching. Returns the newly activated names (empty when nothing new).
 	 */
 	rehydrateFromHistory(messages: readonly unknown[]): string[];
+	/** Activate registered tools by name through the same stable path
+	 * mcp_search uses (skill lazy-reveal, todo 37). Unknown names ignored. */
+	activate(names: readonly string[]): void;
 }
 
 const NOOP_REHYDRATE = (): string[] => [];
@@ -80,7 +83,10 @@ export function registerMcpTierBTools(
 	if (!input.searchMode) {
 		registerToolsPreservingActiveSet(pi, fullDefs, orderActiveSet([...currentBase, ...activeMcpNames], reference));
 		// Direct mode: everything registerable is already active, nothing to replay.
-		return { searchable, rehydrateFromHistory: NOOP_REHYDRATE };
+		const activateDirect = (names: readonly string[]): void => {
+			pi.setActiveTools(orderActiveSet(unionStable(pi.getActiveTools(), names), pi.getActiveTools()));
+		};
+		return { activate: activateDirect, searchable, rehydrateFromHistory: NOOP_REHYDRATE };
 	}
 
 	const stubSwap = input.settings.stubSwap === true;
@@ -95,6 +101,11 @@ export function registerMcpTierBTools(
 		setActiveTools: activateMcpTools,
 	});
 	const registeredNames = new Set(fullDefs.map((def) => def.name));
+	const activate = (names: readonly string[]): void => {
+		const known = names.filter((name) => registeredNames.has(name));
+		if (known.length === 0) return;
+		activateMcpTools(unionStable(pi.getActiveTools(), known));
+	};
 	const rehydrateFromHistory = (messages: readonly unknown[]): string[] => {
 		const restored = rehydrateActiveToolsFromHistory(messages, registeredNames);
 		const current = pi.getActiveTools();
@@ -114,7 +125,7 @@ export function registerMcpTierBTools(
 		// (an accepted cache miss).
 		const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...activeMcpNames], reference);
 		registerToolsPreservingActiveSet(pi, fullDefs, active);
-		return { searchable, rehydrateFromHistory };
+		return { activate, searchable, rehydrateFromHistory };
 	}
 
 	// stubSwap: every search-mode tool is registered as a tiny stub and kept
@@ -127,7 +138,7 @@ export function registerMcpTierBTools(
 	});
 	const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...fullDefs.map((def) => def.name)], reference);
 	registerToolsPreservingActiveSet(pi, toRegister, active);
-	return { searchable, rehydrateFromHistory };
+	return { activate, searchable, rehydrateFromHistory };
 }
 
 function swapStubsToFull(

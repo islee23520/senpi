@@ -2,7 +2,7 @@ import type { ExtensionAPI, SessionShutdownEvent, SessionStartEvent } from "../.
 import { detectLiteralBearerWarnings, resolveServerAuth } from "./auth/context.ts";
 import { collectToolCatalog } from "./catalog.ts";
 import { getValidCachedServer, readMcpCatalogCache } from "./catalog-cache.ts";
-import { loadMcpConfig, visitSpawnableMcpServers } from "./config.ts";
+import { loadMcpConfig, resolveSkillMcpServer, visitSpawnableMcpServers } from "./config.ts";
 import type { McpServerConfig, ResolvedMcpConfig, ResolvedMcpServer } from "./config-schema.ts";
 import { ServerConnection } from "./connection.ts";
 import { mapMcpCatalogNames } from "./expose/register.ts";
@@ -54,6 +54,7 @@ export class McpService {
 	#refreshActiveSetWhenNoTools = false;
 	#tierBRegistration: McpTierBRegistration | undefined;
 	#historyScanned = false;
+	#sessionOptions: McpSessionOptions = {};
 	#pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool"> | undefined;
 	readonly #connections = new Map<string, McpConnectionEntry>();
 	readonly #connectionKeysByName = new Map<string, string>();
@@ -77,6 +78,7 @@ export class McpService {
 		this.#pi = _pi;
 		this.#authAgentDir = options.agentDir;
 		this.#authEnv = options.env;
+		this.#sessionOptions = options;
 		const toolRefreshGeneration = this.#toolRefreshGeneration + 1;
 		this.#toolRefreshGeneration = toolRefreshGeneration;
 		await this.#syncFromConfig(config, options, event.reason !== "reload", _pi, toolRefreshGeneration);
@@ -87,6 +89,55 @@ export class McpService {
 		// one turn late. Doing it here puts restored tools on the very first
 		// wire payload after a --continue/resume.
 		if (_pi !== undefined) this.#rehydrateFromSessionHistory(ctx);
+	}
+
+	/**
+	 * Register skill-declared MCP servers (todo 37). Skill servers are forced
+	 * into search mode with no directTools, so their catalogs register with
+	 * ZERO active tools until activateSkillMcpTools reveals them. A name
+	 * collision with a system-configured server keeps the system config and
+	 * returns a warning (system wins).
+	 */
+	async attachSkillMcpServers(
+		declared: ReadonlyMap<string, { raw: Parameters<typeof resolveSkillMcpServer>[1]; sourcePath: string }>,
+	): Promise<string[]> {
+		const config = this.#config;
+		const pi = this.#pi;
+		if (config === null || pi === undefined) return [];
+		const warnings: string[] = [];
+		let added = 0;
+		for (const [name, decl] of declared) {
+			const existing = config.servers[name];
+			if (existing !== undefined && existing.source !== "skill") {
+				warnings.push(
+					`MCP server '${name}' from skill ${decl.sourcePath} collides with the ${existing.source} config; system config wins.`,
+				);
+				continue;
+			}
+			const resolved = resolveSkillMcpServer(name, decl.raw, decl.sourcePath);
+			if (existing !== undefined && existing.configHash === resolved.configHash) continue;
+			config.servers[name] = resolved;
+			added += 1;
+		}
+		if (added > 0) {
+			const toolRefreshGeneration = this.#toolRefreshGeneration + 1;
+			this.#toolRefreshGeneration = toolRefreshGeneration;
+			await this.#syncFromConfig(config, this.#sessionOptions, false, pi, toolRefreshGeneration);
+			await this.#registerDirectTools(pi);
+		}
+		return warnings;
+	}
+
+	/** Registered searchable catalog (mapped name + server-side tool name),
+	 * used by the skills loader to compute activation targets. */
+	getTierBSearchable(): ReadonlyArray<{ name: string; toolName: string; server: string }> {
+		return this.#tierBRegistration?.searchable ?? [];
+	}
+
+	/** Reveal skill-owned tools (todo 37): activation is effective the next
+	 * turn, exactly like an mcp_search promotion. Unknown names are ignored. */
+	activateSkillMcpTools(names: readonly string[]): void {
+		this.#tierBRegistration?.activate(names);
 	}
 
 	#rehydrateFromSessionHistory(ctx: McpSessionContext): void {
