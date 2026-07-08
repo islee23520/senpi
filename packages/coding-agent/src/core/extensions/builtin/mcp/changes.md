@@ -6,6 +6,43 @@ extension. Fork-native: upstream pi-mono deliberately ships no MCP support, so
 every file under `builtin/mcp/` is fork-owned. Uses the exact-pinned official
 `@modelcontextprotocol/sdk` and the public `pi.*` extension API only.
 
+## W5 — skills-carry-MCP, proxy, resources, prompts, elicitation, logging (2026-07-08)
+
+### What changed
+- New `skills.ts` (todo 37): skills declare MCP servers via an `mcp.json`
+  sidecar (wins) or SKILL.md frontmatter `mcp:` block; declared servers resolve
+  through `config.ts#resolveSkillMcpServer` (source `"skill"`, forced
+  search-mode/no-directTools = 0 pre-load tokens) and register via
+  `service.attachSkillMcpServers`; loading a skill (`/skill:` input or the
+  model reading its SKILL.md) reveals includeTools glob matches through the new
+  `McpTierBRegistration.activate`.
+- New `expose/proxy.ts` (todo 38): `exposure:"proxy"` collapses a server to one
+  `mcp_<server>` gateway (search/describe/call, JSON-string args) reusing BM25
+  and the factored `register.ts#executeMcpCatalogEntry`; policy gains mode
+  `"proxy"`; auto never selects it.
+- New `resources.ts` (todo 39): `mcp_list_resources`/`mcp_read_resource`
+  utility tools (only when resources exist), `@mcp:<server>/<uri>` input-event
+  mention expansion, per-resource subscriptions + updated notifications riding
+  the tools-changed refresh.
+- New `prompts.ts` (todo 40): listed prompts register as `/mcp:<server>:<prompt>`
+  commands (ctx.ui argument collection -> prompts/get -> editor injection).
+- New `elicitation.ts` (todo 41): EMPTY `{}` capability declared at client
+  construction (`transport.ts#buildMcpClient`), flat-primitive form flow over
+  ctx.ui, decline without UI / on URL-mode, bounded cancel timeout.
+- New `logging.ts` (todo 42): notifications/message -> per-server logger with
+  RFC-5424 mapping, `logLevel` filtering, 10/s burst cap.
+
+### Why
+- W5 of the MCP plan: capability surface (skills/resources/prompts/elicitation/
+  logging) on top of W4's exposure machinery, reusing the activation path,
+  guarded call path, and notification refresh loop instead of new plumbing.
+
+### Expected merge conflict zones
+- MEDIUM: `expose/session.ts` / `expose/tier-b.ts` (registration input/return
+  shapes grew: proxyGateways, utilityTools, McpSessionRegistration).
+- LOW: `connection.ts` connect-time subscriptions; `index.ts` event wiring;
+  `service.ts` skill/prompt/resource accessors.
+
 ## Rehydration wiring + single-flight attach (2026-07-08)
 
 ### What changed
