@@ -304,8 +304,13 @@ func TestTranscriptStreamingPerf500Deltas(t *testing.T) {
 		// The race detector multiplies wall-clock ~5-10x; the budget calibrates
 		// uninstrumented builds. Functional + goroutine assertions still run.
 		t.Logf("race build: skipping time budget (took %v)", elapsed)
-	} else if elapsed >= 2*time.Second {
-		t.Fatalf("500 message_update deltas took %v (budget 2s)", elapsed)
+	} else if elapsed >= 8*time.Second {
+		// The budget guards against O(n^2) re-render blowups, where 500 deltas
+		// cost tens of seconds — not against shared-CI scheduling noise. 2s flaked
+		// at 2.13s on a loaded GitHub runner (PR #158 rerun); 8s keeps an
+		// order-of-magnitude margin over the ~0.3s unloaded baseline while staying
+		// far below a genuine regression.
+		t.Fatalf("500 message_update deltas took %v (budget 8s)", elapsed)
 	}
 
 	tr.HandleEvent(eventMsg(t, fmt.Sprintf(
