@@ -18,6 +18,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -33,6 +34,7 @@ import (
 	"github.com/code-yeongyu/senpi/packages/neo/internal/app"
 	"github.com/code-yeongyu/senpi/packages/neo/internal/bridge"
 	"github.com/code-yeongyu/senpi/packages/neo/internal/theme"
+	"github.com/code-yeongyu/senpi/packages/neo/internal/ui/extui"
 	"github.com/code-yeongyu/senpi/packages/neo/internal/ui/keybindings"
 	"github.com/code-yeongyu/senpi/packages/neo/internal/ui/shell"
 )
@@ -52,7 +54,7 @@ var isolatedArgv = []string{
 }
 
 func main() {
-	scene := flag.String("scene", "welcome", "scene: welcome | session-turn | session-kill")
+	scene := flag.String("scene", "welcome", "scene: welcome | session-turn | session-kill | login-flow")
 	flag.Parse()
 
 	switch *scene {
@@ -62,6 +64,8 @@ func main() {
 		os.Exit(runSessionTurn())
 	case "session-kill":
 		os.Exit(runSessionKill())
+	case "login-flow":
+		os.Exit(runLoginFlow())
 	default:
 		fmt.Fprintln(os.Stderr, "unknown scene:", *scene)
 		os.Exit(2)
@@ -262,3 +266,106 @@ func firstKey(keys *keybindings.Manager, action string) string {
 	}
 	return ""
 }
+
+// ---------------------------------------------------------------------------
+// login-flow scene (plan todo 6)
+// ---------------------------------------------------------------------------
+
+// runLoginFlow drives the REAL login dialog through the app extension-UI layer
+// with synthetic auth events: get_auth_providers answers with a stub oauth
+// provider, selecting it fires login_start against a stub client (NO timeout),
+// then an auth_login_url and a successful auth_login_end EventMsg are injected
+// in order. The URL-panel frame renders first (with a capture window), then the
+// post-login state prints as machine-checkable lines.
+func runLoginFlow() int {
+	th, err := theme.Load(theme.Options{Name: theme.DefaultThemeName})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "theme.Load:", err)
+		return 1
+	}
+	keys := keybindings.NewManager(nil)
+	mgr := app.NewManager(keys, stubOverlayRequester{})
+	ext := app.NewExtUI(extui.Deps{Theme: th, Keybindings: keys}, mgr, stubAuthClient{}, stubResponder{}, stubSink{})
+
+	// get_auth_providers → provider list.
+	providersMsg, ok := ext.OpenLogin("")().(app.LoginProvidersMsg)
+	if !ok || providersMsg.Err != nil {
+		fmt.Fprintln(os.Stderr, "login-flow: provider fetch failed:", providersMsg.Err)
+		return 1
+	}
+	drainLoginCmds(ext.HandleLoginProviders(providersMsg))
+	drainLoginCmds(ext.HandleKey("\r").Cmd) // select the stub provider → login_start (flow view)
+
+	// auth_login_url EventMsg → the URL panel frame.
+	urlMsg := app.EventMsg{Event: bridge.Event{
+		Type:    "auth_login_url",
+		Payload: []byte(`{"type":"auth_login_url","provider":"stub","url":"https://stub.example/oauth?code=FAKE"}`),
+	}}
+	ext.HandleEvent(urlMsg.Event)
+	fmt.Println("=== login-flow: auth_login_url ===")
+	for _, line := range ext.Render(100, 30) {
+		fmt.Println(line)
+	}
+	time.Sleep(2 * time.Second) // capture window for the URL panel
+
+	// auth_login_end EventMsg → the dialog closes with status.
+	endMsg := app.EventMsg{Event: bridge.Event{
+		Type:    "auth_login_end",
+		Payload: []byte(`{"type":"auth_login_end","provider":"stub","success":true}`),
+	}}
+	res := ext.HandleEvent(endMsg.Event)
+	fmt.Println("=== login-flow: auth_login_end ===")
+	drainLoginCmds(res.Cmd)
+	fmt.Printf("LOGIN-FLOW provider=stub success=true dialogActive=%v\n", ext.Active())
+	return 0
+}
+
+// drainLoginCmds executes queued tea.Cmds synchronously, printing NoticeMsg
+// lines so the capture shows the login status notice.
+func drainLoginCmds(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch m := cmd().(type) {
+	case tea.BatchMsg:
+		for _, sub := range m {
+			drainLoginCmds(sub)
+		}
+	case app.NoticeMsg:
+		fmt.Println("NOTICE " + m.Text)
+	}
+}
+
+// stubOverlayRequester satisfies app.Requester for the overlay manager; the
+// login-flow scene never routes an overlay outcome through it.
+type stubOverlayRequester struct{}
+
+func (stubOverlayRequester) Request(bridge.Command) tea.Cmd        { return nil }
+func (stubOverlayRequester) FileOp(string, map[string]any) tea.Cmd { return nil }
+
+// stubAuthClient answers get_auth_providers with one stub oauth provider and
+// acknowledges every other auth command (login_start succeeds immediately; the
+// flow completes via the injected events).
+type stubAuthClient struct{}
+
+func (stubAuthClient) Request(cmd bridge.Command, _ time.Duration) (bridge.Response, error) {
+	if cmd.Type == "get_auth_providers" {
+		return bridge.Response{
+			Type:    "response",
+			Command: cmd.Type,
+			Success: true,
+			Data:    json.RawMessage(`{"providers":[{"id":"stub","name":"Stub Provider","authType":"oauth","status":{"configured":false}}]}`),
+		}, nil
+	}
+	return bridge.Response{Type: "response", Command: cmd.Type, Success: true}, nil
+}
+
+// stubResponder and stubSink are inert seams: the login flow sends no
+// extension_ui_response and applies no directives.
+type stubResponder struct{}
+
+func (stubResponder) RespondExtensionUI(bridge.ExtensionUIResponse) error { return nil }
+
+type stubSink struct{}
+
+func (stubSink) ApplyDirective(extui.Directive) {}
