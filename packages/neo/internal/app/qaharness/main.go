@@ -54,7 +54,7 @@ var isolatedArgv = []string{
 }
 
 func main() {
-	scene := flag.String("scene", "welcome", "scene: welcome | session-turn | session-kill | login-flow | status-retry")
+	scene := flag.String("scene", "welcome", "scene: welcome | session-turn | session-kill | login-flow | status-retry | isolated-crash")
 	flag.Parse()
 
 	switch *scene {
@@ -68,6 +68,8 @@ func main() {
 		os.Exit(runLoginFlow())
 	case "status-retry":
 		runStatusRetry()
+	case "isolated-crash":
+		os.Exit(runIsolatedCrash())
 	default:
 		fmt.Fprintln(os.Stderr, "unknown scene:", *scene)
 		os.Exit(2)
@@ -415,4 +417,43 @@ func runStatusRetry() {
 	if len(sh.AboveEditor(width)) == 0 {
 		fmt.Println("retry-status-cleared")
 	}
+}
+
+// runIsolatedCrash (plan task 8) exercises the isolated child-exit → fatal path
+// against the REAL recovery handler: it connects an isolated child, prints
+// RPCCHILD=<pid> at spawn (best-effort via pgrep, the session-kill pattern) so
+// the QA driver can kill -9 it, waits for the adapter's client-closed signal,
+// routes it through app.Recovery, prints the rendered fatal notice, and exits
+// with the recovery's exit code (1 — the launcher re-raises it).
+func runIsolatedCrash() int {
+	sess, result, err := connectIsolated()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "connect:", err)
+		return 1
+	}
+	defer result.Close()
+
+	fmt.Printf("RPCCHILD=%d\n", childPid())
+
+	rec := app.NewRecovery(app.RecoveryConfig{Mode: bridge.TransportIsolated})
+
+	select {
+	case <-sess.sender.closed:
+	case <-time.After(120 * time.Second):
+		fmt.Fprintln(os.Stderr, "timed out waiting for the child to exit")
+		return 1
+	}
+
+	cmd := rec.HandleClientClosed(app.ClientClosedMsg{Err: bridge.ErrClientClosed})
+	if cmd == nil {
+		fmt.Fprintln(os.Stderr, "recovery ignored the client-closed signal")
+		return 1
+	}
+	fatal, ok := cmd().(app.RecoveryFatalMsg)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "recovery did not return the fatal quit signal")
+		return 1
+	}
+	fmt.Println("FATAL", fatal.Notice)
+	return fatal.ExitCode
 }
