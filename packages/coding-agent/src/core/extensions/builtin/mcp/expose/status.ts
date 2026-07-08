@@ -6,7 +6,7 @@ import { computeMcpExposurePolicy } from "./policy.ts";
 export interface McpServerExposureStatus {
 	readonly hint?: string;
 	readonly toolCount: number | null;
-	readonly mode?: "direct" | "search";
+	readonly mode?: "direct" | "search" | "proxy";
 }
 
 export function getMcpCatalogExposureStatus(

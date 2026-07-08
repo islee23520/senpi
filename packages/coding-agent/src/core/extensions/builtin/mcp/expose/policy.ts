@@ -5,7 +5,7 @@ import type { McpServerConfig, McpSettings } from "../config-schema.ts";
 export interface McpExposurePolicyResult {
 	readonly activeEntries: McpToolCatalogEntry[];
 	readonly filteredEntries: McpToolCatalogEntry[];
-	readonly mode: "direct" | "search";
+	readonly mode: "direct" | "search" | "proxy";
 	readonly reason: "explicit" | "threshold" | "directTools";
 	readonly registeredEntries: McpToolCatalogEntry[];
 	readonly warnings: string[];
@@ -39,10 +39,22 @@ export function computeMcpExposurePolicy(
 	if (config.exposure === "direct") {
 		return directResult(filteredEntries, filteredEntries, "explicit");
 	}
+	// Tier-C proxy mode (todo 38): per-server OPT-IN only. The whole catalog
+	// stays behind a single gateway tool; nothing registers directly and auto
+	// never selects this mode (SPEC §5: -27.3pp GSM8K structured-output evidence).
+	if (config.exposure === "proxy") {
+		return {
+			activeEntries: [],
+			filteredEntries,
+			mode: "proxy",
+			reason: "explicit",
+			registeredEntries: [],
+			warnings: [],
+		};
+	}
 	// Tier-B search mode: register the full catalog but keep only directTools
-	// active; mcp_search promotes the rest on demand. `proxy` behaves like search
-	// until the opt-in proxy tool lands (todo 38).
-	if (config.exposure === "search" || config.exposure === "proxy") {
+	// active; mcp_search promotes the rest on demand.
+	if (config.exposure === "search") {
 		return searchResult(filteredEntries, directEntries, "explicit");
 	}
 	if (filteredEntries.length <= (settings.searchThreshold ?? 10)) {

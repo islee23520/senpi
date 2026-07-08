@@ -95,7 +95,7 @@ export type McpServerConfig = Static<typeof ServerSchema> & {
 };
 export type McpSettings = Required<Pick<Static<typeof SettingsSchema>, "toolPrefix">> &
 	Omit<Static<typeof SettingsSchema>, "toolPrefix">;
-export type McpServerSource = "global" | "claude" | "project";
+export type McpServerSource = "global" | "claude" | "project" | "skill";
 export type McpServerState = "enabled" | "disabled" | "untrusted";
 
 export interface ResolvedMcpServer {

@@ -2,12 +2,12 @@ import type { ExtensionAPI, SessionShutdownEvent, SessionStartEvent } from "../.
 import { detectLiteralBearerWarnings, resolveServerAuth } from "./auth/context.ts";
 import { collectToolCatalog } from "./catalog.ts";
 import { getValidCachedServer, readMcpCatalogCache } from "./catalog-cache.ts";
-import { loadMcpConfig, visitSpawnableMcpServers } from "./config.ts";
+import { loadMcpConfig, resolveSkillMcpServer, visitSpawnableMcpServers } from "./config.ts";
 import type { McpServerConfig, ResolvedMcpConfig, ResolvedMcpServer } from "./config-schema.ts";
 import { ServerConnection } from "./connection.ts";
 import { mapMcpCatalogNames } from "./expose/register.ts";
+import type { McpSessionRegistration } from "./expose/session.ts";
 import type { McpServerExposureStatus } from "./expose/status.ts";
-import type { McpTierBRegistration } from "./expose/tier-b.ts";
 import { cleanupMcpOutputArtifacts } from "./guard/output-guard.ts";
 import { markMcpConnectionNeedsAuth } from "./health.ts";
 import { configureMcpConnectionLifecycle, disposeMcpConnectionLifecycle } from "./idle.ts";
@@ -19,6 +19,7 @@ import {
 	formatMcpListChangedDelta,
 } from "./notifications.ts";
 import { configureMcpReconnect, disposeMcpReconnect, reconnectMcpNow } from "./reconnect.ts";
+import type { McpResourceServer } from "./resources.ts";
 import { getMcpServiceExposureStatus } from "./service-exposure.ts";
 import { registerMcpServiceDirectTools } from "./service-register.ts";
 import { buildMcpServerSnapshot } from "./service-snapshot.ts";
@@ -52,8 +53,9 @@ export class McpService {
 	#authEnv: Record<string, string | undefined> | undefined;
 	readonly #pendingAuth = new Map<string, import("./auth/oauth-provider.ts").McpOAuthProvider>();
 	#refreshActiveSetWhenNoTools = false;
-	#tierBRegistration: McpTierBRegistration | undefined;
+	#tierBRegistration: McpSessionRegistration | undefined;
 	#historyScanned = false;
+	#sessionOptions: McpSessionOptions = {};
 	#pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "registerTool"> | undefined;
 	readonly #connections = new Map<string, McpConnectionEntry>();
 	readonly #connectionKeysByName = new Map<string, string>();
@@ -77,6 +79,7 @@ export class McpService {
 		this.#pi = _pi;
 		this.#authAgentDir = options.agentDir;
 		this.#authEnv = options.env;
+		this.#sessionOptions = options;
 		const toolRefreshGeneration = this.#toolRefreshGeneration + 1;
 		this.#toolRefreshGeneration = toolRefreshGeneration;
 		await this.#syncFromConfig(config, options, event.reason !== "reload", _pi, toolRefreshGeneration);
@@ -87,6 +90,65 @@ export class McpService {
 		// one turn late. Doing it here puts restored tools on the very first
 		// wire payload after a --continue/resume.
 		if (_pi !== undefined) this.#rehydrateFromSessionHistory(ctx);
+	}
+
+	/**
+	 * Register skill-declared MCP servers (todo 37). Skill servers are forced
+	 * into search mode with no directTools, so their catalogs register with
+	 * ZERO active tools until activateSkillMcpTools reveals them. A name
+	 * collision with a system-configured server keeps the system config and
+	 * returns a warning (system wins).
+	 */
+	async attachSkillMcpServers(
+		declared: ReadonlyMap<string, { raw: Parameters<typeof resolveSkillMcpServer>[1]; sourcePath: string }>,
+	): Promise<string[]> {
+		const config = this.#config;
+		const pi = this.#pi;
+		if (config === null || pi === undefined) return [];
+		const warnings: string[] = [];
+		let added = 0;
+		for (const [name, decl] of declared) {
+			const existing = config.servers[name];
+			if (existing !== undefined && existing.source !== "skill") {
+				warnings.push(
+					`MCP server '${name}' from skill ${decl.sourcePath} collides with the ${existing.source} config; system config wins.`,
+				);
+				continue;
+			}
+			const resolved = resolveSkillMcpServer(name, decl.raw, decl.sourcePath);
+			if (existing !== undefined && existing.configHash === resolved.configHash) continue;
+			config.servers[name] = resolved;
+			added += 1;
+		}
+		if (added > 0) {
+			const toolRefreshGeneration = this.#toolRefreshGeneration + 1;
+			this.#toolRefreshGeneration = toolRefreshGeneration;
+			await this.#syncFromConfig(config, this.#sessionOptions, false, pi, toolRefreshGeneration);
+			await this.#registerDirectTools(pi);
+		}
+		return warnings;
+	}
+
+	/** Registered searchable catalog (mapped name + server-side tool name),
+	 * used by the skills loader to compute activation targets. */
+	getTierBSearchable(): ReadonlyArray<{ name: string; toolName: string; server: string }> {
+		return this.#tierBRegistration?.searchable ?? [];
+	}
+
+	/** Connected servers that list prompts (todo 40), for slash registration. */
+	getMcpPromptServers(): readonly import("./prompts.ts").McpPromptServer[] {
+		return this.#tierBRegistration?.promptServers ?? [];
+	}
+
+	/** Connected servers that list resources (todo 39), for mention expansion. */
+	getMcpResourceServers(): readonly McpResourceServer[] {
+		return this.#tierBRegistration?.resourceServers ?? [];
+	}
+
+	/** Reveal skill-owned tools (todo 37): activation is effective the next
+	 * turn, exactly like an mcp_search promotion. Unknown names are ignored. */
+	activateSkillMcpTools(names: readonly string[]): void {
+		this.#tierBRegistration?.activate(names);
 	}
 
 	#rehydrateFromSessionHistory(ctx: McpSessionContext): void {

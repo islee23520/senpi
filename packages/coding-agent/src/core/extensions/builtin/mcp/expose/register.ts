@@ -80,18 +80,7 @@ function createMcpToolDefinition(entry: McpToolCatalogEntry, name: string): McpT
 		executionMode: "parallel",
 		async execute(_toolCallId, params, signal, onUpdate): Promise<AgentToolResult<McpToolDetails | undefined>> {
 			const args: Record<string, unknown> = isRecord(params) ? params : {};
-			const result = await callMcpTool(entry, args, signal, onUpdate, label);
-			const mapped = mapMcpToolResult(normalizeCallToolResult(result));
-			if (!mapped.ok) {
-				throw new ToolExecError(mapped.error.message, { phase: "call", serverName: entry.server });
-			}
-			const guarded = await applyMcpOutputGuard(mapped.content, {
-				agentDir: entry.agentDir,
-				outputGuard: entry.outputGuard,
-				server: entry.server,
-			});
-			const content = toAgentContent(guarded);
-			return { content, details: { preview: previewContent(content), server: entry.server, tool: entry.tool } };
+			return await executeMcpCatalogEntry(entry, args, signal, onUpdate);
 		},
 		renderCall(args, theme) {
 			return new Text(theme.fg("toolTitle", theme.bold(`${name} ${previewArgs(args)}`.trim())), 0, 0);
@@ -103,6 +92,29 @@ function createMcpToolDefinition(entry: McpToolCatalogEntry, name: string): McpT
 			return new Text(theme.fg("toolOutput", title), 0, 0);
 		},
 	};
+}
+
+/** Full guarded call path for one catalog entry (lifecycle + retry + output
+ * guard). Shared by direct/search tool definitions and the Tier-C proxy. */
+export async function executeMcpCatalogEntry(
+	entry: McpToolCatalogEntry,
+	args: Record<string, unknown>,
+	signal: AbortSignal | undefined,
+	onUpdate: Parameters<McpToolDefinition["execute"]>[3],
+): Promise<AgentToolResult<McpToolDetails | undefined>> {
+	const label = `${entry.server}/${entry.tool}`;
+	const result = await callMcpTool(entry, args, signal, onUpdate, label);
+	const mapped = mapMcpToolResult(normalizeCallToolResult(result));
+	if (!mapped.ok) {
+		throw new ToolExecError(mapped.error.message, { phase: "call", serverName: entry.server });
+	}
+	const guarded = await applyMcpOutputGuard(mapped.content, {
+		agentDir: entry.agentDir,
+		outputGuard: entry.outputGuard,
+		server: entry.server,
+	});
+	const content = toAgentContent(guarded);
+	return { content, details: { preview: previewContent(content), server: entry.server, tool: entry.tool } };
 }
 
 async function callMcpTool(

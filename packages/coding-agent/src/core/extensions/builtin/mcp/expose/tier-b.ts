@@ -15,6 +15,7 @@ import type { ExtensionAPI } from "../../../types.ts";
 import { registerToolsPreservingActiveSet } from "../active-set.ts";
 import type { McpToolCatalogEntry } from "../catalog.ts";
 import type { McpSettings } from "../config-schema.ts";
+import { createMcpProxyTool } from "./proxy.ts";
 import {
 	buildMcpToolDefinitions,
 	type McpToolDefinition,
@@ -39,6 +40,10 @@ export interface McpTierBRegistrationInput {
 	readonly activeEntries: readonly McpToolCatalogEntry[];
 	/** True when at least one server resolved to search mode. */
 	readonly searchMode: boolean;
+	/** Tier-C proxy servers (todo 38): one always-active gateway tool each. */
+	readonly proxyGateways?: readonly { server: string; entries: readonly McpToolCatalogEntry[] }[];
+	/** Always-active utility tools (todo 39: mcp_list_resources/mcp_read_resource). */
+	readonly utilityTools?: readonly McpToolDefinition[];
 	readonly settings: McpSettings;
 }
 
@@ -52,6 +57,9 @@ export interface McpTierBRegistration {
 	 * re-searching. Returns the newly activated names (empty when nothing new).
 	 */
 	rehydrateFromHistory(messages: readonly unknown[]): string[];
+	/** Activate registered tools by name through the same stable path
+	 * mcp_search uses (skill lazy-reveal, todo 37). Unknown names ignored. */
+	activate(names: readonly string[]): void;
 }
 
 const NOOP_REHYDRATE = (): string[] => [];
@@ -71,7 +79,17 @@ export function registerMcpTierBTools(
 	}));
 	const fullDefs = buildMcpToolDefinitions(input.registeredEntries, warn);
 	const fullByName = new Map(fullDefs.map((def) => [def.name, def] as const));
-	const activeMcpNames = mapMcpCatalogNames(input.activeEntries).map(({ name }) => name);
+	const gatewayNames: string[] = [];
+	for (const gateway of input.proxyGateways ?? []) {
+		const tool = createMcpProxyTool(gateway.server, gateway.entries);
+		pi.registerTool(tool);
+		gatewayNames.push(tool.name);
+	}
+	for (const tool of input.utilityTools ?? []) {
+		pi.registerTool(tool);
+		gatewayNames.push(tool.name);
+	}
+	const activeMcpNames = [...mapMcpCatalogNames(input.activeEntries).map(({ name }) => name), ...gatewayNames];
 	const reference = pi.getActiveTools();
 	// Base tools carry over; any stale mcp_* names from a prior generation are
 	// dropped (membership = base + the intended mcp set; reference orders only).
@@ -80,7 +98,10 @@ export function registerMcpTierBTools(
 	if (!input.searchMode) {
 		registerToolsPreservingActiveSet(pi, fullDefs, orderActiveSet([...currentBase, ...activeMcpNames], reference));
 		// Direct mode: everything registerable is already active, nothing to replay.
-		return { searchable, rehydrateFromHistory: NOOP_REHYDRATE };
+		const activateDirect = (names: readonly string[]): void => {
+			pi.setActiveTools(orderActiveSet(unionStable(pi.getActiveTools(), names), pi.getActiveTools()));
+		};
+		return { activate: activateDirect, searchable, rehydrateFromHistory: NOOP_REHYDRATE };
 	}
 
 	const stubSwap = input.settings.stubSwap === true;
@@ -95,6 +116,11 @@ export function registerMcpTierBTools(
 		setActiveTools: activateMcpTools,
 	});
 	const registeredNames = new Set(fullDefs.map((def) => def.name));
+	const activate = (names: readonly string[]): void => {
+		const known = names.filter((name) => registeredNames.has(name));
+		if (known.length === 0) return;
+		activateMcpTools(unionStable(pi.getActiveTools(), known));
+	};
 	const rehydrateFromHistory = (messages: readonly unknown[]): string[] => {
 		const restored = rehydrateActiveToolsFromHistory(messages, registeredNames);
 		const current = pi.getActiveTools();
@@ -114,7 +140,7 @@ export function registerMcpTierBTools(
 		// (an accepted cache miss).
 		const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...activeMcpNames], reference);
 		registerToolsPreservingActiveSet(pi, fullDefs, active);
-		return { searchable, rehydrateFromHistory };
+		return { activate, searchable, rehydrateFromHistory };
 	}
 
 	// stubSwap: every search-mode tool is registered as a tiny stub and kept
@@ -127,7 +153,7 @@ export function registerMcpTierBTools(
 	});
 	const active = orderActiveSet([...currentBase, MCP_SEARCH_TOOL_NAME, ...fullDefs.map((def) => def.name)], reference);
 	registerToolsPreservingActiveSet(pi, toRegister, active);
-	return { searchable, rehydrateFromHistory };
+	return { activate, searchable, rehydrateFromHistory };
 }
 
 function swapStubsToFull(
