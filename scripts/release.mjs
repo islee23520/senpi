@@ -17,7 +17,7 @@
  *      same-day re-releases looks like a prerelease tag to npm.
  *   4. Run `scripts/sync-versions.js` to propagate the new version to source
  *      inter-package deps, then refresh `package-lock.json`.
- *   5. Regenerate AI model artifacts and `packages/coding-agent/npm-shrinkwrap.json`.
+ *   5. Regenerate AI model artifacts and `packages/coding-agent/publish-deps.lock.json`.
  *   6. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
  *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
  *      (`### Added`, `### Fixed`, ...) for re-insertion in step 8.

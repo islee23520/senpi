@@ -36,7 +36,7 @@ function writePackage(root, name) {
 function writeShrinkwrap(root, packages) {
 	const codingAgentDir = join(root, "packages", "coding-agent");
 	mkdirSync(codingAgentDir, { recursive: true });
-	writeJson(join(codingAgentDir, "npm-shrinkwrap.json"), {
+	writeJson(join(codingAgentDir, "publish-deps.lock.json"), {
 		name: "@code-yeongyu/senpi",
 		version: "0.0.0",
 		lockfileVersion: 3,
@@ -124,13 +124,45 @@ describe("assertSenpiPackedWorkspaceFiles", () => {
 	it("rejects senpi package metadata that omits bundled workspace files", () => {
 		// Given
 		const packed = {
-			files: [{ path: "package/dist/cli.js" }, { path: "package/npm-shrinkwrap.json" }],
+			files: [{ path: "package/dist/cli.js" }, { path: "package/CHANGELOG.md" }],
 		};
 
 		// When / Then
 		assert.throws(
 			() => assertSenpiPackedWorkspaceFiles(packed),
 			/package tarball is missing bundled workspace files: .*@earendil-works\/pi-ai/,
+		);
+	});
+
+	it("rejects a packed tarball that ships npm-shrinkwrap.json", () => {
+		// Given: a shipped npm-shrinkwrap.json is fatal — npm treats it as the complete
+		// locked tree and never installs the non-bundled direct deps (cross-spawn, the
+		// MCP sdk, ...), so the installed CLI dies with ERR_MODULE_NOT_FOUND.
+		const hostPrebuild = nativePrebuildFile(nativePrebuildTarget());
+		const packed = {
+			files: [
+				{ path: "package/dist/cli.js" },
+				{ path: "package/npm-shrinkwrap.json" },
+				{ path: "package/node_modules/@earendil-works/pi-agent-core/package.json" },
+				{ path: "package/node_modules/@earendil-works/pi-agent-core/dist/index.js" },
+				{ path: "package/node_modules/@earendil-works/pi-ai/package.json" },
+				{ path: "package/node_modules/@earendil-works/pi-ai/dist/index.js" },
+				{ path: "package/node_modules/@earendil-works/pi-pty/package.json" },
+				{ path: "package/node_modules/@earendil-works/pi-pty/dist/index.js" },
+				{ path: "package/node_modules/@earendil-works/pi-pty/native/index.js" },
+				{ path: `package/node_modules/@earendil-works/pi-pty/${hostPrebuild}` },
+				{ path: "package/node_modules/@earendil-works/pi-tui/package.json" },
+				{ path: "package/node_modules/@earendil-works/pi-tui/dist/index.js" },
+				{ path: "package/node_modules/@code-yeongyu/senpi-codemode/package.json" },
+				{ path: "package/node_modules/@code-yeongyu/senpi-codemode/src/index.ts" },
+				{ path: "package/node_modules/@code-yeongyu/senpi-codemode/src/kernels/py/prelude.py" },
+			],
+		};
+
+		// When / Then
+		assert.throws(
+			() => assertSenpiPackedWorkspaceFiles(packed),
+			/must not ship npm-shrinkwrap\.json/,
 		);
 	});
 

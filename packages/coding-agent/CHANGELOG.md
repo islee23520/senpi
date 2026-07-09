@@ -11,6 +11,7 @@
 ### Fixed
 
 - Tool results are no longer head/tail-truncated below the emergency context threshold; the model now sees full tool output until context genuinely runs out (session 019f45c0 regression).
+- Fixed `npm install @code-yeongyu/senpi` shipping a broken dependency tree: the published tarball no longer includes `npm-shrinkwrap.json`, which (combined with `bundleDependencies`) made npm treat the bundled subtree as the complete locked tree and skip installing non-bundled direct deps like `@modelcontextprotocol/sdk` and `cross-spawn`, crashing the CLI at startup with `ERR_MODULE_NOT_FOUND`. The publish/bundle staging manifest is now generated as `publish-deps.lock.json` (never packed), and a pack guard prevents any future `npm-shrinkwrap.json` from being shipped.
 
 ### Removed
 

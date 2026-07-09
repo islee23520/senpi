@@ -8,7 +8,14 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const codingAgentDir = join(repoRoot, "packages/coding-agent");
 const rootLockfilePath = join(repoRoot, "package-lock.json");
-const shrinkwrapPath = join(codingAgentDir, "npm-shrinkwrap.json");
+// NOT npm-shrinkwrap.json on purpose: npm force-packs any file literally named
+// npm-shrinkwrap.json, and shipping one alongside bundleDependencies makes npm treat
+// the bundled subtree as the complete locked tree and drop the non-bundled direct deps
+// at install time (ERR_MODULE_NOT_FOUND). This is the publish/bundle staging manifest
+// (consumed by copyPublishDependencies) plus the release-dep install-script allowlist
+// gate; it is intentionally NOT shipped in the tarball.
+const manifestRelPath = "packages/coding-agent/publish-deps.lock.json";
+const shrinkwrapPath = join(repoRoot, manifestRelPath);
 const internalPackagePrefixes = ["@earendil-works/pi-", "@code-yeongyu/senpi-codemode"];
 const allowedInstallScriptPackages = new Map([
 	["@google/genai@1.52.0", "preinstall is a no-op in the published package"],
@@ -341,23 +348,23 @@ try {
 
 	if (checkOnly) {
 		if (!existsSync(shrinkwrapPath)) {
-			console.error("packages/coding-agent/npm-shrinkwrap.json is missing.");
+			console.error(`${manifestRelPath} is missing.`);
 			console.error("Run: npm run shrinkwrap:coding-agent");
 			process.exit(1);
 		}
 		const current = readFileSync(shrinkwrapPath, "utf8");
 		if (current !== content) {
-			console.error("packages/coding-agent/npm-shrinkwrap.json is out of date.");
+			console.error(`${manifestRelPath} is out of date.`);
 			console.error("Run: npm run shrinkwrap:coding-agent");
 			process.exit(1);
 		}
-		console.log("packages/coding-agent/npm-shrinkwrap.json is up to date.");
+		console.log(`${manifestRelPath} is up to date.`);
 	} else {
 		writeFileSync(shrinkwrapPath, content);
 		const packageCount = Object.keys(shrinkwrap.packages).length - 1;
 		const platformPackageCount = Object.values(shrinkwrap.packages).filter((entry) => entry.os || entry.cpu || entry.libc).length;
 		console.log(
-			`Wrote packages/coding-agent/npm-shrinkwrap.json (${packageCount} packages, ${platformPackageCount} platform-specific).`,
+			`Wrote ${manifestRelPath} (${packageCount} packages, ${platformPackageCount} platform-specific).`,
 		);
 	}
 } catch (error) {
