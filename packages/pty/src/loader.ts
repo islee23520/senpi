@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,11 +66,26 @@ export const NATIVE_PTY_PACKAGE_VERSION = readPackageVersion();
 const SEMVER_CORE_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
 
 function readPackageVersion(): string {
-	const packageMetadata = cjsRequire("../package.json");
-	if (!isRecord(packageMetadata) || typeof packageMetadata.version !== "string") {
-		throw new Error("@earendil-works/pi-pty package.json is missing a string version");
+	// node/tsx/tarball layouts: the sibling `../package.json` resolves normally.
+	try {
+		const packageMetadata = cjsRequire("../package.json");
+		if (isRecord(packageMetadata) && typeof packageMetadata.version === "string") {
+			return packageMetadata.version;
+		}
+	} catch {
+		// Compiled Bun binary: `../package.json` is not in the embedded FS. Fall through.
 	}
-	return packageMetadata.version;
+	// Compiled Bun binary: the release ships package.json beside the executable. All
+	// workspace packages are lockstep-versioned, so the sibling version matches pty's.
+	try {
+		const parsed: unknown = JSON.parse(readFileSync(join(dirname(process.execPath), "package.json"), "utf-8"));
+		if (isRecord(parsed) && typeof parsed.version === "string") {
+			return parsed.version;
+		}
+	} catch {
+		// No readable sibling package.json either.
+	}
+	throw new Error("@earendil-works/pi-pty package.json is missing a string version");
 }
 
 export function getNativePtySentinelExport(packageVersion: string = NATIVE_PTY_PACKAGE_VERSION): string {
