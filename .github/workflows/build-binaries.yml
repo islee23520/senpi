@@ -223,14 +223,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      # Build only — the tagged commit already passed the required "Check and test"
+      # status gate on main (full `npm run check` + `npm test`). Re-running the whole
+      # workspace test suite here is redundant and, on this contended publish runner,
+      # its subprocess-heavy suites (app-server/daemon, MCP, PTY) leak handles and hang
+      # the job. Build produces the dist artifacts `scripts/publish.mjs` bundles.
       - name: Build
         run: npm run build
-
-      - name: Check
-        run: npm run check
-
-      - name: Test
-        run: npm test
 
       - name: Upgrade npm for trusted publishing
         run: |
