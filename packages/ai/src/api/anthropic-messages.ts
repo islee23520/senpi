@@ -1649,7 +1649,7 @@ function convertMessages(
 						blocks.push({
 							type: "thinking",
 							thinking: block.thinking,
-							signature: block.thinkingSignature,
+							signature: thinkingSignature,
 						});
 					}
 				} else if (block.type === "toolCall") {
