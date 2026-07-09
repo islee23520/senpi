@@ -1486,7 +1486,7 @@ export const OPENROUTER_MODELS = {
 			cacheWrite: 0,
 		},
 		contextWindow: 1048576,
-		maxTokens: 512000,
+		maxTokens: 131072,
 	} satisfies Model<"openai-completions">,
 	"mistralai/codestral-2508": {
 		id: "mistralai/codestral-2508",
@@ -1876,9 +1876,9 @@ export const OPENROUTER_MODELS = {
 		reasoning: true,
 		input: ["text", "image"],
 		cost: {
-			input: 0.65,
+			input: 0.66,
 			output: 3.41,
-			cacheRead: 0.14,
+			cacheRead: 0.15,
 			cacheWrite: 0,
 		},
 		contextWindow: 262144,
@@ -4829,9 +4829,9 @@ export const OPENROUTER_MODELS = {
 		reasoning: true,
 		input: ["text", "image"],
 		cost: {
-			input: 0.65,
+			input: 0.66,
 			output: 3.41,
-			cacheRead: 0.14,
+			cacheRead: 0.15,
 			cacheWrite: 0,
 		},
 		contextWindow: 262144,
