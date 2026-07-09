@@ -34,6 +34,8 @@
 
 ### Changed
 
+- Tool-result truncation markers now include retrieval guidance (re-run with a narrower range); legacy markers remain parseable.
+
 ### Fixed
 
 - Fixed context-overflow recovery for configured upstream model aliases, so a selected alias such as `gpt-5.5-fast` can auto-compact and retry when the provider reports the wire model `gpt-5.5`.

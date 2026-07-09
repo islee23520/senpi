@@ -4,7 +4,7 @@ import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 const PER_RESULT_TRUNCATE_THRESHOLD_BYTES = 4096;
 const TRUNCATION_HEAD_CHARS = 800;
 const TRUNCATION_TAIL_CHARS = 400;
-const TRUNCATION_MARKER_RE = /<truncated:\d+ bytes original>/;
+const TRUNCATION_MARKER_RE = /<truncated:\d+ bytes original[^>]*>/;
 
 function utf8Bytes(text: string): number {
 	return new TextEncoder().encode(text).length;
@@ -31,7 +31,7 @@ function totalTokens(results: AgentToolResult<unknown>[]): number {
 }
 
 function buildMarker(originalBytes: number): string {
-	return `<truncated:${originalBytes} bytes original>`;
+	return `<truncated:${originalBytes} bytes original; middle elided to save context - re-run this tool with a narrower range (read offset/limit or a filtered command) to retrieve the elided content>`;
 }
 
 function truncateTextBlock(block: TextContent, headChars: number, tailChars: number): TextContent | null {
