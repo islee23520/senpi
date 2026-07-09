@@ -477,7 +477,11 @@ export const streamSimple: StreamFunction<"openai-codex-responses", SimpleStream
 	const base = buildBaseOptions(model, context, options, apiKey);
 	const clampedReasoning = options?.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
 	const reasoningEffort =
-		clampedReasoning === "off" ? undefined : clampMaxForOpenAI(clampedReasoning, supportsXhigh(model));
+		clampedReasoning === "off"
+			? undefined
+			: clampedReasoning === "max" && model.thinkingLevelMap?.max !== undefined
+				? "max"
+				: clampMaxForOpenAI(clampedReasoning, supportsXhigh(model));
 
 	return stream(model, context, {
 		...base,
