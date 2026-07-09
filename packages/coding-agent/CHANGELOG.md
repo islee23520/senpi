@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Tool results are no longer head/tail-truncated below the emergency context threshold; the model now sees full tool output until context genuinely runs out (session 019f45c0 regression).
+
 ### Removed
 
 ## [2026.7.9] - 2026-07-09
