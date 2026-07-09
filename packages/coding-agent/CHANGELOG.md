@@ -24,6 +24,8 @@
 - Counted context-visible custom messages in compaction budgeting.
 - Avoided Windows context-file discovery hangs.
 - Applied `modelOverrides` to extension-provided models.
+- Fixed upstream-merge regressions that could run queued follow-up or goal-continuation prompts after aborted turns, drop context-exclusion filtering during compaction, or show stale MCP diagnostics.
+- Restored exact comma-formatted token counts in the interactive footer.
 - Fixed native clipboard image handling in Bun releases.
 - Prevented double-selecting a fork menu entry.
 - Cleared label timestamp cache state when starting new sessions.
