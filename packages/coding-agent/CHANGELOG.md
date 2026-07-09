@@ -6,6 +6,8 @@
 
 ### Changed
 
+- Tool-result truncation markers now include retrieval guidance (re-run with a narrower range); legacy markers remain parseable.
+
 ### Fixed
 
 - Tool results are no longer head/tail-truncated below the emergency context threshold; the model now sees full tool output until context genuinely runs out (session 019f45c0 regression).
