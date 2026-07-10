@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 
+vi.mock("../src/utils/version-check.ts", () => ({
+	checkForNewPiVersion: vi.fn(async () => undefined),
+	getReleaseChangelogUrl: vi.fn((version: string) => `https://example.invalid/releases/${version}`),
+}));
+
 type SubmitContext = {
-	defaultEditor: { onSubmit?: (text: string) => void };
+	defaultEditor: { onSubmit?: (text: string) => void | Promise<void> };
 	editor: {
 		addToHistory?: (text: string) => void;
 		setText: (text: string) => void;
@@ -24,9 +29,28 @@ type InputContext = {
 	pendingUserInputs: string[];
 };
 
+type RunContext = {
+	init: () => Promise<void>;
+	version: string;
+	options: Record<string, never>;
+	session: {
+		modelRegistry: { getError: () => string | undefined };
+		prompt: (text: string, options?: unknown) => Promise<void>;
+	};
+	checkForPackageUpdates: () => Promise<string[]>;
+	checkTmuxKeyboardSetup: () => Promise<string | undefined>;
+	maybeWarnAboutAnthropicSubscriptionAuth: () => Promise<void>;
+	getUserInput: () => Promise<string>;
+	showNewVersionNotification: (version: string) => void;
+	showPackageUpdateNotification: (packages: string[]) => void;
+	showWarning: (message: string) => void;
+	showError: (message: string) => void;
+};
+
 type InteractiveModePrivate = {
 	setupEditorSubmitHandler(this: SubmitContext): void;
 	getUserInput(this: InputContext): Promise<string>;
+	run(this: RunContext): Promise<void>;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrivate;
@@ -70,5 +94,39 @@ describe("InteractiveMode startup input", () => {
 		await expect(interactiveModePrototype.getUserInput.call(context)).resolves.toBe("queued prompt");
 		expect(context.onInputCallback).toBeUndefined();
 		expect(context.pendingUserInputs).toEqual([]);
+	});
+
+	it("preserves steer intent when the main loop drains queued input", async () => {
+		// Given a queued prompt followed by a sentinel that stops the infinite loop.
+		const stopMainLoop = new Error("stop interactive loop");
+		const prompt = vi.fn(async (_text: string, _options?: unknown) => {});
+		const getUserInput = vi
+			.fn<() => Promise<string>>()
+			.mockResolvedValueOnce("queued prompt")
+			.mockRejectedValueOnce(stopMainLoop);
+		const context: RunContext = {
+			init: vi.fn(async () => {}),
+			version: "test",
+			options: {},
+			session: {
+				modelRegistry: { getError: vi.fn(() => undefined) },
+				prompt,
+			},
+			checkForPackageUpdates: vi.fn(async (): Promise<string[]> => []),
+			checkTmuxKeyboardSetup: vi.fn(async () => undefined),
+			maybeWarnAboutAnthropicSubscriptionAuth: vi.fn(async () => {}),
+			getUserInput,
+			showNewVersionNotification: vi.fn(),
+			showPackageUpdateNotification: vi.fn(),
+			showWarning: vi.fn(),
+			showError: vi.fn(),
+		};
+
+		// When the real run loop drains that prompt.
+		await expect(interactiveModePrototype.run.call(context)).rejects.toBe(stopMainLoop);
+
+		// Then dispatch retains steer intent in case a continuation became active.
+		expect(prompt).toHaveBeenCalledTimes(1);
+		expect(prompt).toHaveBeenCalledWith("queued prompt", { streamingBehavior: "steer" });
 	});
 });
