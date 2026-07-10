@@ -132,7 +132,7 @@ function writeFakeNpm(path) {
 
 function writeLocalReleaseFixture(repoRoot) {
 	writeJson(join(repoRoot, "package.json"), { name: "senpi-monorepo", private: true });
-	writeJson(join(repoRoot, "packages", "coding-agent", "npm-shrinkwrap.json"), {
+	writeJson(join(repoRoot, "packages", "coding-agent", "publish-deps.lock.json"), {
 		lockfileVersion: 3,
 		packages: {},
 	});

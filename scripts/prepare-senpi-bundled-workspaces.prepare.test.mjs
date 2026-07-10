@@ -24,7 +24,7 @@ function writeJson(path, value) {
 }
 
 function writeShrinkwrap(root, packages) {
-	writeJson(join(root, "packages", "coding-agent", "npm-shrinkwrap.json"), {
+	writeJson(join(root, "packages", "coding-agent", "publish-deps.lock.json"), {
 		name: "@code-yeongyu/senpi",
 		version: "0.0.0",
 		lockfileVersion: 3,
