@@ -180,4 +180,99 @@ describe("eval renderer preview", () => {
 		expect.soft(visibleText).not.toMatch(/\bearlier\b/i);
 		expect.soft(visibleText).not.toMatch(/ctrl|to expand|to collapse/i);
 	});
+
+	it("Given expanded code beyond the former finite boundary when rendered then the first and last lines remain visible", () => {
+		// Given
+		const middleLineCount = 999_999;
+		const givenArgs = {
+			language: "js",
+			code: `first-expanded-line\n${"middle-expanded-line\n".repeat(middleLineCount)}last-expanded-line`,
+		} satisfies Parameters<typeof renderEvalCall>[0];
+
+		// When
+		const lines = renderEvalCall(givenArgs, undefined, callContext({ expanded: true })).render(80);
+
+		// Then
+		expect.soft(lines).toHaveLength(middleLineCount + 3);
+		expect.soft(lines[1]).toBe("first-expanded-line");
+		expect.soft(lines.at(-1)).toBe("last-expanded-line");
+	});
+
+	it("Given a retained nested tool call with a huge multiline error when collapsed then detail is bounded and expandable", () => {
+		// Given
+		const errorLines = [
+			"first-error-line",
+			...Array.from({ length: 2_048 }, (_, index) => `error-detail-${index + 1}-${"x".repeat(32)}`),
+			"last-error-line",
+		];
+		const givenResult = evalResult(
+			{
+				language: "js",
+				durationMs: 1,
+				toolCalls: [{ name: "massive", ok: false, error: errorLines.join("\n") }],
+				truncated: false,
+			},
+			"complete",
+		);
+
+		// When
+		const collapsedLines = renderEvalResult(
+			givenResult,
+			{ expanded: false, isPartial: false },
+			undefined,
+			resultContext(undefined, false),
+		).render(80);
+		const expandedLines = renderEvalResult(
+			givenResult,
+			{ expanded: true, isPartial: false },
+			undefined,
+			resultContext({ expanded: true }),
+		).render(80);
+
+		// Then
+		const collapsedToolStart = collapsedLines.findIndex((line) => line.includes("tool.massive"));
+		const collapsedToolLines = collapsedLines.slice(collapsedToolStart);
+		const collapsedText = collapsedToolLines.join("\n");
+		const expandedText = expandedLines.join("\n");
+		expect(collapsedToolStart).toBeGreaterThanOrEqual(0);
+		expect(collapsedToolLines.length).toBeLessThanOrEqual(4);
+		expect(collapsedText).toContain("tool.massive");
+		expect(collapsedText).toContain("error");
+		expect(collapsedText).toContain("[tool error omitted]");
+		expect(collapsedText).not.toContain("last-error-line");
+		expect(expandedText).toContain("tool.massive");
+		expect(expandedText).toContain("last-error-line");
+		expect(expandedText).not.toContain("[tool error omitted]");
+	});
+
+	it("Given an emoji across the old UTF-16 error boundary when collapsed then the complete code point is preserved", () => {
+		// Given
+		const givenResult = evalResult(
+			{
+				language: "js",
+				durationMs: 1,
+				toolCalls: [{ name: "unicode", ok: false, error: `${"x".repeat(511)}🙂${"tail".repeat(25_000)}` }],
+				truncated: false,
+			},
+			"complete",
+		);
+
+		// When
+		const lines = renderEvalResult(
+			givenResult,
+			{ expanded: false, isPartial: false },
+			undefined,
+			resultContext(undefined, false),
+		).render(2_048);
+
+		// Then
+		const toolStart = lines.findIndex((line) => line.includes("tool.unicode"));
+		const toolLines = lines.slice(toolStart);
+		const toolText = toolLines.join("\n");
+		expect(toolStart).toBeGreaterThanOrEqual(0);
+		expect(toolLines.length).toBeLessThanOrEqual(4);
+		expect(toolText).toContain("🙂");
+		expect(toolText).not.toContain("�");
+		expect(toolText).not.toMatch(/[\uD800-\uDFFF]/u);
+	});
 });

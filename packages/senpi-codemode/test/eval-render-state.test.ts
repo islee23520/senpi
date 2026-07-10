@@ -40,6 +40,41 @@ describe("eval renderer state", () => {
 		expect.soft(metadataText).toContain("took 11ms");
 	});
 
+	it("Given a final result that completed within one millisecond when rendered then zero duration is shown", () => {
+		// Given
+		const givenResult = evalResult({ language: "js", durationMs: 0, toolCalls: [], truncated: false }, "complete");
+
+		// When
+		const component = renderEvalResult(
+			givenResult,
+			{ expanded: false, isPartial: false },
+			undefined,
+			resultContext(undefined, false),
+		);
+
+		// Then
+		expect(renderLines(component)).toContain("took 0ms");
+	});
+
+	it("Given a partial result with elapsed duration when rendered then timing remains hidden", () => {
+		// Given
+		const givenResult = evalResult(
+			{ language: "js", durationMs: 17, toolCalls: [], truncated: false },
+			"still running",
+		);
+
+		// When
+		const component = renderEvalResult(
+			givenResult,
+			{ expanded: false, isPartial: true },
+			undefined,
+			resultContext(undefined, false),
+		);
+
+		// Then
+		expect(renderLines(component).join("\n")).not.toContain("took");
+	});
+
 	it("Given empty text output when rendered then no-output marker is shown", () => {
 		// Given
 		const givenResult = evalResult({ language: "js", durationMs: 1, toolCalls: [], truncated: false }, "");

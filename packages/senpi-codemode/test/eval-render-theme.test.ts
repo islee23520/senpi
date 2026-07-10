@@ -1,7 +1,7 @@
 import { Theme, type ThemeColor } from "@code-yeongyu/senpi";
 import { describe, expect, it } from "vitest";
-import { renderEvalResult } from "../src/tool/render.ts";
-import { evalResult, resultContext } from "./eval-render-fixtures.ts";
+import { renderEvalCall, renderEvalResult } from "../src/tool/render.ts";
+import { callContext, evalResult, resultContext } from "./eval-render-fixtures.ts";
 
 const FG_COLORS = {
 	accent: "#010101",
@@ -139,5 +139,52 @@ describe("eval renderer theme hierarchy", () => {
 		expect(successLine.slice(0, TEST_THEME.getFgAnsi("success").length)).not.toBe(
 			failedLine.slice(0, TEST_THEME.getFgAnsi("success").length),
 		);
+	});
+
+	it("Given hidden code output and tool calls when themed then every count row is muted", () => {
+		// Given
+		const code = Array.from({ length: 6 }, (_, index) => `code-${index + 1}`).join("\n");
+		const output = Array.from({ length: 10 }, (_, index) => `output-${index + 1}`).join("\n");
+		const result = evalResult(
+			{
+				language: "js",
+				durationMs: 1,
+				toolCalls: Array.from({ length: 6 }, (_, index) => ({ name: `call-${index + 1}`, ok: true })),
+				truncated: false,
+			},
+			output,
+		);
+
+		// When
+		const lines = [
+			...renderEvalCall({ language: "js", code }, TEST_THEME, callContext()).render(80),
+			...renderEvalResult(result, { expanded: false, isPartial: false }, TEST_THEME, resultContext()).render(80),
+		];
+
+		// Then
+		expectStartsWithColor(requiredLine(lines, "2 earlier code lines"), "muted");
+		expectStartsWithColor(requiredLine(lines, "2 earlier output lines"), "muted");
+		expectStartsWithColor(requiredLine(lines, "1 earlier tool call"), "muted");
+	});
+
+	it("Given an omitted collapsed tool error when themed then its omission marker is muted", () => {
+		// Given
+		const result = evalResult(
+			{
+				language: "js",
+				durationMs: 1,
+				toolCalls: [{ name: "write", ok: false, error: "denied\n".repeat(1_000) }],
+				truncated: false,
+			},
+			"complete",
+		);
+
+		// When
+		const lines = renderEvalResult(result, { expanded: false, isPartial: false }, TEST_THEME, resultContext()).render(
+			80,
+		);
+
+		// Then
+		expectStartsWithColor(requiredLine(lines, "[tool error omitted]"), "muted");
 	});
 });
