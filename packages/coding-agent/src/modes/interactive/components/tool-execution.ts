@@ -51,7 +51,7 @@ export class ToolExecutionComponent extends Container {
 	private callRendererComponent?: Component;
 	private resultRendererComponent?: Component;
 	private rendererState: any = {};
-	private imageComponents: Image[] = [];
+	private imageComponents: Component[] = [];
 	private imageSpacers: Spacer[] = [];
 	private toolName: string;
 	private toolCallId: string;
@@ -232,6 +232,7 @@ export class ToolExecutionComponent extends Container {
 			convertToPng(img.data, img.mimeType).then((converted) => {
 				if (converted) {
 					this.convertedImages.set(index, converted);
+					this.lastDisplaySignature = undefined;
 					this.updateDisplay();
 					this.ui.requestRender();
 				}
@@ -428,7 +429,17 @@ export class ToolExecutionComponent extends Container {
 					const converted = this.convertedImages.get(i);
 					const imageData = converted?.data ?? img.data;
 					const imageMimeType = converted?.mimeType ?? img.mimeType;
-					if (caps.images === "kitty" && imageMimeType !== "image/png") continue;
+					if (caps.images === "kitty" && imageMimeType !== "image/png") {
+						if (this.getResultRenderer()) {
+							const spacer = new Spacer(1);
+							this.addChild(spacer);
+							this.imageSpacers.push(spacer);
+							const fallback = new Text(theme.fg("toolOutput", `[image: ${imageMimeType}]`), 0, 0);
+							this.imageComponents.push(fallback);
+							this.addChild(fallback);
+						}
+						continue;
+					}
 
 					const spacer = new Spacer(1);
 					this.addChild(spacer);

@@ -1,11 +1,14 @@
 import { ProcessTerminal, resetCapabilitiesCache, setCapabilities, TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 const ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const TINY_JPEG =
+	"/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAACAAIDAREAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAVAQEBAAAAAAAAAAAAAAAAAAAGCf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AD3VTB3/2Q==";
+const INVALID_JPEG = Buffer.from("not-a-jpeg").toString("base64");
 
 describe("eval renderer image integration", () => {
 	beforeAll(() => {
@@ -52,5 +55,77 @@ describe("eval renderer image integration", () => {
 		// Then
 		expect(observedImageProtocol).toBe("kitty");
 		expect(rendered).toContain("\x1b_G");
+	});
+
+	it("Given Kitty when a valid JPEG conversion completes then the fallback is replaced by the native image", async () => {
+		// Given
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		const toolDefinition: ToolDefinition = {
+			name: "image_conversion_qa",
+			label: "image_conversion_qa",
+			description: "renderer image conversion transition test",
+			parameters: Type.Object({}),
+			execute: async () => ({ content: [], details: undefined }),
+			renderResult: () => ({ render: () => ["custom result"], invalidate: () => {} }),
+		};
+		const component = new ToolExecutionComponent(
+			"image_conversion_qa",
+			"eval-image-conversion",
+			{},
+			{ showImages: true },
+			toolDefinition,
+			new TUI(new ProcessTerminal()),
+			process.cwd(),
+		);
+		component.updateResult({
+			content: [{ type: "image", data: TINY_JPEG, mimeType: "image/jpeg" }],
+			details: { language: "js", durationMs: 1, toolCalls: [], truncated: false },
+			isError: false,
+		});
+		expect(component.render(80).join("\n")).toContain("[image: image/jpeg]");
+
+		// When
+		await vi.waitFor(
+			() => {
+				const rendered = component.render(80).join("\n");
+				expect(rendered).toContain("\x1b_G");
+				expect(rendered).not.toContain("[image: image/jpeg]");
+			},
+			{ timeout: 3000, interval: 10 },
+		);
+	});
+
+	it("Given Kitty when a custom renderer returns an invalid JPEG then the host renders an image fallback", () => {
+		// Given
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		const toolDefinition: ToolDefinition = {
+			name: "image_fallback_qa",
+			label: "image_fallback_qa",
+			description: "renderer image fallback test",
+			parameters: Type.Object({}),
+			execute: async () => ({ content: [], details: undefined }),
+			renderResult: () => ({ render: () => ["custom result"], invalidate: () => {} }),
+		};
+		const component = new ToolExecutionComponent(
+			"image_fallback_qa",
+			"eval-image-fallback",
+			{},
+			{ showImages: true },
+			toolDefinition,
+			new TUI(new ProcessTerminal()),
+			process.cwd(),
+		);
+		component.updateResult({
+			content: [{ type: "image", data: INVALID_JPEG, mimeType: "image/jpeg" }],
+			details: { language: "js", durationMs: 1, toolCalls: [], truncated: false },
+			isError: false,
+		});
+
+		// When
+		const rendered = component.render(80).join("\n");
+
+		// Then
+		expect(rendered).toContain("[image: image/jpeg]");
+		expect(rendered).not.toContain("\x1b_G");
 	});
 });
