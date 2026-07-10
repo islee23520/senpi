@@ -40,6 +40,37 @@ async function runCell(kernel: JavaScriptKernel, code: string, timeoutMs = 2_000
 }
 
 describe("JavaScriptKernel", () => {
+	it.each([
+		{
+			name: "worker",
+			expectedMode: "worker",
+			workerEntryUrl: new URL("../src/kernels/js/worker-entry.js", import.meta.url),
+		},
+		{
+			name: "inline fallback",
+			expectedMode: "inline",
+			workerEntryUrl: pathToFileURL(join(process.cwd(), "missing-characterization-worker.js")),
+		},
+	] satisfies readonly {
+		readonly name: string;
+		readonly expectedMode: JavaScriptKernelMode;
+		readonly workerEntryUrl: URL;
+	}[])("preserves the $name happy path", async ({ expectedMode, workerEntryUrl }) => {
+		const kernel = new JavaScriptKernel({
+			sessionId: `characterization-${expectedMode}`,
+			cwd: process.cwd(),
+			parallelPoolWidth: 2,
+			workerEntryUrl,
+		});
+		try {
+			const result = await kernel.run({ cellId: "characterization", code: "return 20 + 22", timeoutMs: 2_000 });
+			expect(kernel.mode).toBe(expectedMode);
+			expect(result).toMatchObject({ ok: true, valueRepr: "42" });
+		} finally {
+			await kernel.close();
+		}
+	});
+
 	it("persists state across cells and reset wipes it", async () => {
 		await withKernel(async (kernel) => {
 			await runCell(kernel, "const a = 1");
