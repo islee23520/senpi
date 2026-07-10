@@ -1,21 +1,19 @@
 import type { HostToKernelMessage, KernelToHostMessage } from "../../bridge/protocol.ts";
 import { createInlineWorker, type WorkerLike } from "./inline-worker.ts";
 import {
-	JavaScriptKernelClosedError,
+	assertJavaScriptKernelOpen,
 	type JavaScriptKernelMode,
 	type JavaScriptKernelOptions,
 	type JavaScriptRunInput,
-	type KernelOperation,
 	type LifecycleState,
+	type ResultMessage,
+	type ToolCallMessage,
 } from "./kernel-contract.ts";
 import { JavaScriptRunQueue, type PendingJavaScriptRun, stoppedResult } from "./run-queue.ts";
 import { bridgeError, spawnNodeWorker, WorkerStartupCancelledError, waitForReady } from "./worker-host.ts";
 
 export type { JavaScriptKernelMode, JavaScriptKernelOptions, JavaScriptRunInput } from "./kernel-contract.ts";
 export { JavaScriptKernelClosedError } from "./kernel-contract.ts";
-
-type ResultMessage = Extract<KernelToHostMessage, { type: "result" }>;
-type ToolCallMessage = Extract<KernelToHostMessage, { type: "tool-call" }>;
 
 export class JavaScriptKernel {
 	readonly #options: JavaScriptKernelOptions;
@@ -41,14 +39,14 @@ export class JavaScriptKernel {
 	}
 
 	async run(input: JavaScriptRunInput): Promise<ResultMessage> {
-		this.#assertOpen("run");
+		assertJavaScriptKernelOpen(this.#lifecycle, "run");
 		const promise = this.#runs.enqueue(input);
 		this.#activate();
 		return await promise;
 	}
 
 	async interrupt(reason = "interrupted"): Promise<void> {
-		this.#assertOpen("interrupt");
+		assertJavaScriptKernelOpen(this.#lifecycle, "interrupt");
 		const active = this.#runs.active;
 		const target = this.#runs.takeInterruptTarget();
 		if (!target) return;
@@ -58,9 +56,9 @@ export class JavaScriptKernel {
 	}
 
 	async reset(): Promise<void> {
-		this.#assertOpen("reset");
+		assertJavaScriptKernelOpen(this.#lifecycle, "reset");
 		await this.#terminate();
-		this.#assertOpen("reset");
+		assertJavaScriptKernelOpen(this.#lifecycle, "reset");
 		await this.#ensureReady();
 		this.#startNext();
 	}
@@ -87,10 +85,6 @@ export class JavaScriptKernel {
 		return await closePromise;
 	}
 
-	#assertOpen(operation: KernelOperation): void {
-		if (this.#lifecycle !== "open") throw new JavaScriptKernelClosedError(operation);
-	}
-
 	#activate(): void {
 		if (this.#activation || this.#lifecycle !== "open" || this.#runs.active || !this.#runs.hasWaiting) return;
 		const activation = this.#activateWhenReady();
@@ -112,7 +106,7 @@ export class JavaScriptKernel {
 	}
 
 	async #ensureReady(): Promise<void> {
-		this.#assertOpen("run");
+		assertJavaScriptKernelOpen(this.#lifecycle, "run");
 		if (!this.#ready) {
 			const generation = ++this.#generation;
 			const controller = new AbortController();

@@ -1,5 +1,8 @@
 import type { KernelToHostMessage } from "../../bridge/protocol.ts";
 
+export type ResultMessage = Extract<KernelToHostMessage, { type: "result" }>;
+export type ToolCallMessage = Extract<KernelToHostMessage, { type: "tool-call" }>;
+
 export type JavaScriptKernelMode = "worker" | "inline";
 
 export interface JavaScriptKernelOptions {
@@ -28,4 +31,8 @@ export class JavaScriptKernelClosedError extends Error {
 		super(`Cannot ${operation}: JavaScript kernel is closed`);
 		this.operation = operation;
 	}
+}
+
+export function assertJavaScriptKernelOpen(lifecycle: LifecycleState, operation: KernelOperation): void {
+	if (lifecycle !== "open") throw new JavaScriptKernelClosedError(operation);
 }
