@@ -1,34 +1,8 @@
-import type { BridgeConnectionConfig, KernelToHostMessage } from "../../bridge/protocol.ts";
-import type { KernelSpawnProcess } from "./process.ts";
-import { failedPythonResult, PythonKernelTransport, type PythonTransportResult } from "./transport.ts";
+import type { PendingRun, PythonKernelRunOptions, PythonKernelStartOptions, ResultMessage } from "./kernel-contract.ts";
+import { failedPythonResult, PythonKernelTransport } from "./transport.ts";
 
+export type { PythonKernelRunOptions, PythonKernelStartOptions } from "./kernel-contract.ts";
 export type { KernelChild, KernelSpawnOptions, KernelSpawnProcess } from "./process.ts";
-
-export interface PythonKernelStartOptions {
-	readonly interpreterPath: string;
-	readonly sessionId: string;
-	readonly cwd: string;
-	readonly connection: BridgeConnectionConfig;
-	readonly env?: NodeJS.ProcessEnv;
-	readonly startupTimeoutMs?: number;
-	readonly onMessage?: (message: KernelToHostMessage) => void;
-	readonly spawnProcess?: KernelSpawnProcess;
-}
-export interface PythonKernelRunOptions {
-	readonly cellId: string;
-	readonly code: string;
-	readonly timeoutMs?: number;
-}
-type ResultMessage = PythonTransportResult;
-interface PendingRun {
-	readonly input: PythonKernelRunOptions;
-	readonly resolve: (result: ResultMessage) => void;
-	readonly reject: (error: unknown) => void;
-	startedAt: number | null;
-	timeoutTimer: NodeJS.Timeout | null;
-	escalationTimer?: NodeJS.Timeout;
-	interruptReason?: string;
-}
 
 const startupTimeoutMs = 5_000;
 const interruptEscalationMs = 5_000;
