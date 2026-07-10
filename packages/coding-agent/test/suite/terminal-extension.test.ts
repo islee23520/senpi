@@ -4,7 +4,10 @@ import registerTerminalExtension from "../../src/core/extensions/builtin/termina
 import { TerminalManager } from "../../src/core/extensions/builtin/terminal/manager.ts";
 import { createPtyBashTool } from "../../src/core/extensions/builtin/terminal/tools/bash.ts";
 import { createBashInputTool } from "../../src/core/extensions/builtin/terminal/tools/bash-input.ts";
-import { createBashOutputTool } from "../../src/core/extensions/builtin/terminal/tools/bash-output.ts";
+import {
+	bashOutputSchema,
+	createBashOutputTool,
+} from "../../src/core/extensions/builtin/terminal/tools/bash-output.ts";
 import { createBashResizeTool } from "../../src/core/extensions/builtin/terminal/tools/bash-resize.ts";
 import type { TerminalToolContext } from "../../src/core/extensions/builtin/terminal/tools/context.ts";
 import { createKillBashTool } from "../../src/core/extensions/builtin/terminal/tools/kill-bash.ts";
@@ -219,7 +222,10 @@ describe("terminal builtin extension — bash_output robustness", () => {
 		await manager.stop(bashId);
 	});
 
-	it("an oversized timeout (1800 seconds) is clamped to a 300-second single-poll ceiling", async () => {
+	it("bounds an oversized timeout at the 300-second schema and runtime ceiling", async () => {
+		const timeoutSchema = bashOutputSchema.properties.timeout;
+		expect("maximum" in timeoutSchema ? timeoutSchema.maximum : undefined).toBe(300);
+
 		const bash = createPtyBashTool(ctx);
 		const output = createBashOutputTool(ctx);
 		const started = await bash.execute(
