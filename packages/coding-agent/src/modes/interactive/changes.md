@@ -1,5 +1,28 @@
 # changes
 
+## preserve steer intent when draining queued input (2026-07-10)
+
+### What changed
+
+- `interactive-mode.ts`: the classic TUI main loop dispatches drained user input with explicit `steer` behavior so an
+  automatic continuation that starts between input capture and dispatch queues the message instead of rejecting it as
+  an unspecified concurrent prompt.
+
+### Why
+
+- Input can be accepted while the session is idle and remain pending until the main loop resumes. If processing becomes
+  active during that interval, dropping the interactive queue intent surfaces a false `Agent is already processing`
+  error even though the user submitted through the TUI's steer path.
+
+### Why extension system couldn't handle this
+
+- The race occurs in `InteractiveMode.run()` after the built-in editor/input queue hands control back to the main loop;
+  extensions cannot replace that host-owned dispatch boundary.
+
+### Expected merge conflict zones
+
+- LOW: `interactive-mode.ts` around the main `getUserInput()` / `session.prompt()` loop.
+
 ## live hook identity in tool hook status rows (2026-07-04)
 
 ### What changed
