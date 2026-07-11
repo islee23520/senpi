@@ -10,7 +10,9 @@
  *
  * Flow (matches AGENTS.md "Releasing"):
  *   1. Pre-flight: branch must be `main`; working tree must be clean (--dry-run warns
- *      and continues so the preview is usable during development).
+ *      and continues so the preview is usable during development). Then restore a
+ *      CI-parity dependency tree (`npm ci`) if a prior publish/local-release left a
+ *      stale bundled workspace overlay in `packages/coding-agent/node_modules`.
  *   2. Resolve version: `--version` override or `computeNextVersion()` from calver.mjs.
  *   3. Write `version` into all release workspace package.json files directly (TAB indent,
  *      trailing newline). `npm version` is intentionally NOT used; the `-N` suffix on
@@ -21,13 +23,17 @@
  *   6. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
  *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
  *      (`### Added`, `### Fixed`, ...) for re-insertion in step 8.
- *   7. Run `npm run check` and `npm test`.
+ *   7. Run `npm run check`, then `npm run build`, then `npm test` — mirroring
+ *      the CI "check → build → test" order so cross-package test imports
+ *      resolve against freshly built `dist/` instead of a stale prior build.
  *   8. Commit the release, tag it, re-insert a fresh `## [Unreleased]` block,
  *      commit the next-cycle changelog update, then push `main` and the new tag.
  *      GitHub Actions builds binaries and publishes from the pushed tag.
  */
 
 import { execFileSync } from "node:child_process";
+import { existsSync, lstatSync } from "node:fs";
+import { join } from "node:path";
 import { computeNextVersion } from "./calver.mjs";
 import {
 	runGenerateImageModels,
@@ -209,6 +215,34 @@ function gitPush(refspec, dryRun) {
 	runCommand("git", ["push", "origin", refspec]);
 }
 
+// `scripts/prepare-senpi-bundled-workspaces.mjs` (run by `npm run publish` and
+// the local-release smoke test) copies the built internal packages —
+// `@earendil-works/pi-tui`, `pi-ai`, `pi-agent-core`, `pi-pty` — into
+// `packages/coding-agent/node_modules` as REAL directories, shadowing the
+// workspace symlinks so the published tarball can bundle them. Left behind,
+// those copies go stale and win module resolution over the freshly built
+// workspace, so the release test gate's spawned-CLI tests (which resolve
+// `@earendil-works/pi-*` from coding-agent's own node_modules) load an old
+// build and fail — e.g. `SyntaxError: ... does not provide an export named
+// 'sanitizeTerminalLabel'`. CI never hits this because it starts from a clean
+// `npm ci`. Detect the stale overlay and restore the CI-parity dependency tree
+// before building and testing. Cheap when clean: only reinstalls when the
+// bundled overlay is actually present.
+function ensureCleanWorkspaceDeps(dryRun) {
+	const overlayMarker = join("packages", "coding-agent", "node_modules", "@earendil-works", "pi-tui");
+	const hasBundledOverlay = existsSync(overlayMarker) && !lstatSync(overlayMarker).isSymbolicLink();
+	if (!hasBundledOverlay) {
+		log("workspace dependency tree is clean (no bundled overlay)");
+		return;
+	}
+	if (dryRun) {
+		dryRunLog("npm ci (stale bundled workspace overlay detected)");
+		return;
+	}
+	log("npm ci (restoring CI-parity deps: stale bundled workspace overlay detected)");
+	runCommand("npm", ["ci"]);
+}
+
 function runCheck(dryRun) {
 	if (dryRun) {
 		dryRunLog("npm run check");
@@ -216,6 +250,15 @@ function runCheck(dryRun) {
 	}
 	log("npm run check");
 	runCommand("npm", ["run", "check"]);
+}
+
+function runBuild(dryRun) {
+	if (dryRun) {
+		dryRunLog("npm run build");
+		return;
+	}
+	log("npm run build");
+	runCommand("npm", ["run", "build"]);
 }
 
 function runTests(dryRun) {
@@ -235,6 +278,7 @@ function main() {
 	}
 
 	preflight(args.dryRun);
+	ensureCleanWorkspaceDeps(args.dryRun);
 
 	const version = resolveVersion(args);
 	const date = todayISO();
@@ -253,6 +297,7 @@ function main() {
 	runInstallLock(args.dryRun, runCommand, log, dryRunLog);
 	stampChangelogs(version, date, args.dryRun, capturedChangelogSubsections, log, dryRunLog);
 	runCheck(args.dryRun);
+	runBuild(args.dryRun);
 	runTests(args.dryRun);
 
 	stageChangedFiles(args.dryRun);
