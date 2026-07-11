@@ -8,12 +8,7 @@ import { type CodemodeSessionManager, createCodemodeSessionManager } from "../sr
 import type { InterpreterAvailability } from "../src/interpreters/detect.ts";
 import type { PythonKernelStartOptions } from "../src/kernels/py/kernel.ts";
 import type { EvalKernel, EvalKernelRunInput } from "../src/tool/types.ts";
-
-interface Deferred<T> {
-	readonly promise: Promise<T>;
-	readonly resolve: (value: T) => void;
-	readonly reject: (reason?: unknown) => void;
-}
+import { fakeExtensionContext } from "./eval/fakes.ts";
 
 interface SessionManagerHarness {
 	bridgeOptions: BridgeServerOptions | undefined;
@@ -29,11 +24,13 @@ class FakeKernel implements EvalKernel {
 	readonly closeStarted = Promise.withResolvers<void>();
 	readonly #closeGate: Promise<void> | undefined;
 	readonly #lifecycleEvents: string[] | undefined;
+	readonly #closeFailure: Error | undefined;
 	closeCount = 0;
 
-	constructor(closeGate?: Promise<void>, lifecycleEvents?: string[]) {
+	constructor(closeGate?: Promise<void>, lifecycleEvents?: string[], closeFailure?: Error) {
 		this.#closeGate = closeGate;
 		this.#lifecycleEvents = lifecycleEvents;
+		this.#closeFailure = closeFailure;
 	}
 
 	async run(input: EvalKernelRunInput): Promise<{
@@ -56,6 +53,7 @@ class FakeKernel implements EvalKernel {
 		this.#lifecycleEvents?.push("close-started");
 		this.closeStarted.resolve();
 		await this.#closeGate;
+		if (this.#closeFailure) throw this.#closeFailure;
 		this.#lifecycleEvents?.push("close-finished");
 	}
 }
@@ -192,6 +190,31 @@ describe("codemode session manager lifecycle", () => {
 		await expect(manager.getKernel("py", () => undefined)).rejects.toThrow("disposed");
 	});
 
+	it("closes the bridge and clears completion context before surfacing a kernel close failure", async () => {
+		// Given
+		const closeFailure = new FixtureError("kernel close failed");
+		const kernel = new FakeKernel(undefined, undefined, closeFailure);
+		harness.startKernel = async () => kernel;
+		const manager = await createManager([]);
+		manager.setContext?.(extensionContext(new AbortController().signal));
+		await manager.getKernel("py", () => undefined);
+
+		// When
+		const [outcome] = await Promise.allSettled([manager.dispose()]);
+
+		// Then
+		expect.soft(harness.bridgeCloseCount).toBe(1);
+		await expect(
+			bridgeOptions().onCompletion({ prompt: "after dispose", signal: new AbortController().signal }),
+		).rejects.toThrow("context is unavailable");
+		expect(outcome?.status).toBe("rejected");
+		if (outcome?.status !== "rejected") throw new FixtureError("session disposal unexpectedly succeeded");
+		expect(outcome.reason).toBeInstanceOf(AggregateError);
+		if (!(outcome.reason instanceof AggregateError))
+			throw new FixtureError("session disposal error was not aggregated");
+		expect(outcome.reason.errors).toEqual([closeFailure]);
+	});
+
 	it("aborts subprocess completion when the request signal aborts", async () => {
 		// Given
 		const request = new AbortController();
@@ -233,7 +256,7 @@ describe("codemode session manager lifecycle", () => {
 	});
 });
 
-function deferred<T>(): Deferred<T> {
+function deferred<T>() {
 	return Promise.withResolvers<T>();
 }
 
@@ -272,7 +295,7 @@ function abortingCompletion(
 }
 
 function extensionContext(signal: AbortSignal): ExtensionContext {
-	return Object.assign(Object.create(null), { signal });
+	return { ...fakeExtensionContext(), signal };
 }
 
 function bridgeOptions(): BridgeServerOptions {

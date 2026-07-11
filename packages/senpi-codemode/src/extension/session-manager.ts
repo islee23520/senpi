@@ -113,12 +113,22 @@ class DefaultCodemodeSessionManager implements CodemodeSessionManager {
 	async #disposeGeneration(): Promise<void> {
 		await Promise.allSettled(this.#kernelCreations.values());
 		const kernels = [...this.#kernels.values()];
+		const bridge = this.#bridge;
 		this.#kernels.clear();
 		this.#onMessageRefs.clear();
-		await Promise.all(kernels.map((kernel) => kernel.close()));
-		await this.#bridge?.close();
 		this.#bridge = undefined;
 		this.#context = undefined;
+		const failures: unknown[] = [];
+		for (const outcome of await Promise.allSettled(kernels.map((kernel) => kernel.close()))) {
+			if (outcome.status === "rejected") failures.push(outcome.reason);
+		}
+		if (bridge) {
+			const [outcome] = await Promise.allSettled([bridge.close()]);
+			if (outcome?.status === "rejected") failures.push(outcome.reason);
+		}
+		if (failures.length > 0) {
+			throw new AggregateError(failures, "Failed to dispose codemode session manager");
+		}
 	}
 
 	async #createAndStoreKernel(

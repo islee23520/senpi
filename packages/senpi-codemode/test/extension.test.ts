@@ -1,8 +1,9 @@
-import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@code-yeongyu/senpi";
+import type { ExtensionContext } from "@code-yeongyu/senpi";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CodemodeSessionManager } from "../src/extension/session-manager.ts";
-import senpiCodemode from "../src/index.ts";
+import senpiCodemode, { type CodemodeExtensionAPI } from "../src/index.ts";
 import type { EvalKernelResult, EvalKernelRunInput } from "../src/tool/types.ts";
+import { fakeExtensionContext } from "./eval/fakes.ts";
 
 interface RegisteredHandler {
 	readonly event: string;
@@ -12,19 +13,23 @@ interface RegisteredHandler {
 class FakePi {
 	readonly tools: string[] = [];
 	readonly handlers: RegisteredHandler[] = [];
-	registeredTool: Pick<ToolDefinition, "execute"> | undefined;
-	registerTool(tool: ToolDefinition): void {
+	registeredTool: Pick<Parameters<CodemodeExtensionAPI["registerTool"]>[0], "execute"> | undefined;
+	registerTool(tool: Parameters<CodemodeExtensionAPI["registerTool"]>[0]): void {
 		this.tools.push(tool.name);
 		if (tool.name === "eval") this.registeredTool = tool;
 	}
 	on(event: string, handler: RegisteredHandler["handler"]): void {
 		this.handlers.push({ event, handler });
 	}
+	async executeTool(): Promise<never> {
+		throw new Error("nested tool execution was not expected");
+	}
 }
 
 class DisposableManager implements CodemodeSessionManager {
 	readonly runControllers: AbortController[] = [];
 	readonly runStarted = Promise.withResolvers<void>();
+	#disposed = false;
 	disposeCount = 0;
 	getKernelCount = 0;
 	async getKernel(): Promise<{
@@ -34,6 +39,7 @@ class DisposableManager implements CodemodeSessionManager {
 		reset(): Promise<void>;
 		close(): Promise<void>;
 	}> {
+		if (this.#disposed) throw new Error("manager disposed");
 		this.getKernelCount++;
 		const controller = new AbortController();
 		this.runControllers.push(controller);
@@ -62,6 +68,7 @@ class DisposableManager implements CodemodeSessionManager {
 		};
 	}
 	async dispose(): Promise<void> {
+		this.#disposed = true;
 		this.disposeCount++;
 		for (const controller of this.runControllers) controller.abort();
 	}
@@ -71,41 +78,6 @@ class DisposableManager implements CodemodeSessionManager {
 	}> {
 		return { text: "ok", details: { model: "fake/fake-model", structured: false } };
 	}
-}
-
-const model = {
-	id: "fake-model",
-	name: "Fake Model",
-	provider: "fake",
-	api: "fake-api",
-	reasoning: false,
-	input: ["text"],
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-	contextWindow: 1000,
-	maxTokens: 100,
-};
-
-type FakeModel = typeof model;
-
-function context(
-	registry: { getApiKeyAndHeaders: (input: FakeModel) => Promise<unknown> },
-	currentModel?: FakeModel | null,
-): ExtensionContext {
-	return Object.assign(Object.create(null), {
-		model: currentModel === undefined ? model : (currentModel ?? undefined),
-		modelRegistry: registry,
-		signal: undefined,
-	});
-}
-
-function extensionApi(pi: FakePi): ExtensionAPI {
-	return Object.assign(Object.create(null), {
-		registerTool: (tool: ToolDefinition) => pi.registerTool(tool),
-		on: (event: string, handler: RegisteredHandler["handler"]) => pi.on(event, handler),
-		executeTool: async () => {
-			throw new Error("nested tool execution was not expected");
-		},
-	});
 }
 
 async function emit(pi: FakePi, event: string, payload: unknown, ctx: ExtensionContext): Promise<void> {
@@ -121,7 +93,7 @@ describe("senpi-codemode extension factory", () => {
 		const pi = new FakePi();
 		const managers: DisposableManager[] = [];
 
-		senpiCodemode(extensionApi(pi), {
+		senpiCodemode(pi, {
 			createSessionManager: () => {
 				const manager = new DisposableManager();
 				managers.push(manager);
@@ -136,14 +108,14 @@ describe("senpi-codemode extension factory", () => {
 	it("creates a fresh manager on start/reload and disposes on shutdown, switch, and fork", async () => {
 		const pi = new FakePi();
 		const managers: DisposableManager[] = [];
-		senpiCodemode(extensionApi(pi), {
+		senpiCodemode(pi, {
 			createSessionManager: () => {
 				const manager = new DisposableManager();
 				managers.push(manager);
 				return manager;
 			},
 		});
-		const ctx = context({ getApiKeyAndHeaders: vi.fn() });
+		const ctx = fakeExtensionContext();
 
 		await emit(pi, "session_start", { reason: "startup" }, ctx);
 		await emit(pi, "session_start", { reason: "reload" }, ctx);
@@ -156,14 +128,45 @@ describe("senpi-codemode extension factory", () => {
 		expect(managers).toHaveLength(4);
 		expect(managers.map((manager) => manager.disposeCount)).toEqual([1, 1, 1, 1]);
 	});
+
+	it("disposes a delayed startup manager instead of publishing it after shutdown", async () => {
+		// Given
+		const pi = new FakePi();
+		const creation = Promise.withResolvers<CodemodeSessionManager>();
+		const creationStarted = Promise.withResolvers<void>();
+		const manager = new DisposableManager();
+		senpiCodemode(pi, {
+			createSessionManager: () => {
+				creationStarted.resolve();
+				return creation.promise;
+			},
+		});
+		const ctx = fakeExtensionContext();
+		const startup = emit(pi, "session_start", { reason: "startup" }, ctx);
+		await creationStarted.promise;
+
+		// When
+		await emit(pi, "session_shutdown", {}, ctx);
+		creation.resolve(manager);
+		await startup;
+
+		// Then
+		expect(manager.disposeCount).toBe(1);
+		const tool = pi.registeredTool;
+		if (!tool) throw new Error("eval tool was not registered");
+		await expect(
+			tool.execute("after-shutdown", { language: "js", code: "1" }, undefined, undefined, ctx),
+		).rejects.toThrow("session has not started");
+		expect(manager.getKernelCount).toBe(0);
+	});
 });
 
 describe("senpi-codemode extension lifecycle", () => {
 	it("settles a mid-run cell as an error and rejects post-shutdown work", async () => {
 		const pi = new FakePi();
 		const manager = new DisposableManager();
-		senpiCodemode(extensionApi(pi), { createSessionManager: () => manager });
-		const ctx = context({ getApiKeyAndHeaders: vi.fn() });
+		senpiCodemode(pi, { createSessionManager: () => manager });
+		const ctx = fakeExtensionContext();
 		await emit(pi, "session_start", { reason: "startup" }, ctx);
 		const tool = pi.registeredTool;
 		expect(tool).toBeDefined();
