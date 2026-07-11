@@ -1,4 +1,12 @@
-import { type Component, Container, getCapabilities, Image, Spacer, Text } from "@earendil-works/pi-tui";
+import {
+	type Component,
+	Container,
+	getCapabilities,
+	Image,
+	Spacer,
+	sanitizeTerminalLabel,
+	Text,
+} from "@earendil-works/pi-tui";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
 import type { ToolExecutionResult } from "./tool-execution-types.ts";
@@ -114,7 +122,9 @@ export class ToolExecutionImages extends Container {
 			const imageMimeType = converted?.mimeType ?? image.mimeType;
 			if (capabilities.images === "kitty" && imageMimeType !== "image/png") {
 				if (this.options.showRendererFallback) {
-					this.addImageComponent(new Text(theme.fg("toolOutput", `[image: ${imageMimeType}]`), 0, 0));
+					this.addImageComponent(
+						new Text(theme.fg("toolOutput", `[image: ${sanitizeTerminalLabel(imageMimeType)}]`), 0, 0),
+					);
 				}
 				continue;
 			}
