@@ -1,0 +1,314 @@
+{
+  "goals": [
+    {
+      "id": "Wave1-Foundation",
+      "tier": "HEAVY",
+      "shape": "delivery",
+      "statement": "Wave1-Foundation: plan todos [1, 2, 3, 4, 5]",
+      "criteria": [
+        {
+          "id": "todo-1",
+          "scenario": "Plan todo 1 (Settings v2 — codemode.json schema expansion + env flags): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/config.test.ts` → exit 0, includes new cases `taskTools defaults`, `env override beats file`, `statusEvents default true`.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-1-settings.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-1",
+          "description": "Plan todo 1 (Settings v2 — codemode.json schema expansion + env flags): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/config.test.ts` → exit 0, includes new cases `taskTools defaults`, `env override beats file`, `statusEvents default true`."
+        },
+        {
+          "id": "todo-2",
+          "scenario": "Plan todo 2 (Bridge protocol v2 — status frame + localRoots + artifactsDir): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/bridge-protocol.test.ts` → exit 0 with new cases `status frame round-trip`, `init carries localRoots`.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-2-protocol.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-2",
+          "description": "Plan todo 2 (Bridge protocol v2 — status frame + localRoots + artifactsDir): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/bridge-protocol.test.ts` → exit 0 with new cases `status frame round-trip`, `init carries localRoots`."
+        },
+        {
+          "id": "todo-3",
+          "scenario": "Plan todo 3 (Output infrastructure — TailBuffer + OutputSink port with session-adjacent spill): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/output/` → exit 0, ≥10 assertions covering tail window, spill threshold, maxColumns, summary math.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-3-outputsink.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-3",
+          "description": "Plan todo 3 (Output infrastructure — TailBuffer + OutputSink port with session-adjacent spill): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/output/` → exit 0, ≥10 assertions covering tail window, spill threshold, maxColumns, summary math."
+        },
+        {
+          "id": "todo-4",
+          "scenario": "Plan todo 4 (JSON tree renderer port): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/json-tree.test.ts` → exit 0 with cases for depth cap, line cap, scalar truncation, plain fallback.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-4-jsontree.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-4",
+          "description": "Plan todo 4 (JSON tree renderer port): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/json-tree.test.ts` → exit 0 with cases for depth cap, line cap, scalar truncation, plain fallback."
+        },
+        {
+          "id": "todo-5",
+          "scenario": "Plan todo 5 (Types v2 — EvalToolDetails/EvalCellResult/EvalStatusEvent expansion): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/status-events.test.ts` → exit 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-5-types.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-5",
+          "description": "Plan todo 5 (Types v2 — EvalToolDetails/EvalCellResult/EvalStatusEvent expansion): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/status-events.test.ts` → exit 0."
+        }
+      ],
+      "status": "pending",
+      "title": "Wave1-Foundation: plan todos [1, 2, 3, 4, 5]"
+    },
+    {
+      "id": "Wave2-Kernels",
+      "tier": "HEAVY",
+      "shape": "delivery",
+      "statement": "Wave2-Kernels: plan todos [6, 7, 8]",
+      "criteria": [
+        {
+          "id": "todo-6",
+          "scenario": "Plan todo 6 (Python kernel parity — prelude helpers, status events, magics/shell escapes, display richness): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/py-prelude-parity.test.ts test/py-kernel.test.ts` → exit 0 (or explicit skip lines when python3 absent — CI has python3).",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-6-py-parity.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-6",
+          "description": "Plan todo 6 (Python kernel parity — prelude helpers, status events, magics/shell escapes, display richness): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/py-prelude-parity.test.ts test/py-kernel.test.ts` → exit 0 (or explicit skip lines when python3 absent — CI has python3)."
+        },
+        {
+          "id": "todo-7",
+          "scenario": "Plan todo 7 (JS kernel parity — import rewriting, local modules, helpers, status events): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/js-rewrite-imports.test.ts test/js-kernel.test.ts` → exit 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-7-js-parity.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-7",
+          "description": "Plan todo 7 (JS kernel parity — import rewriting, local modules, helpers, status events): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/js-rewrite-imports.test.ts test/js-kernel.test.ts` → exit 0."
+        },
+        {
+          "id": "todo-8",
+          "scenario": "Plan todo 8 (Ruby + Julia kernel parity — helpers, status events, REPL auto-display polish): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/rb-kernel.test.ts test/jl-kernel.test.ts` → exit 0 (or explicit interpreter-absent skips).",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-8-rbjl-parity.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-8",
+          "description": "Plan todo 8 (Ruby + Julia kernel parity — helpers, status events, REPL auto-display polish): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/rb-kernel.test.ts test/jl-kernel.test.ts` → exit 0 (or explicit interpreter-absent skips)."
+        }
+      ],
+      "status": "pending",
+      "title": "Wave2-Kernels: plan todos [6, 7, 8]"
+    },
+    {
+      "id": "Wave3-Bridges",
+      "tier": "HEAVY",
+      "shape": "delivery",
+      "statement": "Wave3-Bridges: plan todos [9, 10, 11, 12, 13]",
+      "criteria": [
+        {
+          "id": "todo-9",
+          "scenario": "Plan todo 9 (Idle-timeout pause/resume wiring across the bridge): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/timeouts.test.ts test/eval-tool-interrupt.test.ts` → exit 0 including the new pause/resume cases.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-9-timeout.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-9",
+          "description": "Plan todo 9 (Idle-timeout pause/resume wiring across the bridge): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/timeouts.test.ts test/eval-tool-interrupt.test.ts` → exit 0 including the new pause/resume cases."
+        },
+        {
+          "id": "todo-10",
+          "scenario": "Plan todo 10 (agent() host bridge — task-tool contract delegation): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/agent-bridge.test.ts` → exit 0, ≥8 cases as listed.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-10-agent.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-10",
+          "description": "Plan todo 10 (agent() host bridge — task-tool contract delegation): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/agent-bridge.test.ts` → exit 0, ≥8 cases as listed."
+        },
+        {
+          "id": "todo-11",
+          "scenario": "Plan todo 11 (output() host bridge — task_output delegation): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/output-bridge.test.ts` → exit 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-11-output.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-11",
+          "description": "Plan todo 11 (output() host bridge — task_output delegation): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/output-bridge.test.ts` → exit 0."
+        },
+        {
+          "id": "todo-12",
+          "scenario": "Plan todo 12 (completion() v2 — schema + model tiers): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/completion-handler.test.ts` → exit 0 with schema + tier cases.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-12-completion.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-12",
+          "description": "Plan todo 12 (completion() v2 — schema + model tiers): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/completion-handler.test.ts` → exit 0 with schema + tier cases."
+        },
+        {
+          "id": "todo-13",
+          "scenario": "Plan todo 13 (Concurrency parity — parallel()/pipeline() pool semantics): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/py-kernel.test.ts test/js-kernel.test.ts` → exit 0 including new parallel/pipeline cases.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-13-parallel.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-13",
+          "description": "Plan todo 13 (Concurrency parity — parallel()/pipeline() pool semantics): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/py-kernel.test.ts test/js-kernel.test.ts` → exit 0 including new parallel/pipeline cases."
+        }
+      ],
+      "status": "pending",
+      "title": "Wave3-Bridges: plan todos [9, 10, 11, 12, 13]"
+    },
+    {
+      "id": "Wave4-Integration",
+      "tier": "HEAVY",
+      "shape": "delivery",
+      "statement": "Wave4-Integration: plan todos [14, 15, 16, 17, 18]",
+      "criteria": [
+        {
+          "id": "todo-14",
+          "scenario": "Plan todo 14 (eval-tool core v2 — OutputSink integration, live tail, images, narrowing re-registration, disposal tracking): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/eval-tool.test.ts test/eval-tool-output.test.ts test/extension.test.ts` → exit 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-14-core.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-14",
+          "description": "Plan todo 14 (eval-tool core v2 — OutputSink integration, live tail, images, narrowing re-registration, disposal tracking): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/eval-tool.test.ts test/eval-tool-output.test.ts test/extension.test.ts` → exit 0."
+        },
+        {
+          "id": "todo-15",
+          "scenario": "Plan todo 15 (Prompt v2 — spawns gating, examples, senpi wording, guideline parity): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/prompt.test.ts` → exit 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-15-prompt.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-15",
+          "description": "Plan todo 15 (Prompt v2 — spawns gating, examples, senpi wording, guideline parity): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/prompt.test.ts` → exit 0."
+        },
+        {
+          "id": "todo-16",
+          "scenario": "Plan todo 16 (Render v2 — framed highlighted cells, status lines, agent progress, JSON tree): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/eval-render.test.ts test/eval-render-streaming.test.ts test/eval-render-theme.test.ts test/eval-render-width.test.ts test/eval-render-preview.test.ts test/eval-render-state.test.ts` → exit 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-16-render-happy.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-16",
+          "description": "Plan todo 16 (Render v2 — framed highlighted cells, status lines, agent progress, JSON tree): implement TDD-first, then acceptance: `cd /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode && npx tsx ../../node_modules/vitest/dist/cli.js --run test/eval-render.test.ts test/eval-render-streaming.test.ts test/eval-render-theme.test.ts test/eval-render-width.test.ts test/eval-render-preview.test.ts test/eval-render-state.test.ts` → exit 0."
+        },
+        {
+          "id": "todo-17",
+          "scenario": "Plan todo 17 (Test-parity sweep — every applicable omp eval test has a counterpart): implement TDD-first, then acceptance: `test -f /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode/test/PARITY.md && grep -c \"| skipped\" packages/senpi-codemode/test/PARITY.md` → every skipped row's reason cell non-empty (manual-free check: `! grep -E \"\\| skipped \\|\\s*\\|\" test/PARITY.md`).",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-17-suite-run1.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-17",
+          "description": "Plan todo 17 (Test-parity sweep — every applicable omp eval test has a counterpart): implement TDD-first, then acceptance: `test -f /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode/test/PARITY.md && grep -c \"| skipped\" packages/senpi-codemode/test/PARITY.md` → every skipped row's reason cell non-empty (manual-free check: `! grep -E \"\\| skipped \\|\\s*\\|\" test/PARITY.md`)."
+        },
+        {
+          "id": "todo-18",
+          "scenario": "Plan todo 18 (Docs + packaging — README, AGENTS.md, CHANGELOG, dependency hygiene): implement TDD-first, then acceptance: `grep -c \"no-op\" /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode/README.md` → 0.",
+          "channel": "cli",
+          "expectedEvidence": ".omo/evidence/task-18-docs.log",
+          "adversarialClasses": [
+            "malformed input",
+            "stale state",
+            "hung commands"
+          ],
+          "status": "pending",
+          "failCount": 0,
+          "title": "todo-18",
+          "description": "Plan todo 18 (Docs + packaging — README, AGENTS.md, CHANGELOG, dependency hygiene): implement TDD-first, then acceptance: `grep -c \"no-op\" /Users/yeongyu/local-workspaces/senpi/packages/senpi-codemode/README.md` → 0."
+        }
+      ],
+      "status": "pending",
+      "title": "Wave4-Integration: plan todos [14, 15, 16, 17, 18]"
+    }
+  ]
+}
