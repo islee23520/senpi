@@ -1,3 +1,0 @@
-{"type": "init", "brief": "# senpi-codemode Full-Parity Port of oh-my-pi eval\n\n## TL;DR\n> Summary:      Port oh-my-pi's entire eval subsystem (~21.5k LOC surface) to full parity inside `packages/senpi-codemode` — kernels, helpe", "ts": "2026-07-12T04:25:29+0900"}
-{"type": "set_goals", "goals": ["Wave1-Foundation", "Wave2-Kernels", "Wave3-Bridges", "Wave4-Integration"], "ts": "2026-07-12T04:26:10+0900"}
-{"type": "set_goals", "goals": ["Wave1-Foundation", "Wave2-Kernels", "Wave3-Bridges", "Wave4-Integration"], "ts": "2026-07-12T04:26:41+0900"}
