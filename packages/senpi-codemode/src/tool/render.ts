@@ -1,5 +1,6 @@
 import {
 	type AgentToolResult,
+	sanitizeTerminalLabel,
 	type Theme,
 	type ThemeColor,
 	type ToolDefinition,
@@ -159,7 +160,9 @@ function textOutput(result: AgentToolResult<EvalToolDetails>, showImageFallback:
 	const lines: string[] = [];
 	for (const part of result.content) {
 		if (part.type === "text") lines.push(part.text);
-		else if (showImageFallback && part.type === "image") lines.push(`[image: ${part.mimeType}]`);
+		else if (showImageFallback && part.type === "image") {
+			lines.push(`[image: ${sanitizeTerminalLabel(part.mimeType)}]`);
+		}
 	}
 	return lines.join("\n");
 }

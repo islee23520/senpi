@@ -4,6 +4,8 @@ import { renderEvalResult } from "../src/tool/render.ts";
 import type { EvalToolDetails } from "../src/tool/types.ts";
 import { evalResult, evalResultWithOmittedDetails, renderLines, resultContext } from "./eval-render-fixtures.ts";
 
+const TERMINAL_CONTROL_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u;
+
 describe("eval renderer state", () => {
 	it("Given completed eval details when rendered then header and metadata show status phase and duration", () => {
 		// Given
@@ -133,6 +135,36 @@ describe("eval renderer state", () => {
 		expect.soft(fallbackText).not.toContain("(no output)");
 		expect.soft(renderedText).not.toContain("[image:");
 		expect.soft(renderedText).not.toContain("(no output)");
+	});
+
+	it("Given a hostile image MIME label when text fallback renders then terminal controls are inert", () => {
+		// Given
+		const hostileMimeType = "image/png\x1b]52;c;SGVsbG8=\x07";
+		const givenResult = {
+			content: [{ type: "image", data: "abc123", mimeType: hostileMimeType }],
+			details: {
+				language: "js",
+				durationMs: 1,
+				toolCalls: [],
+				truncated: false,
+			},
+		} satisfies AgentToolResult<EvalToolDetails>;
+
+		// When
+		const component = renderEvalResult(
+			givenResult,
+			{ expanded: false, isPartial: false },
+			undefined,
+			resultContext({ showImages: true, imageProtocol: null }),
+		);
+		const renderedLabel = renderLines(component).find((line) => line.includes("[image:"));
+
+		// Then
+		expect(renderedLabel).toBe("[image: image/png]");
+		expect(renderedLabel).not.toMatch(TERMINAL_CONTROL_PATTERN);
+		expect(renderedLabel).not.toContain("\x1b");
+		expect(renderedLabel).not.toContain("\x07");
+		expect(renderedLabel).not.toContain("\x1b]");
 	});
 
 	it("Given final result with omitted details when rendered then safe header and no-output marker are shown", () => {
