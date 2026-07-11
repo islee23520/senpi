@@ -1412,8 +1412,15 @@ function buildParams(
 		preserveUnsignedThinking: true,
 	});
 	const normalizeToolName = isOAuthToken ? toClaudeCodeName : (name: string) => name;
+	// A marker on a discarded pre-fallback result must not defer its tool:
+	// convertMessages drops that result, so no tool_reference would replay to
+	// load the deferred definition.
+	const discardedFallbackToolCallIds = collectDiscardedFallbackToolCallIds(transformedMessages, model);
+	const partitionMessages = transformedMessages.filter(
+		(message) => !(message.role === "toolResult" && discardedFallbackToolCallIds.has(message.toolCallId)),
+	);
 	const toolPlacement = splitDeferredTools(
-		{ ...context, messages: transformedMessages },
+		{ ...context, messages: partitionMessages },
 		compat.supportsToolReferences,
 		normalizeToolName,
 	);

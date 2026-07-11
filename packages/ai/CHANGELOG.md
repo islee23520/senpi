@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Fixed Anthropic deferred tool loading to ignore `addedToolNames` markers on tool results discarded by server-side fallback pruning; such markers deferred a tool while its `tool_reference` never replayed, leaving the tool unloadable.
 - Fixed OpenRouter model context windows to use the top provider's actual context length ([#6481](https://github.com/earendil-works/pi-mono/pull/6481) by [@davidbrai](https://github.com/davidbrai)).
 - Fixed Amazon Bedrock requests to use the generic `apiKey` stream option as a Bedrock bearer token.
 - Prevented invalid model or request `maxTokens` metadata from reaching provider payloads by falling back to the available context budget.

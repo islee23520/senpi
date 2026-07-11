@@ -215,6 +215,28 @@ describe("deferred tools", () => {
 		expect(payload.tools?.every((tool) => !tool.defer_loading)).toBe(true);
 	});
 
+	it("keeps a tool immediate when its marker rides a discarded fallback result", async () => {
+		// Server-side fallback discards pre-boundary tool calls and their results
+		// from Anthropic replay. A marker on such a result must not defer its
+		// tool: the result never replays, so no tool_reference would load it.
+		const context = makeContext([makeTool("base_tool"), makeTool("late_tool")]);
+		const assistant = context.messages[1] as AssistantMessage;
+		assistant.content = [
+			{ type: "toolCall", id: "call_1", name: "base_tool", arguments: {} },
+			{
+				type: "providerNative",
+				subtype: "fallback",
+				raw: { type: "fallback", from: { model: "claude-opus-4-6" }, to: { model: "claude-opus-4-6" } },
+			},
+			{ type: "text", text: "served after fallback" },
+		];
+
+		const payload = await capturePayload<AnthropicPayload>(getModel("anthropic", "claude-opus-4-6"), context);
+
+		expect(payload.tools?.map((tool) => tool.name)).toEqual(["base_tool", "late_tool"]);
+		expect(payload.tools?.every((tool) => !tool.defer_loading)).toBe(true);
+	});
+
 	it("normalizes OAuth names before checking prior tool usage", async () => {
 		const context = makeContext([makeTool("base_tool"), makeTool("read")], ["read"]);
 		const assistant = context.messages[1] as AssistantMessage;
