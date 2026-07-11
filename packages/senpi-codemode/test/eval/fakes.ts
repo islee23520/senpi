@@ -1,6 +1,7 @@
 import { DEFAULT_COMPACTION_SETTINGS, type ExtensionContext } from "@code-yeongyu/senpi";
 import type { KernelToHostMessage } from "../../src/bridge/protocol.ts";
 import type { EvalKernel, EvalKernelManager } from "../../src/tool/eval-tool.ts";
+import type { EvalKernelRunInput } from "../../src/tool/types.ts";
 
 type KernelResult = Extract<KernelToHostMessage, { type: "result" }>;
 
@@ -106,6 +107,95 @@ export class FakeManager implements EvalKernelManager {
 		if (!kernel) throw new Error(`missing fake kernel ${language}`);
 		kernel.onMessage = onMessage;
 		return kernel;
+	}
+}
+
+export class DelayedKernelManager implements EvalKernelManager {
+	readonly requested = new Deferred<void>();
+	readonly acquired = new Deferred<EvalKernel>();
+
+	async getKernel(): Promise<EvalKernel> {
+		this.requested.resolve(undefined);
+		return await this.acquired.promise;
+	}
+}
+
+export class DelayedResetKernel extends FakeKernel {
+	readonly resetStarted = new Deferred<void>();
+	readonly resetReleased = new Deferred<void>();
+
+	override async reset(): Promise<void> {
+		this.resetStarted.resolve(undefined);
+		await this.resetReleased.promise;
+	}
+}
+
+export class PendingInterruptKernel implements EvalKernel {
+	readonly runStarted = new Deferred<void>();
+	readonly runResult = new Deferred<KernelResult>();
+	readonly interruptStarted = new Deferred<void>();
+	readonly interruptResult = new Deferred<void>();
+	readonly interrupts: Array<string | undefined> = [];
+
+	async run(): Promise<KernelResult> {
+		this.runStarted.resolve(undefined);
+		return await this.runResult.promise;
+	}
+
+	async interrupt(reason?: string): Promise<void> {
+		this.interrupts.push(reason);
+		this.interruptStarted.resolve(undefined);
+		await this.interruptResult.promise;
+	}
+
+	deliverToolReply(): void {}
+
+	async reset(): Promise<void> {}
+
+	async close(): Promise<void> {}
+}
+
+export class KernelOwnedTimeoutKernel implements EvalKernel {
+	readonly runStarted = new Deferred<void>();
+	readonly interrupts: Array<string | undefined> = [];
+
+	async run(input: EvalKernelRunInput): Promise<KernelResult> {
+		const timeoutMs = input.timeoutMs;
+		if (timeoutMs === undefined) throw new Error("expected a kernel timeout");
+		this.runStarted.resolve(undefined);
+		return await new Promise<KernelResult>((resolve) => {
+			setTimeout(() => {
+				resolve({
+					type: "result",
+					cellId: input.cellId,
+					ok: false,
+					error: { message: `Kernel timed out after ${timeoutMs}ms` },
+					durationMs: timeoutMs,
+				});
+			}, timeoutMs);
+		});
+	}
+
+	async interrupt(reason?: string): Promise<void> {
+		this.interrupts.push(reason);
+	}
+
+	deliverToolReply(): void {}
+
+	async reset(): Promise<void> {}
+
+	async close(): Promise<void> {}
+}
+
+export class SingleKernelManager implements EvalKernelManager {
+	readonly kernel: EvalKernel;
+
+	constructor(kernel: EvalKernel) {
+		this.kernel = kernel;
+	}
+
+	async getKernel(): Promise<EvalKernel> {
+		return this.kernel;
 	}
 }
 

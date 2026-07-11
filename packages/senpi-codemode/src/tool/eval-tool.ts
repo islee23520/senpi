@@ -36,6 +36,8 @@ interface EvalCellInvocation {
 
 type ToolReply = Extract<HostToKernelMessage, { type: "tool-reply" }>;
 
+const INTERRUPT_DELIVERY_GRACE_MS = 100;
+
 class CellKernel implements EvalKernel {
 	readonly #kernel: EvalKernel;
 	readonly #state: CellState;
@@ -68,25 +70,40 @@ class CellKernel implements EvalKernel {
 
 class CellExecution {
 	readonly #callerSignal: AbortSignal | undefined;
+	readonly #timeoutMs: number;
 	readonly #onAbort: (error: Error) => void;
 	readonly #abortPromise: Promise<never>;
 	#rejectAbort: (reason?: unknown) => void = () => {};
 	#kernel: CellKernel | undefined;
 	#deadline: ReturnType<typeof setTimeout> | undefined;
+	#abortSettled = false;
 	#active = true;
 
 	constructor(callerSignal: AbortSignal | undefined, timeoutMs: number, onAbort: (error: Error) => void) {
 		this.#callerSignal = callerSignal;
+		this.#timeoutMs = timeoutMs;
 		this.#onAbort = onAbort;
 		this.#abortPromise = new Promise<never>((_resolve, reject) => {
 			this.#rejectAbort = reject;
 		});
 		callerSignal?.addEventListener("abort", this.#handleCallerAbort, { once: true });
+		this.startDeadline();
+	}
+
+	startDeadline(): void {
+		this.clearDeadline();
+		if (!this.#active) return;
 		this.#deadline = setTimeout(() => {
-			const error = new Error(`Cell timed out after ${timeoutMs}ms`);
+			const error = new Error(`Cell timed out after ${this.#timeoutMs}ms`);
 			error.name = "TimeoutError";
 			this.#abort(error);
-		}, timeoutMs);
+		}, this.#timeoutMs);
+	}
+
+	clearDeadline(): void {
+		if (this.#deadline === undefined) return;
+		clearTimeout(this.#deadline);
+		this.#deadline = undefined;
 	}
 
 	setKernel(kernel: CellKernel): void {
@@ -98,7 +115,11 @@ class CellExecution {
 	}
 
 	async wait<T>(operation: Promise<T>): Promise<T> {
-		return await Promise.race([operation, this.#abortPromise]);
+		const guardedOperation = operation.then(
+			(value): T | Promise<never> => (this.#active ? value : this.#abortPromise),
+			(reason: unknown): Promise<never> => (this.#active ? Promise.reject(reason) : this.#abortPromise),
+		);
+		return await Promise.race([guardedOperation, this.#abortPromise]);
 	}
 
 	finish(): void {
@@ -116,20 +137,30 @@ class CellExecution {
 		this.#cleanup();
 		const error = abortError(reason);
 		this.#onAbort(error);
-		this.#rejectAbort(error);
 		const kernel = this.#kernel;
-		if (kernel)
-			void Promise.resolve()
-				.then(() => kernel.interrupt(error.message))
-				.catch(() => undefined);
+		if (!kernel) {
+			this.#settleAbort(error);
+			return;
+		}
+		this.#deadline = setTimeout(() => this.#settleAbort(error), INTERRUPT_DELIVERY_GRACE_MS);
+		void Promise.resolve()
+			.then(() => kernel.interrupt(error.message))
+			.then(
+				() => this.#settleAbort(error),
+				(interruptError: unknown) => this.#settleAbort(interruptError),
+			);
+	}
+
+	#settleAbort(reason: unknown): void {
+		if (this.#abortSettled) return;
+		this.#abortSettled = true;
+		this.clearDeadline();
+		this.#rejectAbort(reason);
 	}
 
 	#cleanup(): void {
 		this.#callerSignal?.removeEventListener("abort", this.#handleCallerAbort);
-		if (this.#deadline !== undefined) {
-			clearTimeout(this.#deadline);
-			this.#deadline = undefined;
-		}
+		this.clearDeadline();
 	}
 }
 
@@ -200,6 +231,7 @@ async function runEvalCell(
 		);
 		const kernel = new CellKernel(acquired, state);
 		execution.setKernel(kernel);
+		execution.clearDeadline();
 		handler = new CellHandler(kernel, state, {
 			executeTool: options.executeTool,
 			complete: options.complete,
@@ -208,11 +240,19 @@ async function runEvalCell(
 		if ("setContext" in options.kernelManager && typeof options.kernelManager.setContext === "function") {
 			options.kernelManager.setContext(bridgeContext);
 		}
-		if (invocation.input.reset) await execution.wait(kernel.reset());
+		if (invocation.input.reset) {
+			execution.startDeadline();
+			await execution.wait(kernel.reset());
+			execution.clearDeadline();
+		}
 		const result = await execution.wait(
 			kernel.run({ cellId: invocation.cellId, code: invocation.input.code, timeoutMs }),
 		);
-		if (result.ok) await execution.wait(Promise.all(state.pendingBridgeCalls));
+		if (result.ok && state.pendingBridgeCalls.length > 0) {
+			execution.startDeadline();
+			await execution.wait(Promise.all(state.pendingBridgeCalls));
+			execution.clearDeadline();
+		}
 		return handler.finalize(result);
 	} finally {
 		state.active = false;

@@ -1,69 +1,23 @@
 import type { AgentToolResult } from "@code-yeongyu/senpi";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { KernelToHostMessage } from "../src/bridge/protocol.ts";
-import { createEvalTool, type EvalKernel, type EvalKernelManager } from "../src/tool/eval-tool.ts";
+import { createEvalTool, type EvalKernelManager } from "../src/tool/eval-tool.ts";
 import type { ExecuteTool } from "../src/tool/types.ts";
-import { Deferred, FakeKernel, FakeManager, fakeExtensionContext, result } from "./eval/fakes.ts";
+import {
+	Deferred,
+	DelayedKernelManager,
+	DelayedResetKernel,
+	FakeKernel,
+	FakeManager,
+	fakeExtensionContext,
+	KernelOwnedTimeoutKernel,
+	PendingInterruptKernel,
+	result,
+	SingleKernelManager,
+} from "./eval/fakes.ts";
 
 type ToolResult = AgentToolResult<unknown>;
 type ToolContent = ToolResult["content"][number];
 type TextPart = Extract<ToolContent, { type: "text" }>;
-type EvalResult = Extract<KernelToHostMessage, { type: "result" }>;
-
-class DelayedKernelManager implements EvalKernelManager {
-	readonly requested = new Deferred<void>();
-	readonly acquired = new Deferred<EvalKernel>();
-
-	async getKernel(): Promise<EvalKernel> {
-		this.requested.resolve(undefined);
-		return await this.acquired.promise;
-	}
-}
-
-class DelayedResetKernel extends FakeKernel {
-	readonly resetStarted = new Deferred<void>();
-	readonly resetReleased = new Deferred<void>();
-
-	override async reset(): Promise<void> {
-		this.resetStarted.resolve(undefined);
-		await this.resetReleased.promise;
-	}
-}
-
-class PendingInterruptKernel implements EvalKernel {
-	readonly runStarted = new Deferred<void>();
-	readonly runResult = new Deferred<EvalResult>();
-	readonly interruptResult = new Deferred<void>();
-	readonly interrupts: Array<string | undefined> = [];
-
-	async run(): Promise<EvalResult> {
-		this.runStarted.resolve(undefined);
-		return await this.runResult.promise;
-	}
-
-	async interrupt(reason?: string): Promise<void> {
-		this.interrupts.push(reason);
-		await this.interruptResult.promise;
-	}
-
-	deliverToolReply(): void {}
-
-	async reset(): Promise<void> {}
-
-	async close(): Promise<void> {}
-}
-
-class SingleKernelManager implements EvalKernelManager {
-	readonly kernel: EvalKernel;
-
-	constructor(kernel: EvalKernel) {
-		this.kernel = kernel;
-	}
-
-	async getKernel(): Promise<EvalKernel> {
-		return this.kernel;
-	}
-}
 
 function textOf(toolResult: ToolResult): string {
 	const texts: string[] = [];
@@ -77,6 +31,15 @@ function isTextPart(part: ToolContent): part is TextPart {
 	return part.type === "text";
 }
 
+function createTool(kernelManager: EvalKernelManager, cellTimeoutSeconds = 30, executeTool: ExecuteTool = vi.fn()) {
+	return createEvalTool({
+		enabledLanguages: { js: true, py: false, rb: false, jl: false },
+		kernelManager,
+		cellTimeoutSeconds,
+		executeTool,
+	});
+}
+
 describe("createEvalTool interrupt handling", () => {
 	afterEach(() => {
 		vi.useRealTimers();
@@ -86,12 +49,7 @@ describe("createEvalTool interrupt handling", () => {
 		const controller = new AbortController();
 		const manager = new DelayedKernelManager();
 		const kernel = new FakeKernel([result("cell-acquire-abort", "must not run")]);
-		const tool = createEvalTool({
-			enabledLanguages: { js: true, py: false, rb: false, jl: false },
-			kernelManager: manager,
-			cellTimeoutSeconds: 30,
-			executeTool: vi.fn(),
-		});
+		const tool = createTool(manager);
 		const execution = tool.execute(
 			"cell-acquire-abort",
 			{ language: "js", code: "1" },
@@ -111,12 +69,7 @@ describe("createEvalTool interrupt handling", () => {
 	it("preempts reset when the configured deadline expires", async () => {
 		vi.useFakeTimers();
 		const kernel = new DelayedResetKernel([result("cell-reset-timeout", "must not run")]);
-		const tool = createEvalTool({
-			enabledLanguages: { js: true, py: false, rb: false, jl: false },
-			kernelManager: new FakeManager([["js", kernel]]),
-			cellTimeoutSeconds: 30,
-			executeTool: vi.fn(),
-		});
+		const tool = createTool(new FakeManager([["js", kernel]]));
 		const execution = tool.execute(
 			"cell-reset-timeout",
 			{ language: "js", code: "1", reset: true, timeout: 1 },
@@ -141,6 +94,33 @@ describe("createEvalTool interrupt handling", () => {
 		kernel.resetReleased.resolve(undefined);
 	});
 
+	it("preserves the kernel timeout result when its deadline equals the cell timeout", async () => {
+		vi.useFakeTimers();
+		const kernel = new KernelOwnedTimeoutKernel();
+		const tool = createTool(new SingleKernelManager(kernel));
+		const execution = tool.execute(
+			"cell-kernel-timeout",
+			{ language: "js", code: "while (true) {}", timeout: 1 },
+			undefined,
+			undefined,
+			fakeExtensionContext(),
+		);
+		const outcome = execution.then(
+			(value) => ({ status: "fulfilled" as const, value }),
+			(reason: unknown) => ({ status: "rejected" as const, reason }),
+		);
+		await kernel.runStarted.promise;
+
+		await vi.advanceTimersByTimeAsync(1_000);
+
+		const settled = await outcome;
+		expect(settled).toMatchObject({ status: "fulfilled", value: { details: { durationMs: 1_000, isError: true } } });
+		if (settled.status === "rejected") throw settled.reason;
+		const toolResult = settled.value;
+		expect(textOf(toolResult)).toContain("Kernel timed out after 1000ms");
+		expect(kernel.interrupts).toEqual([]);
+	});
+
 	it("combines the caller and cell lifecycle signals for nested tools", async () => {
 		const controller = new AbortController();
 		const bridgeStarted = new Deferred<AbortSignal>();
@@ -156,12 +136,7 @@ describe("createEvalTool interrupt handling", () => {
 				nestedSignal.addEventListener("abort", () => reject(nestedSignal.reason), { once: true });
 			});
 		});
-		const tool = createEvalTool({
-			enabledLanguages: { js: true, py: false, rb: false, jl: false },
-			kernelManager: new FakeManager([["js", kernel]]),
-			cellTimeoutSeconds: 30,
-			executeTool,
-		});
+		const tool = createTool(new FakeManager([["js", kernel]]), 30, executeTool);
 		const execution = tool.execute(
 			"cell-active-abort",
 			{ language: "js", code: "await tool.slow({})" },
@@ -181,14 +156,53 @@ describe("createEvalTool interrupt handling", () => {
 	});
 
 	it("settles once when interrupt remains pending and later rejects", async () => {
+		vi.useFakeTimers();
 		const controller = new AbortController();
 		const kernel = new PendingInterruptKernel();
-		const tool = createEvalTool({
-			enabledLanguages: { js: true, py: false, rb: false, jl: false },
-			kernelManager: new SingleKernelManager(kernel),
-			cellTimeoutSeconds: 30,
-			executeTool: vi.fn(),
-		});
+		const tool = createTool(new SingleKernelManager(kernel), 920);
+		let settlementCount = 0;
+		const outcome = tool
+			.execute(
+				"cell-pending-interrupt",
+				{ language: "js", code: "await pending" },
+				controller.signal,
+				undefined,
+				fakeExtensionContext(),
+			)
+			.then(
+				(value) => {
+					settlementCount++;
+					return { status: "fulfilled" as const, value };
+				},
+				(reason: unknown) => {
+					settlementCount++;
+					return { status: "rejected" as const, reason };
+				},
+			);
+		await kernel.runStarted.promise;
+
+		controller.abort(new Error("stop pending cell"));
+		await kernel.interruptStarted.promise;
+		try {
+			await vi.advanceTimersByTimeAsync(100);
+			const settled = await Promise.race([outcome, Promise.resolve({ status: "pending" as const })]);
+			expect(settled).toMatchObject({ status: "rejected", reason: { message: "stop pending cell" } });
+			expect(settlementCount).toBe(1);
+			kernel.interruptResult.reject(new Error("late interrupt rejection"));
+			await vi.advanceTimersByTimeAsync(0);
+			expect(settlementCount).toBe(1);
+		} finally {
+			kernel.interruptResult.resolve(undefined);
+			kernel.runResult.resolve(result("cell-pending-interrupt", "late"));
+			await outcome;
+		}
+		expect(kernel.interrupts).toEqual(["stop pending cell"]);
+	});
+
+	it("propagates an asynchronous interrupt rejection into eval settlement exactly once", async () => {
+		const controller = new AbortController();
+		const kernel = new PendingInterruptKernel();
+		const tool = createTool(new SingleKernelManager(kernel));
 		let settlementCount = 0;
 		const execution = tool
 			.execute(
@@ -204,10 +218,11 @@ describe("createEvalTool interrupt handling", () => {
 		await kernel.runStarted.promise;
 
 		controller.abort(new Error("stop pending cell"));
-
-		await expect(execution).rejects.toThrow("stop pending cell");
-		expect(settlementCount).toBe(1);
+		await kernel.interruptStarted.promise;
 		kernel.interruptResult.reject(new Error("interrupt rejected asynchronously"));
+
+		await expect(execution).rejects.toThrow("interrupt rejected asynchronously");
+		expect(settlementCount).toBe(1);
 		kernel.runResult.resolve(result("cell-interrupt-rejection", "late"));
 		await new Promise<void>((resolve) => setImmediate(resolve));
 		expect(settlementCount).toBe(1);
@@ -217,12 +232,7 @@ describe("createEvalTool interrupt handling", () => {
 	it("does not interrupt a completed kernel when a stale signal aborts", async () => {
 		const controller = new AbortController();
 		const kernel = new FakeKernel([result("cell-late-abort", "ok")]);
-		const tool = createEvalTool({
-			enabledLanguages: { js: true, py: false, rb: false, jl: false },
-			kernelManager: new FakeManager([["js", kernel]]),
-			cellTimeoutSeconds: 30,
-			executeTool: vi.fn(),
-		});
+		const tool = createTool(new FakeManager([["js", kernel]]));
 		const toolResult = await tool.execute(
 			"cell-late-abort",
 			{ language: "js", code: "1" },
@@ -243,12 +253,7 @@ describe("createEvalTool interrupt handling", () => {
 		const kernel = new FakeKernel([result("cell-pre-abort", "should not run")]);
 		const manager = new FakeManager([["js", kernel]]);
 		const getKernel = vi.spyOn(manager, "getKernel");
-		const tool = createEvalTool({
-			enabledLanguages: { js: true, py: false, rb: false, jl: false },
-			kernelManager: manager,
-			cellTimeoutSeconds: 30,
-			executeTool: vi.fn(),
-		});
+		const tool = createTool(manager);
 
 		await expect(
 			tool.execute(
