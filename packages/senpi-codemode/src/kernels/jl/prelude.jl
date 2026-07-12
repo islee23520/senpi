@@ -223,10 +223,12 @@ function agent(prompt::AbstractString; agent="task", model=nothing, label=nothin
     result
 end
 
-function senpi_pool_map(items, callback; width::Integer=4)
+function senpi_pool_map(items, callback)
     values = collect(items)
     isempty(values) && return Any[]
-    workers = min(max(Int(width), 1), length(values))
+    configured_width = get(senpi_connection, "parallelPoolWidth", 4)
+    width = configured_width isa Real && isfinite(configured_width) ? Int(floor(configured_width)) : 4
+    workers = min(max(width, 1), length(values))
     tokens = Channel{Nothing}(workers)
     for _ in 1:workers
         put!(tokens, nothing)
@@ -252,11 +254,12 @@ function senpi_pool_map(items, callback; width::Integer=4)
     results
 end
 
-function parallel(thunks; width::Integer=4)
-    senpi_pool_map(thunks, thunk -> begin
+function parallel(thunks)
+    values = collect(thunks)
+    for thunk in values
         applicable(thunk) || error("parallel() expects zero-argument callables")
-        thunk()
-    end; width=width)
+    end
+    senpi_pool_map(values, thunk -> thunk())
 end
 
 function pipeline(items, stages...)

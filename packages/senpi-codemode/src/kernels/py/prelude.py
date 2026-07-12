@@ -19,7 +19,8 @@ import traceback
 import urllib.error
 import urllib.request
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
@@ -460,16 +461,46 @@ def agent(
     return node
 
 
-def parallel(callables: list[Callable[[], Any]], width: int = 4) -> list[Any]:
-    workers = max(1, width)
+def _pool_map(items: Iterable[Any], function: Callable[[Any], Any]) -> list[Any]:
+    values = list(items)
+    if not values:
+        return []
+    configured_width = CONNECTION.get("parallelPoolWidth", 4)
+    width = (
+        int(configured_width)
+        if isinstance(configured_width, (int, float)) and not isinstance(configured_width, bool)
+        else 4
+    )
+    workers = min(max(1, width), len(values))
+    results: list[Any] = [None] * len(values)
+    errors: dict[int, BaseException] = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(lambda function: function(), callables))
+        futures = {pool.submit(function, value): index for index, value in enumerate(values)}
+        for future in as_completed(futures):
+            index = futures[future]
+            try:
+                results[index] = future.result()
+            except BaseException as exc:
+                errors[index] = exc
+    if errors:
+        raise errors[min(errors)]
+    return results
 
 
-def pipeline(items: list[Any], *stages: Callable[[Any], Any]) -> list[Any]:
-    values = items
+def parallel(callables: Iterable[Callable[[], Any]]) -> list[Any]:
+    thunks = list(callables)
+    for thunk in thunks:
+        if not callable(thunk):
+            raise PreludeTypeError("parallel() expects an iterable of zero-arg callables")
+    return _pool_map(thunks, lambda thunk: thunk())
+
+
+def pipeline(items: Iterable[Any], *stages: Callable[[Any], Any]) -> list[Any]:
+    values = list(items)
     for stage in stages:
-        values = parallel([lambda item=item: stage(item) for item in values])
+        if not callable(stage):
+            raise PreludeTypeError("pipeline() stages must be callables")
+        values = _pool_map(values, stage)
     return values
 
 

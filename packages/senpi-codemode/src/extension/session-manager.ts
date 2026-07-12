@@ -153,11 +153,13 @@ class DefaultCodemodeSessionManager implements CodemodeSessionManager {
 	async #createKernel(language: EvalLanguage, onMessage: (message: KernelToHostMessage) => void): Promise<EvalKernel> {
 		const bridge = this.#bridge;
 		if (!bridge) throw new Error("codemode bridge server is not running");
+		const configuredPoolWidth = this.#options.settings.parallelPoolWidth;
+		const parallelPoolWidth = Number.isFinite(configuredPoolWidth) ? Math.max(1, Math.trunc(configuredPoolWidth)) : 1;
 		if (language === "js") {
 			return new JavaScriptKernel({
 				sessionId: this.#options.sessionId,
 				cwd: this.#options.cwd,
-				parallelPoolWidth: this.#options.settings.parallelPoolWidth,
+				parallelPoolWidth,
 				onMessage,
 			});
 		}
@@ -169,6 +171,7 @@ class DefaultCodemodeSessionManager implements CodemodeSessionManager {
 		const connection = {
 			port: bridge.port,
 			token: bridge.token,
+			parallelPoolWidth,
 			...(localRoots ? { localRoots: { ...localRoots } } : {}),
 			...(this.#options.artifactsDir ? { artifactsDir: this.#options.artifactsDir } : {}),
 		};

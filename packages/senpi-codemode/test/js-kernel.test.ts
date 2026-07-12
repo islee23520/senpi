@@ -449,4 +449,123 @@ return "done";
 			await rm(root, { recursive: true, force: true });
 		}
 	});
+	it("preserves input order through a bounded pool under controlled jitter", async () => {
+		const heldCalls: Extract<KernelToHostMessage, { type: "tool-call" }>[] = [];
+		let kernel: JavaScriptKernel | undefined;
+		let markerSeen = false;
+		let releasedFirstWave = false;
+		const reply = (call: Extract<KernelToHostMessage, { type: "tool-call" }>): void => {
+			const activeKernel = kernel;
+			if (!activeKernel) throw new Error("kernel is unavailable");
+			activeKernel.deliverToolReply({ type: "tool-reply", callId: call.callId, ok: true, value: call.args });
+		};
+		const releaseFirstWave = (): void => {
+			if (!markerSeen || releasedFirstWave || heldCalls.length < 2) return;
+			const first = heldCalls[0];
+			const second = heldCalls[1];
+			if (!first || !second) throw new Error("missing first-wave tool calls");
+			releasedFirstWave = true;
+			reply(second);
+			reply(first);
+		};
+		kernel = new JavaScriptKernel({
+			sessionId: "parallel-width",
+			cwd: process.cwd(),
+			parallelPoolWidth: 2,
+			onMessage: (message) => {
+				if (message.type !== "tool-call") return;
+				if (message.toolName === "marker") {
+					markerSeen = true;
+					reply(message);
+					releaseFirstWave();
+					return;
+				}
+				if (message.toolName !== "hold") throw new Error("unexpected tool call");
+				if (releasedFirstWave) {
+					reply(message);
+					return;
+				}
+				heldCalls.push(message);
+				releaseFirstWave();
+			},
+		});
+		try {
+			// Given: four thunks whose first two calls are held by the bridge.
+			const result = await kernel.run({
+				cellId: "parallel-width",
+				code: `let active = 0;
+const work = async (index) => {
+  active += 1;
+  if (active > 2) throw new Error("pool width exceeded");
+  if (active === 2) await tool.marker({});
+  const value = await tool.hold({ index });
+  active -= 1;
+  return value;
+};
+return await parallel([0, 1, 2, 3].map((index) => async () => await work(index)));`,
+				timeoutMs: 2_000,
+			});
+
+			// When: the bridge resolves the held wave out of input order.
+			// Then: pool width remains bounded and results retain input order.
+			expect(heldCalls).toHaveLength(2);
+			expect(result).toMatchObject({
+				ok: true,
+				valueRepr: '[{"index":0},{"index":1},{"index":2},{"index":3}]',
+			});
+		} finally {
+			await kernel.close();
+		}
+	});
+
+	it("propagates the lowest-index parallel error after every worker settles", async () => {
+		await withKernel(async (kernel) => {
+			// Given: a lower-index thunk blocked on a bridge reply and a higher-index failure.
+			const run = kernel.run({
+				cellId: "parallel-error",
+				code: `return await parallel([
+  async () => { await tool.gate({}); throw new Error("idx0"); },
+  async () => { throw new Error("idx1"); }
+]);`,
+				timeoutMs: 2_000,
+			});
+			const gate = await kernel.nextToolCall();
+			expect(gate).toMatchObject({ toolName: "gate" });
+
+			// When: the lower-index thunk is allowed to finish after the higher-index failure.
+			kernel.deliverToolReply({ type: "tool-reply", callId: gate.callId, ok: true, value: "released" });
+			const result = await run;
+
+			// Then: the result reports the lowest-index failure.
+			expect(result.ok).toBe(false);
+			if (!result.ok) expect(result.error.message).toContain("idx0");
+		});
+	});
+
+	it("keeps every pipeline stage behind the preceding stage barrier", async () => {
+		await withKernel(async (kernel) => {
+			// Given: stages recording deterministic logical timestamps after asynchronous yields.
+			const run = await runCell(
+				kernel,
+				`let logicalTime = 0;
+const stageOneEnds = [];
+const stageTwoStarts = [];
+const stageOne = async (value) => {
+  await Promise.resolve();
+  stageOneEnds.push(++logicalTime);
+  return value;
+};
+const stageTwo = async (value) => {
+  stageTwoStarts.push(++logicalTime);
+  return value;
+};
+const values = await pipeline([0, 1, 2], stageOne, stageTwo);
+return { values, barrier: Math.min(...stageTwoStarts) >= Math.max(...stageOneEnds) };`,
+			);
+
+			// When: both pipeline stages run.
+			// Then: stage two starts only after every stage-one completion.
+			expect(run.result).toMatchObject({ ok: true, valueRepr: '{"values":[0,1,2],"barrier":true}' });
+		});
+	});
 });

@@ -224,22 +224,44 @@ export class JsWorkerRuntime {
 	}
 
 	async #parallel(thunks) {
-		const results = new Array(thunks.length);
+		const list = Array.from(thunks ?? []);
+		if (list.length === 0) return [];
+		const configuredWidth = Number.isFinite(this.#parallelPoolWidth) ? Math.trunc(this.#parallelPoolWidth) : 1;
+		const workerCount = Math.min(Math.max(1, configuredWidth), list.length);
+		const results = new Array(list.length);
 		let next = 0;
-		const workers = Array.from({ length: Math.min(this.#parallelPoolWidth, thunks.length) }, async () => {
-			while (next < thunks.length) {
+		let firstError;
+		let firstErrorIndex = list.length;
+		let hasError = false;
+		const worker = async () => {
+			while (true) {
 				const index = next;
 				next += 1;
-				results[index] = await thunks[index]();
+				if (index >= list.length) return;
+				try {
+					const thunk = list[index];
+					if (typeof thunk !== "function") throw new TypeError("parallel() expects an iterable of functions");
+					results[index] = await thunk(index);
+				} catch (error) {
+					if (!hasError || index < firstErrorIndex) {
+						hasError = true;
+						firstErrorIndex = index;
+						firstError = error;
+					}
+				}
 			}
-		});
-		await Promise.all(workers);
+		};
+		await Promise.all(Array.from({ length: workerCount }, worker));
+		if (hasError) throw firstError;
 		return results;
 	}
 
 	async #pipeline(items, stages) {
-		let current = items;
-		for (const stage of stages) current = await this.#parallel(current.map(item => async () => await stage(item)));
+		let current = Array.from(items ?? []);
+		for (const stage of stages) {
+			if (typeof stage !== "function") throw new TypeError("pipeline() stages must be functions");
+			current = await this.#parallel(current.map(item => async () => await stage(item)));
+		}
 		return current;
 	}
 }

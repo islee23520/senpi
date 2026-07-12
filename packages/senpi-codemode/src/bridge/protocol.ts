@@ -18,6 +18,7 @@ const connectionConfigSchema = Type.Object({
 	token: Type.String({ minLength: 1 }),
 	localRoots: Type.Optional(Type.Record(Type.String(), Type.String())),
 	artifactsDir: Type.Optional(Type.String()),
+	parallelPoolWidth: Type.Optional(Type.Integer({ minimum: 1 })),
 });
 
 const hostToKernelMessageSchema = Type.Union([

@@ -10,6 +10,6 @@ export const JAVASCRIPT_KERNEL_PRELUDE = [
 	"completion(prompt, options?): request a host completion bridge call.",
 	"output(...ids, options?): retrieve task output through the reserved output bridge.",
 	"agent(prompt, options?): delegate work through the reserved agent bridge.",
-	"parallel(thunks): run async thunks through the configured bounded pool.",
-	"pipeline(items, ...stages): map items through staged async transforms.",
+	"parallel(thunks): run async thunks through the configured bounded pool; preserves order and rethrows the lowest-index error after all settle.",
+	"pipeline(items, ...stages): map items through staged async transforms with a barrier between stages.",
 ].join("\n");

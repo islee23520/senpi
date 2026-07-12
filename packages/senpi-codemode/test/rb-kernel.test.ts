@@ -1,3 +1,4 @@
+// allow: SIZE_OK — parity cases stay beside the live kernel harness they exercise.
 import { execFileSync } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -209,6 +210,150 @@ describe("RubyKernel", () => {
 			expect([...after]).toEqual([]);
 		} finally {
 			await server.close();
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+	it.skipIf(!hasRuby())("uses the bridge pool width and preserves input order under controlled jitter", async () => {
+		const root = await mkdtemp(join(tmpdir(), "senpi-rb-parallel-width-"));
+		const markerReceived = Promise.withResolvers<void>();
+		const markerReply = Promise.withResolvers<string>();
+		const firstHolds = Promise.withResolvers<void>();
+		const held = new Map<number, (value: number | PromiseLike<number>) => void>();
+		let releaseAdditionalHolds = false;
+		const server = await startBridgeServer({
+			token: "parallel-width-token",
+			onCall: async (request) => {
+				if (request.toolName === "marker") {
+					markerReceived.resolve();
+					return await markerReply.promise;
+				}
+				if (request.toolName !== "hold") throw new Error(`unexpected tool call: ${request.toolName}`);
+				if (
+					typeof request.args !== "object" ||
+					request.args === null ||
+					Array.isArray(request.args) ||
+					!("index" in request.args) ||
+					typeof request.args.index !== "number"
+				) {
+					throw new Error("hold requires a numeric index");
+				}
+				const index = request.args.index;
+				if (releaseAdditionalHolds) return index;
+				const deferred = Promise.withResolvers<number>();
+				held.set(index, deferred.resolve);
+				if (held.size === 2) firstHolds.resolve();
+				return await deferred.promise;
+			},
+			onEmit: async () => undefined,
+			onCompletion: async () => "unused",
+		});
+		const connection = { port: server.port, token: server.token, parallelPoolWidth: 2 };
+		const kernel = RubyKernel.start({ cwd: root, sessionId: "parallel-width", connection });
+		try {
+			// Given: a two-worker pool whose first wave is held by the bridge.
+			const run = kernel.run({
+				cellId: "parallel-width",
+				code: `lock = Mutex.new
+active = 0
+work = lambda do |index|
+  lock.synchronize do
+    active += 1
+    raise "pool width exceeded" if active > 2
+    tool.marker({}) if active == 2
+  end
+  value = tool.hold({ index: index })
+  lock.synchronize { active -= 1 }
+  value
+end
+parallel((0...4).map { |index| -> { work.call(index) } })`,
+				timeoutMs: 3_000,
+			});
+
+			// When: the first wave is released in reverse completion order.
+			await markerReceived.promise;
+			markerReply.resolve("marker");
+			await firstHolds.promise;
+			expect([...held.keys()].sort((left, right) => left - right)).toEqual([0, 1]);
+			releaseAdditionalHolds = true;
+			const releaseOne = held.get(1);
+			const releaseZero = held.get(0);
+			if (!releaseOne || !releaseZero) throw new Error("missing first-wave hold");
+			releaseOne(1);
+			releaseZero(0);
+
+			// Then: the bounded pool completes every thunk while retaining input order.
+			await expect(run).resolves.toMatchObject({ ok: true, valueRepr: "[0,1,2,3]" });
+		} finally {
+			await kernel.close();
+			await server.close();
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it.skipIf(!hasRuby())("propagates the lowest-index parallel error after every worker settles", async () => {
+		const root = await mkdtemp(join(tmpdir(), "senpi-rb-parallel-error-"));
+		const kernel = RubyKernel.start({
+			cwd: root,
+			sessionId: "parallel-error",
+			connection: { port: 1, token: "unused", parallelPoolWidth: 2 },
+		});
+		try {
+			// Given: a lower-index thunk waiting for a higher-index thunk to fail.
+			const result = await kernel.run({
+				cellId: "parallel-error",
+				code: `gate = Queue.new
+low = -> { gate.pop; raise "idx0" }
+high = -> { gate << true; raise "idx1" }
+parallel([low, high])`,
+				timeoutMs: 3_000,
+			});
+
+			// When: both thunks raise in controlled opposite completion order.
+			// Then: the observable cell error is from the lowest input index.
+			expect(result.ok).toBe(false);
+			if (!result.ok) expect(result.error.message).toContain("idx0");
+		} finally {
+			await kernel.close();
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it.skipIf(!hasRuby())("keeps every pipeline stage behind the preceding stage barrier", async () => {
+		const root = await mkdtemp(join(tmpdir(), "senpi-rb-pipeline-barrier-"));
+		const kernel = RubyKernel.start({
+			cwd: root,
+			sessionId: "pipeline-barrier",
+			connection: { port: 1, token: "unused", parallelPoolWidth: 2 },
+		});
+		try {
+			// Given: stages that record deterministic logical timestamps in the cell.
+			const result = await kernel.run({
+				cellId: "pipeline-barrier",
+				code: `logical_time = 0
+stage_one_ends = []
+stage_two_starts = []
+stage_one = lambda do |value|
+  logical_time += 1
+  stage_one_ends << logical_time
+  Thread.pass
+  value
+end
+stage_two = lambda do |value|
+  logical_time += 1
+  stage_two_starts << logical_time
+  value
+end
+values = pipeline([0, 1, 2], stage_one, stage_two)
+raise "pipeline barrier failed" unless stage_two_starts.min >= stage_one_ends.max
+values`,
+				timeoutMs: 3_000,
+			});
+
+			// When: both pipeline stages run.
+			// Then: stage two starts only after every stage-one completion.
+			expect(result).toMatchObject({ ok: true, valueRepr: "[0,1,2]" });
+		} finally {
+			await kernel.close();
 			await rm(root, { recursive: true, force: true });
 		}
 	});

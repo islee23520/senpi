@@ -212,12 +212,16 @@ def agent(prompt, agent: "task", model: nil, label: nil, schema: nil, isolated: 
   end
 end
 
-def __senpi_pool_map(items, width)
+def __senpi_pool_map(items)
   values = items.to_a
   return [] if values.empty?
-  workers = [[width.to_i, 1].max, values.length].min
+  connection = $__senpi_connection
+  configured_width = connection.is_a?(Hash) ? connection["parallelPoolWidth"] : nil
+  width = configured_width.is_a?(Numeric) ? configured_width.to_i : 4
+  workers = [[width, 1].max, values.length].min
   results = Array.new(values.length)
   failures = {}
+  failure_mutex = Mutex.new
   queue = Queue.new
   values.each_index { |index| queue << index }
   threads = workers.times.map do
@@ -228,7 +232,7 @@ def __senpi_pool_map(items, width)
         begin
           results[index] = yield(values[index])
         rescue Exception => error
-          failures[index] = error
+          failure_mutex.synchronize { failures[index] = error }
         end
       end
     end
@@ -238,18 +242,21 @@ def __senpi_pool_map(items, width)
   results
 end
 
-def parallel(thunks, width: 4)
-  __senpi_pool_map(thunks, width) do |thunk|
-    raise TypeError, "parallel() expects zero-arg callables" unless thunk.respond_to?(:call)
-    thunk.call
+def parallel(thunks)
+  values = thunks.to_a
+  values.each do |thunk|
+    raise TypeError, "parallel() expects an iterable of zero-arg callables" unless thunk.respond_to?(:call)
   end
+  __senpi_pool_map(values) { |thunk| thunk.call }
 end
 
 def pipeline(items, *stages)
-  stages.reduce(items.to_a) do |values, stage|
+  values = items.to_a
+  stages.each do |stage|
     raise TypeError, "pipeline() stages must be callables" unless stage.respond_to?(:call)
-    __senpi_pool_map(values, 4) { |value| stage.call(value) }
+    values = __senpi_pool_map(values) { |value| stage.call(value) }
   end
+  values
 end
 
 def log(message)
