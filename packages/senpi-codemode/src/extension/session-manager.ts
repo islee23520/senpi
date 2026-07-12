@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { ExtensionContext } from "@code-yeongyu/senpi";
 import { type BridgeServerHandle, startBridgeServer } from "../bridge/http-server.ts";
 import type { KernelToHostMessage } from "../bridge/protocol.ts";
@@ -21,6 +22,10 @@ export interface CreateCodemodeSessionManagerOptions {
 	readonly cwd: string;
 	readonly settings: CodemodeSettings;
 	readonly availability: InterpreterAvailability;
+	/** Session-scoped roots exposed to kernel helpers such as local://. */
+	readonly localRoots?: Readonly<Record<string, string>>;
+	/** Session-adjacent directory used for persisted eval artifacts. */
+	readonly artifactsDir?: string;
 	readonly executeTool: ExecuteTool;
 	readonly complete: (request: CompletionRequest, ctx: ExtensionContext) => Promise<CompletionResult>;
 }
@@ -158,7 +163,15 @@ class DefaultCodemodeSessionManager implements CodemodeSessionManager {
 		}
 		const detected = this.#options.availability[language].detected;
 		if (!detected.ok) throw new Error(`No ${language} interpreter is available`);
-		const connection = { port: bridge.port, token: bridge.token };
+		const localRoots =
+			this.#options.localRoots ??
+			(this.#options.artifactsDir ? { local: join(this.#options.artifactsDir, "local") } : undefined);
+		const connection = {
+			port: bridge.port,
+			token: bridge.token,
+			...(localRoots ? { localRoots: { ...localRoots } } : {}),
+			...(this.#options.artifactsDir ? { artifactsDir: this.#options.artifactsDir } : {}),
+		};
 		if (language === "py") {
 			return await PythonKernel.start({
 				interpreterPath: detected.path,
