@@ -18,7 +18,7 @@ type StopReason = "stop" | "error" | "aborted";
 
 type FakeAssistantMessage = {
 	readonly role: "assistant";
-	readonly content: readonly { readonly type: "text"; readonly text: string }[];
+	readonly content: { readonly type: "text"; readonly text: string }[];
 	readonly api: string;
 	readonly provider: string;
 	readonly model: string;
