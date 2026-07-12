@@ -28,7 +28,7 @@ import type { TLocalizedValidationError } from "typebox/error";
 import { getAgentDir } from "../config.ts";
 import { stripJsonComments } from "../utils/json.ts";
 import { normalizePath } from "../utils/paths.ts";
-import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
+import type { AuthStatus, AuthStorage, PooledCredentialOptions } from "./auth-storage.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import {
 	getConfigValueEnvVarNames,
@@ -309,6 +309,7 @@ export type ResolvedRequestAuth =
 			upstreamModelId?: string;
 			serviceTier?: ModelServiceTier;
 			env?: Record<string, string>;
+			reportOutcome?: (status: "success" | "rate_limited" | "unauthorized" | "unavailable") => void;
 	  }
 	| {
 			ok: false;
@@ -921,20 +922,27 @@ export class ModelRegistry {
 	/**
 	 * Get API key and request headers for a model.
 	 */
-	async getApiKeyAndHeaders(model: Model<Api>): Promise<ResolvedRequestAuth> {
+	async getApiKeyAndHeaders(
+		model: Model<Api>,
+		pooledCredentialOptions?: PooledCredentialOptions,
+	): Promise<ResolvedRequestAuth> {
 		try {
 			const providerConfig = this.providerRequestConfigs.get(model.provider);
 			const providerEnv = this.authStorage.getProviderEnv(model.provider);
 			const apiKeyFromAuthStorage = await this.authStorage.getApiKey(model.provider, { includeFallback: false });
-			const apiKey =
-				apiKeyFromAuthStorage ??
-				(providerConfig?.apiKey
+			const configuredApiKey =
+				apiKeyFromAuthStorage === undefined && providerConfig?.apiKey
 					? resolveConfigValueOrThrow(
 							providerConfig.apiKey,
 							`API key for provider "${model.provider}"`,
 							providerEnv,
 						)
-					: undefined);
+					: undefined;
+			const pooledCredential =
+				apiKeyFromAuthStorage === undefined && configuredApiKey === undefined
+					? this.authStorage.selectPooledCredential(model.provider, pooledCredentialOptions)
+					: undefined;
+			const apiKey = apiKeyFromAuthStorage ?? configuredApiKey ?? pooledCredential?.apiKey ?? undefined;
 
 			const modelRequestKey = this.getModelRequestKey(model.provider, model.id);
 			const providerHeaders = resolveHeadersOrThrow(
@@ -985,6 +993,9 @@ export class ModelRegistry {
 			}
 			if (providerEnv && Object.keys(providerEnv).length > 0) {
 				resolved.env = providerEnv;
+			}
+			if (pooledCredential !== undefined) {
+				resolved.reportOutcome = pooledCredential.reportOutcome;
 			}
 			return resolved;
 		} catch (error) {
