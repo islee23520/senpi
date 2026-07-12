@@ -46,6 +46,7 @@ type SessionRuntime = {
 	readonly settings: ResolvedCodemodeSettings;
 	readonly artifactsDir: string;
 	readonly executeTool: AgentExecuteTool;
+	readonly spawns: boolean;
 };
 
 export interface CodemodeExtensionAPI {
@@ -102,6 +103,8 @@ export default function senpiCodemode(pi: CodemodeExtensionAPI, options: SenpiCo
 				artifactsDir: runtime.artifactsDir,
 				executionTracker: manager,
 				renderers,
+				spawns: runtime.spawns,
+				spawnDefaultAgent: runtime.settings.taskTools.task,
 			}),
 		);
 	});
@@ -231,7 +234,14 @@ async function createRuntime(
 		executeTool,
 		complete,
 	});
-	return { manager, enabledLanguages, settings, artifactsDir: artifacts.dir, executeTool };
+	return {
+		manager,
+		enabledLanguages,
+		settings,
+		artifactsDir: artifacts.dir,
+		executeTool,
+		spawns: activeTools.has(settings.taskTools.task),
+	};
 }
 
 function createExecuteTool(pi: CodemodeExtensionAPI, activeTools?: ReadonlySet<string>): AgentExecuteTool {

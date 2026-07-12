@@ -35,6 +35,10 @@ export interface CreateEvalToolOptions {
 	readonly executionTracker?: EvalExecutionTracker;
 	readonly proxyExecutor?: (params: EvalToolInput, signal?: AbortSignal) => Promise<AgentToolResult<EvalToolDetails>>;
 	readonly renderers?: Pick<ToolDefinition<EvalInputSchema, EvalToolDetails>, "renderCall" | "renderResult">;
+	/** Whether the task-tool spawn helpers (agent()/output()/<dag>) are advertised in the prompt. */
+	readonly spawns?: boolean;
+	/** Default agent name surfaced in the agent() helper docs when spawns are enabled. */
+	readonly spawnDefaultAgent?: string;
 }
 
 interface EvalCellInvocation {
@@ -145,7 +149,10 @@ class CellExecution {
 
 export function createEvalTool(options: CreateEvalToolOptions): ToolDefinition<EvalInputSchema, EvalToolDetails> {
 	const parameters = createEvalInputSchema(options.enabledLanguages);
-	const prompt = buildEvalPrompt(options.enabledLanguages);
+	const prompt = buildEvalPrompt(options.enabledLanguages, {
+		spawns: options.spawns ?? false,
+		...(options.spawnDefaultAgent === undefined ? {} : { spawnDefaultAgent: options.spawnDefaultAgent }),
+	});
 	const languages = enabledLanguageList(options.enabledLanguages);
 	return {
 		name: "eval",

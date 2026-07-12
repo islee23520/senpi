@@ -181,6 +181,64 @@ describe("senpi-codemode extension factory", () => {
 		}
 	});
 
+	it("exposes agent()/output()/<dag> in the registered description when the task tool is active", async () => {
+		// Given a session where the `task` tool is registered alongside eval
+		const cwd = await mkdtemp(join(tmpdir(), "senpi-codemode-spawns-"));
+		await mkdir(join(cwd, ".senpi"), { recursive: true });
+		await writeFile(
+			join(cwd, ".senpi", "codemode.json"),
+			JSON.stringify({ languages: { py: true, js: true, rb: false, jl: false } }),
+		);
+		const pi = new FakePi();
+		pi.activeTools.add("task");
+		const manager = new DisposableManager();
+		senpiCodemode(pi, { createSessionManager: () => manager });
+		const ctx = extensionContext(cwd);
+
+		try {
+			// When
+			await emit(pi, "session_start", { reason: "startup" }, ctx);
+
+			// Then the registered description advertises the spawn helpers
+			const tool = pi.registeredTool;
+			if (!tool) throw new Error("eval tool was not registered");
+			expect(tool.description).toContain("agent(");
+			expect(tool.description).toContain("output(");
+			expect(tool.description).toContain("<dag>");
+		} finally {
+			await emit(pi, "session_shutdown", {}, ctx);
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("omits agent()/output()/<dag> from the registered description when no task tool is active", async () => {
+		// Given a session with no `task` tool registered
+		const cwd = await mkdtemp(join(tmpdir(), "senpi-codemode-nospawns-"));
+		await mkdir(join(cwd, ".senpi"), { recursive: true });
+		await writeFile(
+			join(cwd, ".senpi", "codemode.json"),
+			JSON.stringify({ languages: { py: true, js: true, rb: false, jl: false } }),
+		);
+		const pi = new FakePi();
+		const manager = new DisposableManager();
+		senpiCodemode(pi, { createSessionManager: () => manager });
+		const ctx = extensionContext(cwd);
+
+		try {
+			// When
+			await emit(pi, "session_start", { reason: "startup" }, ctx);
+
+			// Then the registered description hides the spawn helpers
+			const tool = pi.registeredTool;
+			if (!tool) throw new Error("eval tool was not registered");
+			expect(tool.description).not.toContain("agent(");
+			expect(tool.description).not.toContain("<dag>");
+		} finally {
+			await emit(pi, "session_shutdown", {}, ctx);
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
 	it("creates a fresh manager on start/reload and disposes on shutdown, switch, and fork", async () => {
 		const pi = new FakePi();
 		const managers: DisposableManager[] = [];
