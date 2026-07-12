@@ -346,8 +346,27 @@ class ToolProxy:
 tool = ToolProxy()
 
 
-def completion(prompt: str, **options: Any) -> Any:
-    return bridge_post("/completion", {"prompt": prompt, "opts": options})
+def completion(
+    prompt: str,
+    model: str = "default",
+    system: str | None = None,
+    schema: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> Any:
+    options: dict[str, Any] = {}
+    if model != "default":
+        options["model"] = model
+    options.update(kwargs)
+    if system is not None:
+        options["system"] = system
+    if schema is not None:
+        options["schema"] = schema
+    response = bridge_post("/completion", {"prompt": prompt, "opts": options})
+    if not isinstance(response, dict):
+        return response
+    if "value" in response:
+        return response["value"]
+    return response.get("text", response)
 
 
 def output(

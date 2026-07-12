@@ -181,8 +181,10 @@ def completion(prompt, model: "default", system: nil, schema: nil, **kwargs)
   options["system"] = system unless system.nil?
   options["schema"] = schema unless schema.nil?
   result = __senpi_bridge_request("/completion", { "prompt" => prompt.to_s, "opts" => options })
-  return result unless schema
-  JSON.parse(result.is_a?(Hash) ? result.fetch("text", result).to_s : result.to_s)
+  return result unless result.is_a?(Hash)
+  return result["value"] if result.key?("value")
+
+  result.fetch("text", result)
 end
 
 def output(*ids, format: "raw", offset: nil, limit: nil)

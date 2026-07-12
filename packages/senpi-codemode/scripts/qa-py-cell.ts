@@ -1,6 +1,7 @@
-import type { AgentToolResult } from "@code-yeongyu/senpi";
+import type { AgentToolResult, ExtensionContext } from "@code-yeongyu/senpi";
 import { startBridgeServer } from "../src/bridge/http-server.ts";
 import { RESERVED_AGENT_TOOL, RESERVED_OUTPUT_TOOL } from "../src/bridge/reserved.ts";
+import { createCompletionHandler } from "../src/completion/handler.ts";
 import {
 	type AgentExecuteTool,
 	type EvalAgentResult,
@@ -17,12 +18,14 @@ class QaUsageError extends Error {
 type QaOptions = {
 	readonly codes: readonly string[];
 	readonly cwd: string;
+	readonly withFakeCompletion: string | undefined;
 	readonly withFakeTask: boolean;
 };
 
 function parseOptions(argv: readonly string[]): QaOptions {
 	const codes: string[] = [];
 	let cwd = process.cwd();
+	let withFakeCompletion: string | undefined;
 	let withFakeTask = false;
 	for (let index = 0; index < argv.length; index += 1) {
 		const argument = argv[index];
@@ -40,6 +43,13 @@ function parseOptions(argv: readonly string[]): QaOptions {
 			index += 1;
 			continue;
 		}
+		if (argument === "--with-fake-completion") {
+			const value = argv[index + 1];
+			if (value === undefined) throw new QaUsageError("--with-fake-completion requires a value");
+			withFakeCompletion = value;
+			index += 1;
+			continue;
+		}
 		if (argument === "--with-fake-task") {
 			withFakeTask = true;
 			continue;
@@ -47,7 +57,7 @@ function parseOptions(argv: readonly string[]): QaOptions {
 		throw new QaUsageError("unknown argument: " + argument);
 	}
 	if (codes.length === 0) throw new QaUsageError("provide at least one --code cell");
-	return { codes, cwd, withFakeTask };
+	return { codes, cwd, withFakeCompletion, withFakeTask };
 }
 
 function taskResult(text: string, status: string): AgentToolResult<unknown> {
@@ -65,6 +75,78 @@ function createQaTaskTool(enabled: boolean): AgentExecuteTool {
 		return taskResult("FAKE_RESULT", "completed");
 	};
 	return Object.assign(executeTool, { isToolAvailable: (name: string) => enabled && name === "task" });
+}
+
+type QaAssistantMessage = {
+	readonly role: "assistant";
+	readonly content: readonly { readonly type: "text"; readonly text: string }[];
+	readonly api: string;
+	readonly provider: string;
+	readonly model: string;
+	readonly stopReason: "stop";
+	readonly usage: {
+		readonly input: number;
+		readonly output: number;
+		readonly cacheRead: number;
+		readonly cacheWrite: number;
+		readonly totalTokens: number;
+		readonly cost: {
+			readonly input: number;
+			readonly output: number;
+			readonly cacheRead: number;
+			readonly cacheWrite: number;
+			readonly total: number;
+		};
+	};
+	readonly timestamp: number;
+};
+
+const qaCompletionModel = {
+	id: "qa-completion-model",
+	name: "QA Completion Model",
+	provider: "qa",
+	api: "qa-api",
+	reasoning: false,
+	input: ["text"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 1_000,
+	maxTokens: 100,
+};
+
+function qaCompletionContext(signal: AbortSignal): ExtensionContext {
+	return Object.assign(Object.create(null), {
+		model: qaCompletionModel,
+		modelRegistry: {
+			getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "qa-key" }),
+			getAvailable: () => [qaCompletionModel],
+		},
+		signal,
+	});
+}
+
+function qaCompletionMessage(text: string): QaAssistantMessage {
+	return {
+		role: "assistant",
+		content: [{ type: "text", text }],
+		api: "qa-api",
+		provider: "qa",
+		model: "qa-completion-model",
+		stopReason: "stop",
+		usage: {
+			input: 1,
+			output: 1,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 2,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		timestamp: Date.now(),
+	};
+}
+
+async function runFakeCompletion(text: string, prompt: string, opts: unknown, signal: AbortSignal): Promise<unknown> {
+	const complete = createCompletionHandler(async () => qaCompletionMessage(text));
+	return await complete(qaCompletionContext(signal))({ prompt, opts });
 }
 
 function adaptPlainForegroundForQa(value: EvalAgentResult): unknown {
@@ -96,8 +178,11 @@ async function runQa(options: QaOptions): Promise<void> {
 		onEmit: async (event) => {
 			console.log(JSON.stringify({ type: "emit", event }));
 		},
-		onCompletion: async () => {
-			throw new QaUsageError("completion unavailable in qa driver");
+		onCompletion: async (request) => {
+			if (options.withFakeCompletion === undefined) {
+				throw new QaUsageError("completion unavailable in qa driver");
+			}
+			return await runFakeCompletion(options.withFakeCompletion, request.prompt, request.opts, request.signal);
 		},
 	});
 	try {

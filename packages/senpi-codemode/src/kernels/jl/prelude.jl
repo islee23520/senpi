@@ -189,9 +189,9 @@ function completion(prompt::AbstractString; model="default", system=nothing, sch
         options[string(key)] = value
     end
     response = senpi_with_bridge_timeout_pause(() -> senpi_completion(string(prompt), options))
-    schema === nothing && return response
-    text_value = response isa AbstractDict ? get(response, "text", response) : response
-    senpi_json_parse(string(text_value))
+    response isa AbstractDict || return response
+    haskey(response, "value") && return response["value"]
+    get(response, "text", response)
 end
 
 function output(ids...; format="raw", offset=nothing, limit=nothing)
