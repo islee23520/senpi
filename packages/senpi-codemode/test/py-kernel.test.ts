@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { type BridgeHttpCallRequest, startBridgeServer } from "../src/bridge/http-server.ts";
-import type { BridgeConnectionConfig } from "../src/bridge/protocol.ts";
+import type { BridgeConnectionConfig, KernelToHostMessage } from "../src/bridge/protocol.ts";
 import { createInterpreterDetector } from "../src/interpreters/detect.ts";
 import { type KernelSpawnOptions, PythonKernel } from "../src/kernels/py/kernel.ts";
 import { FakeChild, hasPython3, liveKernel, runCell } from "./py-kernel/fixtures.ts";
@@ -78,6 +78,36 @@ describe.skipIf(!(await hasPython3()))("PythonKernel live", () => {
 			const failed = await runCell(kernel, "raise RuntimeError('kaput')");
 			expect(failed.ok).toBe(false);
 			if (!failed.ok) expect(failed.error.stack).toContain("RuntimeError: kaput");
+		} finally {
+			await kernel.close();
+		}
+	});
+
+	it("translates shell escapes and keeps env state", async () => {
+		// Given
+		const messages: KernelToHostMessage[] = [];
+		const kernel = await liveKernel({ onMessage: (message) => messages.push(message) });
+
+		try {
+			// When
+			const result = await runCell(
+				kernel,
+				"!echo SHELL_OK\nenv('CM_ENV_ROUND_TRIP', 'V1'); print(env('CM_ENV_ROUND_TRIP'))",
+			);
+
+			// Then
+			expect(result.ok).toBe(true);
+			const stdout = messages
+				.flatMap((message) => (message.type === "text" && message.stream === "stdout" ? [message.data] : []))
+				.join("");
+			expect(stdout).toContain("SHELL_OK");
+			expect(stdout).toContain("V1");
+			expect(messages).toContainEqual(
+				expect.objectContaining({
+					type: "status",
+					event: { op: "env", key: "CM_ENV_ROUND_TRIP", value: "V1", action: "set" },
+				}),
+			);
 		} finally {
 			await kernel.close();
 		}
