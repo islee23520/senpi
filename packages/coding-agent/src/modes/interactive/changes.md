@@ -1,5 +1,21 @@
 # changes
 
+## Transactional post-compaction queue transfer (2026-07-13)
+
+### What changed
+
+- `compaction-queue-transfer.ts`: transfers one captured interactive batch entry by entry, commits accepted entries, and restores only the undelivered suffix ahead of input that arrived during transfer.
+- `interactive-mode.ts`: post-compaction rollback no longer clears native session queues; the first prompt carries explicit steer/follow-up intent and commits at prompt preflight acceptance.
+
+### Why extension system couldn't handle this
+
+- `compactionQueuedMessages` and the first-prompt handoff are private TUI state. Extensions can add native continuations, but cannot transactionally own or restore the host's interactive queue.
+
+### Expected merge conflict zones
+
+- HIGH: `interactive-mode.ts` around `flushCompactionQueue()` and pending-message display updates.
+- LOW: `compaction-queue-transfer.ts` (fork-only helper).
+
 ## eval/tool image renderer lifecycle (2026-07-10)
 
 ### What changed

@@ -109,6 +109,11 @@ import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { checkForNewPiVersion, getReleaseChangelogUrl } from "../../utils/version-check.ts";
 import { abortedErrorLabel } from "./aborted-error-label.ts";
+import {
+	type CompactionQueuedMessage,
+	transferCompactionQueue,
+	waitForPromptAcceptance,
+} from "./compaction-queue-transfer.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
@@ -206,11 +211,6 @@ class ExpandableText extends Text implements Expandable {
 		this.setText(expanded ? this.getExpandedText() : this.getCollapsedText());
 	}
 }
-
-type CompactionQueuedMessage = {
-	text: string;
-	mode: "steer" | "followUp";
-};
 
 type ToolExecutionStartEvent = Extract<AgentSessionEvent, { type: "tool_execution_start" }>;
 type ToolExecutionEndEvent = Extract<AgentSessionEvent, { type: "tool_execution_end" }>;
@@ -4426,80 +4426,46 @@ export class InteractiveMode {
 	}
 
 	private async flushCompactionQueue(options?: { willRetry?: boolean }): Promise<void> {
-		if (this.compactionQueuedMessages.length === 0) {
-			return;
-		}
-
-		const queuedMessages = [...this.compactionQueuedMessages];
-		this.compactionQueuedMessages = [];
+		await transferCompactionQueue(
+			{
+				takeBatch: () => {
+					const batch = this.compactionQueuedMessages;
+					this.compactionQueuedMessages = [];
+					this.updatePendingMessagesDisplay();
+					return batch;
+				},
+				restoreUndelivered: (messages) => {
+					this.compactionQueuedMessages = [...messages, ...this.compactionQueuedMessages];
+					this.updatePendingMessagesDisplay();
+				},
+				isCommand: (message) => this.isExtensionCommand(message.text),
+				deliverCommand: (message) => this.session.prompt(message.text),
+				deliverFirstPrompt: (message) =>
+					waitForPromptAcceptance(
+						(preflightResult) =>
+							this.session.prompt(message.text, {
+								streamingBehavior: message.mode,
+								preflightResult,
+							}),
+						(error) => {
+							this.showError(
+								`Queued prompt failed after acceptance: ${error instanceof Error ? error.message : String(error)}`,
+							);
+						},
+					),
+				deliverQueued: (message) =>
+					message.mode === "followUp" ? this.session.followUp(message.text) : this.session.steer(message.text),
+				reportFailure: (error, undeliveredCount) => {
+					this.showError(
+						`Failed to send queued message${undeliveredCount === 1 ? "" : "s"}: ${
+							error instanceof Error ? error.message : String(error)
+						}`,
+					);
+				},
+			},
+			options,
+		);
 		this.updatePendingMessagesDisplay();
-
-		const restoreQueue = (error: unknown) => {
-			this.session.clearQueue();
-			this.compactionQueuedMessages = queuedMessages;
-			this.updatePendingMessagesDisplay();
-			this.showError(
-				`Failed to send queued message${queuedMessages.length > 1 ? "s" : ""}: ${
-					error instanceof Error ? error.message : String(error)
-				}`,
-			);
-		};
-
-		try {
-			if (options?.willRetry) {
-				// When retry is pending, queue messages for the retry turn
-				for (const message of queuedMessages) {
-					if (this.isExtensionCommand(message.text)) {
-						await this.session.prompt(message.text);
-					} else if (message.mode === "followUp") {
-						await this.session.followUp(message.text);
-					} else {
-						await this.session.steer(message.text);
-					}
-				}
-				this.updatePendingMessagesDisplay();
-				return;
-			}
-
-			// Find first non-extension-command message to use as prompt
-			const firstPromptIndex = queuedMessages.findIndex((message) => !this.isExtensionCommand(message.text));
-			if (firstPromptIndex === -1) {
-				// All extension commands - execute them all
-				for (const message of queuedMessages) {
-					await this.session.prompt(message.text);
-				}
-				return;
-			}
-
-			// Execute any extension commands before the first prompt
-			const preCommands = queuedMessages.slice(0, firstPromptIndex);
-			const firstPrompt = queuedMessages[firstPromptIndex];
-			const rest = queuedMessages.slice(firstPromptIndex + 1);
-
-			for (const message of preCommands) {
-				await this.session.prompt(message.text);
-			}
-
-			// Send first prompt (starts streaming)
-			const promptPromise = this.session.prompt(firstPrompt.text).catch((error) => {
-				restoreQueue(error);
-			});
-
-			// Queue remaining messages
-			for (const message of rest) {
-				if (this.isExtensionCommand(message.text)) {
-					await this.session.prompt(message.text);
-				} else if (message.mode === "followUp") {
-					await this.session.followUp(message.text);
-				} else {
-					await this.session.steer(message.text);
-				}
-			}
-			this.updatePendingMessagesDisplay();
-			void promptPromise;
-		} catch (error) {
-			restoreQueue(error);
-		}
 	}
 
 	/** Move pending bash components from pending area to chat */
