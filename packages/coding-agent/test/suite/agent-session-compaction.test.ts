@@ -606,11 +606,12 @@ describe("AgentSession compaction characterization", () => {
 	it("applies the provider context transform to a persisted previous summary", async () => {
 		// given
 		const sensitiveSummary = "SENSITIVE_PREVIOUS_SUMMARY";
+		const injectedDirective = "INJECTED_SAFETY_DIRECTIVE";
 		const harness = await createHarness();
 		harnesses.push(harness);
 		harness.setResponses([fauxAssistantMessage("updated summary")]);
-		const transformContext = vi.fn(async (messages: AgentMessage[]) =>
-			messages.map((message) => {
+		const transformContext = vi.fn(async (messages: AgentMessage[]) => [
+			...messages.map((message) => {
 				if (message.role !== "user" || typeof message.content === "string") return message;
 				return {
 					...message,
@@ -621,7 +622,12 @@ describe("AgentSession compaction characterization", () => {
 					),
 				};
 			}),
-		);
+			{
+				role: "user" as const,
+				content: [{ type: "text" as const, text: injectedDirective }],
+				timestamp: Date.now(),
+			},
+		]);
 
 		// when
 		await generateSummary(
@@ -648,8 +654,11 @@ describe("AgentSession compaction characterization", () => {
 
 		// then
 		const providerContext = JSON.stringify(harness.faux.getCallLog()[0]?.context.messages ?? []);
-		expect(transformContext).toHaveBeenCalled();
+		expect(transformContext).toHaveBeenCalledTimes(1);
 		expect(providerContext).not.toContain(sensitiveSummary);
+		expect(providerContext).toContain("new conversation content");
+		expect(providerContext.split(injectedDirective)).toHaveLength(2);
+		expect(harness.faux.state.callCount).toBe(1);
 	});
 
 	it("stops before provider call 2 when required inline threshold compaction is cancelled", async () => {

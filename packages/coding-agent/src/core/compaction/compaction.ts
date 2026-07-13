@@ -573,24 +573,39 @@ async function completeSummarization(
 	return stream.result();
 }
 
-async function transformPreviousSummary(
+async function transformSummarySource(
+	currentMessages: AgentMessage[],
 	previousSummary: string | undefined,
 	transformContext: ((messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>) | undefined,
 	signal: AbortSignal | undefined,
-): Promise<string | undefined> {
-	if (!previousSummary || !transformContext) return previousSummary;
+): Promise<{ readonly messages: AgentMessage[]; readonly previousSummary: string | undefined }> {
+	if (!transformContext) return { messages: currentMessages, previousSummary };
+	if (!previousSummary) {
+		return { messages: await transformContext(currentMessages, signal), previousSummary: undefined };
+	}
+
+	const timestamps = new Set(currentMessages.map((message) => message.timestamp));
+	let summaryTimestamp = -1;
+	while (timestamps.has(summaryTimestamp)) {
+		summaryTimestamp--;
+	}
 	const transformed = await transformContext(
 		[
 			{
 				role: "user",
 				content: [{ type: "text", text: previousSummary }],
-				timestamp: 0,
+				timestamp: summaryTimestamp,
 			},
+			...currentMessages,
 		],
 		signal,
 	);
-	if (transformed.length === 0) return undefined;
-	return serializeConversation(convertToLlm(transformed));
+	const transformedSummary = transformed.filter((message) => message.timestamp === summaryTimestamp);
+	return {
+		messages: transformed.filter((message) => message.timestamp !== summaryTimestamp),
+		previousSummary:
+			transformedSummary.length > 0 ? serializeConversation(convertToLlm(transformedSummary)) : undefined,
+	};
 }
 
 /**
@@ -617,7 +632,8 @@ export async function generateSummary(
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
 	);
 
-	const providerPreviousSummary = await transformPreviousSummary(previousSummary, transformContext, signal);
+	const transformedSource = await transformSummarySource(currentMessages, previousSummary, transformContext, signal);
+	const providerPreviousSummary = transformedSource.previousSummary;
 
 	// Use update prompt if we have a previous summary, otherwise initial prompt
 	let basePrompt = providerPreviousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
@@ -627,8 +643,7 @@ export async function generateSummary(
 
 	// Serialize conversation to text so model doesn't try to continue it
 	// Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
-	const providerMessages = transformContext ? await transformContext(currentMessages, signal) : currentMessages;
-	const llmMessages = convertToLlm(providerMessages);
+	const llmMessages = convertToLlm(transformedSource.messages);
 	const conversationText = serializeConversation(llmMessages);
 
 	// Build the prompt with conversation wrapped in tags
