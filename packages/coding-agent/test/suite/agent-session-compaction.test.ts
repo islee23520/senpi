@@ -469,6 +469,61 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.eventsOfType("compaction_start").filter((event) => event.reason === "pre_prompt")).toHaveLength(1);
 	});
 
+	it("stops before a separate prompt provider call when required pre-prompt compaction is cancelled", async () => {
+		// given
+		const contextWindow = 5_000;
+		const reserveTokens = 1_000;
+		const largeToolResult = "terminating oversized output ".repeat(350);
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens } },
+			models: [{ id: "faux-1", contextWindow }],
+			extensionFactories: [
+				createResultToolExtension(largeToolResult, undefined, true),
+				(pi) => {
+					pi.on("session_before_compact", async () => ({ cancel: true }));
+				},
+			],
+		});
+		harnesses.push(harness);
+		const seedTimestamp = Date.now() - 2_000;
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "prior separate prompt context ".repeat(220) }],
+			timestamp: seedTimestamp,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, {
+				text: "prior response",
+				stopReason: "stop",
+				totalTokens: 700,
+				timestamp: seedTimestamp + 1_000,
+			}),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([
+			Object.assign(createAssistant(harness, { stopReason: "toolUse", totalTokens: 700 }), {
+				content: [fauxToolCall("large_result", {})],
+			}),
+			() => {
+				throw new Error("provider call 2 must not be reached");
+			},
+		]);
+		await harness.session.prompt("run the terminating result tool");
+		expect(estimateContextTokens(harness.sessionManager.buildSessionContext().messages).tokens).toBeGreaterThan(
+			contextWindow - reserveTokens,
+		);
+
+		// when / then
+		await expect(harness.session.prompt("continue after cancelled compaction")).rejects.toThrow(
+			"Context remains above the compaction threshold because compaction did not complete",
+		);
+		expect(harness.faux.state.callCount).toBe(1);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		expect(harness.eventsOfType("compaction_end")).toContainEqual(
+			expect.objectContaining({ reason: "pre_prompt", accepted: false, rejectionCause: "cancelled-by-extension" }),
+		);
+	});
+
 	it("preserves a constructor-supplied next-turn callback after rebuilding compacted context", async () => {
 		// given
 		const largeToolResult = "callback tool output ".repeat(300);

@@ -1613,7 +1613,16 @@ export class AgentSession {
 			// The user's new prompt is sent below, so do not call agent.continue() here.
 			const lastAssistant = this._findLastAssistantMessage();
 			if (lastAssistant) {
-				await this._checkCompaction(lastAssistant, false, "pre_prompt");
+				const compacted = await this._checkCompaction(lastAssistant, false, "pre_prompt");
+				if (!compacted) {
+					const settings = this.settingsManager.getCompactionSettings();
+					const contextTokens = estimateContextTokens(
+						filterContextExcludedMessages(this.sessionManager.buildSessionContext().messages),
+					).tokens;
+					if (settings.enabled && this.model && shouldCompact(contextTokens, this.model.contextWindow, settings)) {
+						throw new RequiredCompactionError();
+					}
+				}
 			}
 
 			// Build messages array (custom message if any, then user message)
