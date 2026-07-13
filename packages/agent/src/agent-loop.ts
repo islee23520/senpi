@@ -304,6 +304,18 @@ async function runLoop(
 				await emit({ type: "agent_end", messages: newMessages });
 				return;
 			}
+			if (drainedTerminatingQueue && config.isPendingMessageDrainCurrent?.(drainedTerminatingQueue) === false) {
+				pendingMessages = (await config.getSteeringMessages?.()) || [];
+				drainedTerminatingQueue = pendingMessages.length > 0 ? "steering" : undefined;
+				if (pendingMessages.length === 0) {
+					pendingMessages = (await config.getFollowUpMessages?.()) || [];
+					drainedTerminatingQueue = pendingMessages.length > 0 ? "followUp" : undefined;
+				}
+				if (pendingMessages.length === 0) {
+					await emit({ type: "agent_end", messages: newMessages });
+					return;
+				}
+			}
 
 			if (
 				!toolBatchTerminated &&

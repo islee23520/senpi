@@ -482,6 +482,10 @@ export class AgentHarness<
 				}
 				await this.emitQueueUpdate();
 			},
+			isPendingMessageDrainCurrent: (queue) =>
+				queue === "steering"
+					? this.steerQueue === steeringQueueAtDrain
+					: this.followUpQueue === followUpQueueAtDrain,
 		};
 	}
 
