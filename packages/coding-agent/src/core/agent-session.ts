@@ -616,11 +616,20 @@ export class AgentSession {
 		this.agent.prepareNextTurnWithContext = async (turn, signal) => {
 			const previousSnapshot = await previousPrepareNextTurnWithContext?.(turn, signal);
 			const previousContext = previousSnapshot?.context ?? turn.context;
+			let messages = previousContext.messages;
+			if (turn.toolResults.length > 0) {
+				await this._agentEventQueue;
+				const compacted = await this._checkCompaction(turn.message, true, "threshold");
+				if (compacted) {
+					messages = this.agent.state.messages.slice();
+				}
+			}
 
 			return {
 				...previousSnapshot,
 				context: {
 					...previousContext,
+					messages,
 					systemPrompt: this._systemPromptOverride ?? this._baseSystemPrompt,
 					tools: this.agent.state.tools.slice(),
 				},
@@ -2569,7 +2578,7 @@ export class AgentSession {
 			[...pathEntries, simulatedCompactionEntry],
 			simulatedCompactionEntry.id,
 		).messages;
-		const contextTokens = estimateContextTokens(filterContextExcludedMessages(simulatedMessages)).tokens;
+		const contextTokens = estimateMessagesTokens(filterContextExcludedMessages(simulatedMessages));
 		const settings = this.settingsManager.getCompactionSettings();
 		return contextTokens > this.model.contextWindow - settings.reserveTokens;
 	}
@@ -2622,7 +2631,7 @@ export class AgentSession {
 	private async _checkCompaction(
 		assistantMessage: AssistantMessage,
 		skipAbortedCheck = true,
-		requestReason?: "pre_prompt",
+		inlineReason?: "pre_prompt" | "threshold",
 	): Promise<boolean> {
 		const settings = this.settingsManager.getCompactionSettings();
 		if (!settings.enabled) return false;
@@ -2676,7 +2685,7 @@ export class AgentSession {
 					willRetry: false,
 					errorMessage,
 				});
-				if (requestReason === "pre_prompt") {
+				if (inlineReason === "pre_prompt") {
 					throw new Error(errorMessage);
 				}
 				return false;
@@ -2690,12 +2699,11 @@ export class AgentSession {
 				this.agent.state.messages = messages.slice(0, -1);
 				this._incrementMessageRevision();
 			}
-			if (requestReason) {
-				await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck, "overflow", willRetry);
+			if (inlineReason) {
+				return await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck, "overflow", willRetry);
 			} else {
 				return await this._runAutoCompaction("overflow", willRetry);
 			}
-			return false;
 		}
 
 		// Case 2: Threshold - context is getting large
@@ -2703,29 +2711,34 @@ export class AgentSession {
 		// This ensures sessions that hit persistent API errors (e.g. 529) or malformed zero-usage
 		// responses can still compact and do not reset context accounting.
 		let contextTokens: number;
-		const directContextTokens = assistantMessage.usage ? calculateContextTokens(assistantMessage.usage) : 0;
-		if (assistantMessage.stopReason === "error" || directContextTokens === 0) {
-			const messages = filterContextExcludedMessages(this.agent.state.messages);
-			const estimate = estimateContextTokens(messages);
-			if (estimate.lastUsageIndex === null) return false; // No usage data at all
-			// Verify the usage source is post-compaction. Kept pre-compaction messages
-			// have stale usage reflecting the old (larger) context and would falsely
-			// trigger compaction right after one just finished.
-			const usageMsg = messages[estimate.lastUsageIndex];
-			if (
-				compactionEntry &&
-				usageMsg.role === "assistant" &&
-				(usageMsg as AssistantMessage).timestamp <= new Date(compactionEntry.timestamp).getTime()
-			) {
-				return false;
-			}
-			contextTokens = estimate.tokens;
+		if (inlineReason === "threshold") {
+			const messages = filterContextExcludedMessages(this.sessionManager.buildSessionContext().messages);
+			contextTokens = estimateContextTokens(messages).tokens;
 		} else {
-			contextTokens = directContextTokens;
+			const directContextTokens = assistantMessage.usage ? calculateContextTokens(assistantMessage.usage) : 0;
+			if (assistantMessage.stopReason !== "error" && directContextTokens !== 0) {
+				contextTokens = directContextTokens;
+			} else {
+				const messages = filterContextExcludedMessages(this.agent.state.messages);
+				const estimate = estimateContextTokens(messages);
+				if (estimate.lastUsageIndex === null) return false; // No usage data at all
+				// Verify the usage source is post-compaction. Kept pre-compaction messages
+				// have stale usage reflecting the old (larger) context and would falsely
+				// trigger compaction right after one just finished.
+				const usageMsg = messages[estimate.lastUsageIndex];
+				if (
+					compactionEntry &&
+					usageMsg.role === "assistant" &&
+					(usageMsg as AssistantMessage).timestamp <= new Date(compactionEntry.timestamp).getTime()
+				) {
+					return false;
+				}
+				contextTokens = estimate.tokens;
+			}
 		}
 		if (shouldCompact(contextTokens, contextWindow, settings)) {
-			if (requestReason) {
-				await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck);
+			if (inlineReason) {
+				return await this._runPrePromptCompaction(assistantMessage, skipAbortedCheck, inlineReason);
 			} else {
 				return await this._runAutoCompaction("threshold", false);
 			}
@@ -2736,9 +2749,9 @@ export class AgentSession {
 	private async _runPrePromptCompaction(
 		lastAssistantMessage: AssistantMessage,
 		skipAbortedCheck: boolean,
-		reason: "pre_prompt" | "overflow" = "pre_prompt",
+		reason: "pre_prompt" | "overflow" | "threshold" = "pre_prompt",
 		willRetry = false,
-	): Promise<void> {
+	): Promise<boolean> {
 		this._emit({ type: "compaction_start", reason });
 		this._compactionAbortController = new AbortController();
 
@@ -2752,6 +2765,7 @@ export class AgentSession {
 			if (!execution.accepted && isContextOverflow(lastAssistantMessage, this.model?.contextWindow ?? 0)) {
 				this._overflowRecoveryAttempted = false;
 			}
+			return execution.accepted;
 		} catch (error) {
 			if (isContextOverflow(lastAssistantMessage, this.model?.contextWindow ?? 0)) {
 				this._overflowRecoveryAttempted = false;
@@ -2767,6 +2781,7 @@ export class AgentSession {
 				willRetry,
 				errorMessage: aborted ? undefined : `Pre-prompt compaction failed: ${errorMessage}`,
 			});
+			return false;
 		} finally {
 			this._compactionAbortController = undefined;
 		}
