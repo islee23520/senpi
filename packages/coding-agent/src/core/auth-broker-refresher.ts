@@ -39,6 +39,7 @@ export class AuthBrokerRefresher {
 	#timer: ReturnType<typeof setInterval> | undefined;
 	#running = false;
 	#nextSweepAt: number;
+	#activeTick: Promise<void> | undefined;
 
 	constructor(opts: AuthBrokerRefresherOptions) {
 		this.#service = opts.service;
@@ -59,11 +60,13 @@ export class AuthBrokerRefresher {
 		}, this.#refreshIntervalMs);
 	}
 
-	stop(): void {
+	async stop(): Promise<void> {
 		if (this.#timer !== undefined) {
 			clearInterval(this.#timer);
 			this.#timer = undefined;
 		}
+		const active = this.#activeTick;
+		if (active !== undefined) await active.catch(() => undefined);
 	}
 
 	getSchedule(): AuthBrokerRefresherSchedule {
@@ -79,14 +82,19 @@ export class AuthBrokerRefresher {
 	async tick(): Promise<void> {
 		if (this.#running) return;
 		this.#running = true;
+		const sweep = this.#service
+			.sweepExpiringCredentials({ now: this.#now(), refreshSkewMs: this.#refreshSkewMs })
+			.then(
+				() => undefined,
+				() => undefined,
+			);
+		this.#activeTick = sweep;
 		try {
-			await this.#service.sweepExpiringCredentials({
-				now: this.#now(),
-				refreshSkewMs: this.#refreshSkewMs,
-			});
+			await sweep;
 		} finally {
 			this.#running = false;
 			this.#nextSweepAt = this.#now() + this.#refreshIntervalMs;
+			this.#activeTick = undefined;
 		}
 	}
 }

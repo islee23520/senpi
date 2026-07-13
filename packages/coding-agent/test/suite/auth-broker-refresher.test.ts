@@ -171,4 +171,37 @@ describe("auth broker refresher", () => {
 		expect(calls).toBe(1);
 		vault.close();
 	});
+
+	it("stop() awaits an in-flight tick before resolving", async () => {
+		const vault = openVault();
+		vault.upsertCredential(oauthCredential("expiring", NOW + 30_000));
+		let resolveGate: () => void = () => {};
+		const gate = new Promise<void>((resolve) => {
+			resolveGate = resolve;
+		});
+		let started = false;
+		const broker = new AuthBrokerService(vault, [], async (record) => {
+			started = true;
+			await gate;
+			return refreshedMaterial(record.credentialId);
+		});
+		const refresher = new AuthBrokerRefresher({
+			service: broker,
+			refreshSkewMs: DEFAULT_AUTH_BROKER_REFRESH_SKEW_MS,
+			refreshIntervalMs: 1000,
+			now: () => NOW,
+		});
+		refresher.start();
+		while (!started) await Promise.resolve();
+		const stopP = Promise.resolve(refresher.stop());
+		let settled = false;
+		void stopP.then(() => {
+			settled = true;
+		});
+		for (let i = 0; i < 5; i++) await Promise.resolve();
+		expect(settled).toBe(false);
+		resolveGate();
+		await stopP;
+		vault.close();
+	});
 });
