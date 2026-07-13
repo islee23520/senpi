@@ -614,9 +614,7 @@ export class AgentSession {
 				? async (_turn: PrepareNextTurnContext, signal?: AbortSignal) => await this.agent.prepareNextTurn?.(signal)
 				: undefined);
 		this.agent.prepareNextTurnWithContext = async (turn, signal) => {
-			const previousSnapshot = await previousPrepareNextTurnWithContext?.(turn, signal);
-			const previousContext = previousSnapshot?.context ?? turn.context;
-			let messages = previousContext.messages;
+			let messages = turn.context.messages;
 			if (turn.toolResults.length > 0) {
 				await this._agentEventQueue;
 				const compacted = await this._checkCompaction(turn.message, true, "threshold");
@@ -624,12 +622,17 @@ export class AgentSession {
 					messages = this.agent.state.messages.slice();
 				}
 			}
+			const postCompactionTurn = {
+				...turn,
+				context: { ...turn.context, messages },
+			};
+			const previousSnapshot = await previousPrepareNextTurnWithContext?.(postCompactionTurn, signal);
+			const previousContext = previousSnapshot?.context ?? postCompactionTurn.context;
 
 			return {
 				...previousSnapshot,
 				context: {
 					...previousContext,
-					messages,
 					systemPrompt: this._systemPromptOverride ?? this._baseSystemPrompt,
 					tools: this.agent.state.tools.slice(),
 				},

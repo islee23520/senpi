@@ -1,3 +1,4 @@
+import type { PrepareNextTurnContext } from "@earendil-works/pi-agent-core";
 import {
 	type AssistantMessage,
 	createAssistantMessageEventStream,
@@ -396,6 +397,95 @@ describe("AgentSession compaction characterization", () => {
 			willRetry: false,
 			accepted: true,
 		});
+	});
+
+	it("applies an existing next-turn context callback once after accepted inline threshold compaction", async () => {
+		// given
+		const sensitiveToolOutput = "SENSITIVE_TOOL_OUTPUT";
+		const permittedToolOutput = "PERMITTED_TOOL_OUTPUT";
+		const contextWindow = 5_000;
+		const reserveTokens = 1_000;
+		const largeToolResult = `${sensitiveToolOutput}\n${"tool output ".repeat(300)}\n${permittedToolOutput}`;
+		const compactionSummary = "tool result callback summary";
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens } },
+			models: [{ id: "faux-1", contextWindow }],
+			extensionFactories: [createResultToolExtension(largeToolResult, compactionSummary)],
+		});
+		harnesses.push(harness);
+		const seedTimestamp = Date.now() - 2_000;
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "prior context ".repeat(220) }],
+			timestamp: seedTimestamp,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, {
+				text: "prior response",
+				stopReason: "stop",
+				totalTokens: 700,
+				timestamp: seedTimestamp + 1_000,
+			}),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		let callbackContext = "";
+		let toolTurnCallbackCalls = 0;
+		const prepareNextTurnWithContext = vi.fn(async (turn: PrepareNextTurnContext) => {
+			if (turn.toolResults.length > 0) {
+				toolTurnCallbackCalls++;
+				callbackContext = JSON.stringify(turn.context.messages);
+			}
+			return {
+				context: {
+					...turn.context,
+					messages: turn.context.messages.map((message) => {
+						if (message.role !== "toolResult") return message;
+						return {
+							...message,
+							content: message.content.map((content) =>
+								content.type === "text"
+									? { ...content, text: content.text.replaceAll(sensitiveToolOutput, "") }
+									: content,
+							),
+						};
+					}),
+				},
+			};
+		});
+		harness.session.agent.prepareNextTurnWithContext = prepareNextTurnWithContext;
+		const installAgentNextTurnRefresh = Reflect.get(harness.session, "_installAgentNextTurnRefresh");
+		if (typeof installAgentNextTurnRefresh !== "function") {
+			throw new Error("AgentSession._installAgentNextTurnRefresh is not available for characterization tests");
+		}
+		installAgentNextTurnRefresh.call(harness.session);
+		let call2Context = "";
+		let acceptedCompactionAtCall2 = false;
+		let toolTurnCallbackCallsAtCall2 = 0;
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("large_result", {}), { stopReason: "toolUse" }),
+			(context) => {
+				call2Context = JSON.stringify(context.messages);
+				toolTurnCallbackCallsAtCall2 = toolTurnCallbackCalls;
+				acceptedCompactionAtCall2 = harness
+					.eventsOfType("compaction_end")
+					.some((event) => event.reason === "threshold" && event.accepted === true);
+				return fauxAssistantMessage("done after callback-filtered compaction");
+			},
+		]);
+
+		// when
+		await harness.session.prompt("run the sensitive result tool");
+
+		// then
+		expect(toolTurnCallbackCallsAtCall2).toBe(1);
+		expect(toolTurnCallbackCalls).toBe(1);
+		expect(acceptedCompactionAtCall2).toBe(true);
+		expect(call2Context).toContain(compactionSummary);
+		expect(call2Context).toContain(permittedToolOutput);
+		expect(call2Context).not.toContain(sensitiveToolOutput);
+		expect(callbackContext).toContain(compactionSummary);
+		expect(callbackContext).toContain(sensitiveToolOutput);
+		expect(harness.faux.state.callCount).toBe(2);
 	});
 
 	it("continues to provider call 2 without compaction when trailing tool results stay below the threshold", async () => {
