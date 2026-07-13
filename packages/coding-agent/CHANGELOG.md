@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Fixed built-in web search discovery so model aliases sharing a provider endpoint no longer multiply serial fallback attempts, aborting a search stops pending native authentication discovery, and dotted private host spellings are rejected before auth or fetch ([upstream #5](https://github.com/code-yeongyu/pi-websearch/pull/5), [upstream #6](https://github.com/code-yeongyu/pi-websearch/pull/6)).
+
 ### Removed
 
 ## [2026.7.13] - 2026-07-13
