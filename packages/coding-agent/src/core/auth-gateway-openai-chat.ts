@@ -47,8 +47,10 @@ export function createOpenAIChatGatewayAdapter(options: {
 				if (result.kind !== "stream") return safeError(result.statusCode);
 				if (parsed.stream)
 					return { frames: openAiFrames(result.stream, result.model.id), kind: "sse", statusCode: 200 };
+				const message = await result.stream.result();
+				if (message.stopReason === "error" || message.stopReason === "aborted") return safeError(502);
 				return {
-					body: openAiCompletion(await result.stream.result(), result.model.id),
+					body: openAiCompletion(message, result.model.id),
 					kind: "json",
 					statusCode: 200,
 				};

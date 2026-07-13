@@ -39,8 +39,10 @@ export function createAnthropicMessagesGatewayAdapter(options: {
 				if (result.kind === "model_not_found") return unknownModel();
 				if (result.kind !== "stream") return safeError(result.statusCode);
 				if (parsed.stream) return { frames: anthropicFrames(result.stream), kind: "sse", statusCode: 200 };
+				const message = await result.stream.result();
+				if (message.stopReason === "error" || message.stopReason === "aborted") return safeError(502);
 				return {
-					body: anthropicCompletion(await result.stream.result(), result.model.id),
+					body: anthropicCompletion(message, result.model.id),
 					kind: "json",
 					statusCode: 200,
 				};

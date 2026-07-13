@@ -6,6 +6,7 @@ import {
 	fauxThinking,
 	fauxToolCall,
 } from "@earendil-works/pi-ai/compat";
+import { fauxOverflowError } from "@earendil-works/pi-ai/providers/faux";
 import { describe, expect, it } from "vitest";
 import { createAnthropicMessagesGatewayAdapter } from "../../src/core/auth-gateway-anthropic-messages.ts";
 import { createOpenAIChatGatewayAdapter } from "../../src/core/auth-gateway-openai-chat.ts";
@@ -309,6 +310,30 @@ describe("auth gateway OpenAI Chat and Anthropic Messages adapters", () => {
 		expect(runtime.calls).toHaveLength(1);
 		expect(JSON.stringify(runtime.calls)).not.toContain("caller-secret");
 	});
+
+	it("returns an error response when the OpenAI provider stream errors (non-stream)", async () => {
+		const openai = createOpenAIChatGatewayAdapter({ provider: "fixture", runtime: errorRuntime() });
+		const result = await openai.handle({
+			body: { messages: [{ content: "hi", role: "user" }], model: "fixture-model" },
+			headers: {},
+		});
+		expect(result.kind).toBe("json");
+		if (result.kind !== "json") throw new Error("expected json response");
+		expect(result.statusCode).not.toBe(200);
+		expect(result.body).toHaveProperty("error");
+	});
+
+	it("returns an error response when the Anthropic provider stream errors (non-stream)", async () => {
+		const anthropic = createAnthropicMessagesGatewayAdapter({ provider: "fixture", runtime: errorRuntime() });
+		const result = await anthropic.handle({
+			body: { max_tokens: 16, messages: [{ content: "hi", role: "user" }], model: "fixture-model" },
+			headers: {},
+		});
+		expect(result.kind).toBe("json");
+		if (result.kind !== "json") throw new Error("expected json response");
+		expect(result.statusCode).not.toBe(200);
+		expect(result.body).toHaveProperty("error");
+	});
 });
 
 async function collectSse(
@@ -354,4 +379,16 @@ function fixtureStream(): AssistantMessageEventStream {
 	stream.push({ contentIndex: 2, partial: message, toolCall, type: "toolcall_end" });
 	stream.push({ message, reason: "toolUse", type: "done" });
 	return stream;
+}
+
+function errorRuntime(): AuthGatewayAdapterRuntime {
+	return {
+		async stream(input) {
+			const stream = createAssistantMessageEventStream();
+			const message = fauxOverflowError("fixture", "upstream unavailable");
+			stream.push({ type: "start", partial: message });
+			stream.push({ message, reason: "stop", type: "done" });
+			return { kind: "stream", leaseId: "lease-error", model: { id: input.modelId }, stream };
+		},
+	};
 }
