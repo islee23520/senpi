@@ -165,7 +165,7 @@ function seedCompactableSession(harness: Harness): void {
 	harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
 }
 
-function createResultToolExtension(toolResult: string, compactionSummary?: string) {
+function createResultToolExtension(toolResult: string, compactionSummary?: string, terminate = false) {
 	return (pi: ExtensionAPI): void => {
 		pi.registerTool({
 			name: "large_result",
@@ -175,6 +175,7 @@ function createResultToolExtension(toolResult: string, compactionSummary?: strin
 			execute: async () => ({
 				content: [{ type: "text", text: toolResult }],
 				details: {},
+				terminate,
 			}),
 		});
 		if (compactionSummary !== undefined) {
@@ -396,6 +397,124 @@ describe("AgentSession compaction characterization", () => {
 			willRetry: false,
 			accepted: true,
 		});
+	});
+
+	it("compacts a terminating tool result before the next separate user prompt", async () => {
+		// given
+		const contextWindow = 5_000;
+		const reserveTokens = 1_000;
+		const threshold = contextWindow - reserveTokens;
+		const largeToolResult = "terminating tool output ".repeat(300);
+		const compactionSummary = "terminating tool result summary";
+		let call2Context = "";
+		let compactionEndsAtCall2 = 0;
+		const harness = await createHarness({
+			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens } },
+			models: [{ id: "faux-1", contextWindow }],
+			extensionFactories: [createResultToolExtension(largeToolResult, compactionSummary, true)],
+		});
+		harnesses.push(harness);
+		const seedTimestamp = Date.now() - 2_000;
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "prior terminating context ".repeat(220) }],
+			timestamp: seedTimestamp,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, {
+				text: "prior response",
+				stopReason: "stop",
+				totalTokens: 700,
+				timestamp: seedTimestamp + 1_000,
+			}),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		const terminatingToolCall = Object.assign(createAssistant(harness, { stopReason: "toolUse", totalTokens: 700 }), {
+			content: [fauxToolCall("large_result", {})],
+		});
+		harness.setResponses([
+			terminatingToolCall,
+			(context) => {
+				call2Context = JSON.stringify(context.messages);
+				compactionEndsAtCall2 = harness.eventsOfType("compaction_end").length;
+				return createAssistant(harness, {
+					text: "done after pre-prompt compaction",
+					stopReason: "stop",
+					totalTokens: 1_000,
+				});
+			},
+		]);
+
+		await harness.session.prompt("run the terminating result tool");
+		const toolResult = harness.session.messages.find((message) => message.role === "toolResult");
+		if (toolResult?.role !== "toolResult") {
+			throw new Error("Expected the terminating tool result in the persisted session context");
+		}
+		const persistedContext = estimateContextTokens(harness.sessionManager.buildSessionContext().messages);
+		expect(terminatingToolCall.usage.totalTokens).toBeLessThan(threshold);
+		expect(persistedContext.tokens).toBeGreaterThan(threshold);
+		expect(harness.faux.state.callCount).toBe(1);
+		expect(harness.eventsOfType("compaction_start")).toHaveLength(0);
+
+		// when
+		await harness.session.prompt("continue after the terminating tool");
+
+		// then
+		expect(compactionEndsAtCall2).toBe(1);
+		expect(call2Context).toContain(compactionSummary);
+		expect(call2Context).toContain(largeToolResult);
+		expect(call2Context).not.toContain("prior terminating context ");
+		expect(harness.faux.state.callCount).toBe(2);
+		expect(harness.eventsOfType("compaction_start").filter((event) => event.reason === "pre_prompt")).toHaveLength(1);
+	});
+
+	it("preserves a constructor-supplied next-turn callback after rebuilding compacted context", async () => {
+		// given
+		const largeToolResult = "callback tool output ".repeat(300);
+		const compactionSummary = "callback-preserved summary";
+		const callbackContexts: string[] = [];
+		const prepareNextTurnWithContext = vi.fn(async (turn) => {
+			callbackContexts.push(JSON.stringify(turn.context.messages));
+			return undefined;
+		});
+		const harness = await createHarness({
+			settings: {
+				compaction: { enabled: true, keepRecentTokens: 1, reserveTokens: 1_000 },
+				retry: { enabled: false },
+			},
+			models: [{ id: "faux-1", contextWindow: 5_000 }],
+			extensionFactories: [createResultToolExtension(largeToolResult, compactionSummary)],
+			prepareNextTurnWithContext,
+		});
+		harnesses.push(harness);
+		const seedTimestamp = Date.now() - 2_000;
+		harness.sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "callback prior context ".repeat(220) }],
+			timestamp: seedTimestamp,
+		});
+		harness.sessionManager.appendMessage(
+			createAssistant(harness, {
+				text: "prior response",
+				stopReason: "stop",
+				totalTokens: 700,
+				timestamp: seedTimestamp + 1_000,
+			}),
+		);
+		harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("large_result", {}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("done after callback", { stopReason: "error", errorMessage: "test complete" }),
+		]);
+
+		// when
+		await harness.session.prompt("run the callback result tool");
+
+		// then
+		expect(prepareNextTurnWithContext).toHaveBeenCalledTimes(1);
+		expect(callbackContexts[0]).toContain(compactionSummary);
+		expect(callbackContexts[0]).toContain(largeToolResult);
+		expect(callbackContexts[0]).not.toContain("callback prior context ");
 	});
 
 	it("applies the provider context transform to inline compaction summarization", async () => {

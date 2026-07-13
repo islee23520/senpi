@@ -2730,7 +2730,7 @@ export class AgentSession {
 		// This ensures sessions that hit persistent API errors (e.g. 529) or malformed zero-usage
 		// responses can still compact and do not reset context accounting.
 		let contextTokens: number;
-		if (inlineReason === "threshold") {
+		if (inlineReason) {
 			const messages = filterContextExcludedMessages(this.sessionManager.buildSessionContext().messages);
 			contextTokens = estimateContextTokens(messages).tokens;
 		} else {

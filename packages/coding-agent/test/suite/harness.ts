@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentMessage, AgentOptions, AgentTool } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type {
 	FauxModelDefinition,
@@ -75,6 +75,7 @@ export interface HarnessOptions {
 	withConfiguredAuth?: boolean;
 	upstreamModelId?: string;
 	onPayload?: (payload: unknown) => void;
+	prepareNextTurnWithContext?: AgentOptions["prepareNextTurnWithContext"];
 	persistSession?: boolean;
 	autoTitleSessions?: boolean;
 }
@@ -181,6 +182,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 			if (!runner) return messages;
 			return runner.emitContext(messages);
 		},
+		prepareNextTurnWithContext: options.prepareNextTurnWithContext,
 	});
 	const extensionsResult = options.extensionFactories
 		? await createTestExtensionsResult(options.extensionFactories, tempDir)
