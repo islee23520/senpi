@@ -25,11 +25,11 @@ attachqa/              Real attach/recovery QA harness
 - `types.go` mirrors the TypeScript RPC contract. Update exhaustive tests and real fixtures whenever either side changes.
 - Keep Unix and Windows socket, signal, process-liveness, and spawn implementations paired.
 - Recovery must not create duplicate daemons or clients; registry repair and spawn races converge on one live endpoint.
-- Diagnostics must not expose tokens, auth headers, or inherited secret-bearing environments.
+- Child processes currently inherit the environment and raw stderr may enter errors. Treat diagnostics as secret-bearing, avoid widening their exposure, and do not claim redaction without implementing it.
 
 ## FIXTURES AND VALIDATION
 
 - Generate protocol fixtures through `testdata/gen-fixtures.mjs`; do not hand-author replacements for real wire captures.
 - Run focused bridge tests, then `go test ./internal/bridge/...` from `packages/neo`.
 - Transport or daemon changes also run `go build ./...`, `go vet ./...`, `go test ./...`, and the relevant `attachqa` scenario.
-- Cross-protocol changes require the matching TypeScript coding-agent RPC/app-server tests.
+- RPC contract changes require the matching TypeScript coding-agent RPC tests; add app-server coverage only when shared daemon or transport behavior changes.

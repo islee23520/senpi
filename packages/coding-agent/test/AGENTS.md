@@ -1,6 +1,6 @@
 # packages/coding-agent/test
 
-Vitest coverage for the Senpi CLI, sessions, extensions, modes, transports, and regressions. Tests are deterministic by default and must not spend tokens.
+Vitest coverage for the Senpi CLI, sessions, extensions, modes, transports, and regressions. New default tests must be deterministic and must not spend tokens.
 
 ## STRUCTURE
 
@@ -20,6 +20,7 @@ fixtures/, goldens/ Shared deterministic inputs and snapshots
 
 - Prefer `suite/harness.ts` and the faux provider for new lifecycle and extension coverage.
 - Do not use real provider APIs, API keys, network calls, or paid tokens in default tests.
+- Some legacy tests outside `integration/` still activate from ambient Anthropic credentials. Run the suite hermetically and do not copy that activation pattern into new tests.
 - Use `suite/regressions/<issue>-<slug>.test.ts` for issue regressions.
 - Do not extend the legacy `test-harness.ts` unless the preferred harness lacks a required capability.
 - Keep fixtures deterministic, local, and secret-free. Spawned process tests must clean up children, sockets, and temporary directories.
@@ -28,7 +29,7 @@ fixtures/, goldens/ Shared deterministic inputs and snapshots
 ## LIVE AND MANUAL SURFACES
 
 - `integration/` is opt-in only with `PI_RUN_INTEGRATION=1`; it may use real credentials and incur cost.
-- `qa/app-server/` is driven by `npm run qa:app-server` and proves real protocol behavior beyond unit tests.
+- `qa/app-server/` contains focused real-surface drivers. The separate `npm run qa:app-server` command runs the packaged handshake, multiclient, approval, and real-client probes.
 - Runtime changes covered here still require the repository's `senpi-qa` evidence gate when the root guide requires it.
 
 ## VALIDATION

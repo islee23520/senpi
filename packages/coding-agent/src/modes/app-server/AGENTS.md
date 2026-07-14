@@ -22,8 +22,8 @@ turn-adapter.ts       Agent/session events to app-server turn events
 - Stdio uses one UTF-8 JSON object per LF-delimited line; stdout is protocol-only and diagnostics go to stderr.
 - WebSocket listeners bind IP literals. Bearer auth is required unless explicitly disabled for loopback, and `Origin` requests remain rejected.
 - Keep connection subscriptions, thread ownership, archive/unload, and turn cancellation consistent across disconnect and daemon shutdown.
-- Approval payloads and diagnostics can contain sensitive material. Preserve redaction and restricted token-file permissions.
-- Generated files under `protocol/generated/` are evidence, not build input. Never import or edit them directly; use the non-generated facade.
+- Approval payloads and diagnostics can contain sensitive material. Keep token-file permissions restricted, do not assume diagnostics are redacted, and add explicit redaction before exposing them beyond the local process.
+- Generated files under `protocol/generated/` are evidence, not build input. Never edit them directly. Prefer the non-generated facade; keep any necessary type-only imports isolated until the facade covers them.
 
 ## WHERE TO LOOK
 
@@ -40,11 +40,12 @@ turn-adapter.ts       Agent/session events to app-server turn events
 
 - The pinned raw protocol comes from Codex and is regenerated with `packages/coding-agent/scripts/generate-app-server-protocol.sh`.
 - Keep `protocol/generated/**/*.ts` byte-identical to generator output. The local `generated/package.json` is only a compilation shim.
-- Wire compatibility is defined by runtime message shape and the app-facing facade, not by importing raw generated modules.
+- Wire compatibility is defined by runtime message shape and the app-facing facade. Existing type-only imports from the generated tree are compatibility gaps, not permission to add runtime dependencies on it.
 
 ## VALIDATION
 
 - Run focused app-server Vitest suites from `packages/coding-agent`.
-- Run `npm run qa:app-server` for the real stdio, WebSocket, Unix-socket, handshake, and lifecycle scenarios.
+- Run `npm run qa:app-server` for the handshake, multiclient, approval, and real-client probes.
+- Run the matching `test/qa/app-server/` driver for focused Unix-socket, malformed-input, and lifecycle scenarios.
 - Protocol or documentation changes must keep `docs/app-server.md` examples and `test/qa/app-server/` checks aligned.
 - Runtime changes also require root `npm run check` and the applicable real CLI QA evidence gate.

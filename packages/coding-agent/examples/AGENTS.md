@@ -16,7 +16,7 @@ rpc-extension-ui.ts RPC-compatible extension UI example
 - Import public package surfaces such as `@code-yeongyu/senpi` and `@earendil-works/pi-ai`; do not reach into `src/core/` internals.
 - Keep examples small enough to teach one pattern, while preserving real error, cleanup, cancellation, and persistence behavior where relevant.
 - Extension factories have no top-level runtime side effects. Register work through the public `pi.*` API and lifecycle events.
-- Use configurable keybindings and themed TUI helpers rather than hardcoded keys, colors, or raw terminal writes.
+- Interactive examples use configurable keybindings and themed TUI helpers. Direct terminal writes belong only in examples explicitly teaching a terminal protocol; ordinary SDK examples may use normal stdout.
 - Tool string enums use the shared `StringEnum` helper for provider compatibility.
 - Stateful examples persist reconstructable state in session entries or tool-result details so fork/resume behavior remains valid.
 - Nested example packages are private workspaces with exact-pinned dependencies. Treat their manifests and lock impact as production dependency changes.

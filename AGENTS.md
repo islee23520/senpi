@@ -2,7 +2,7 @@
 
 Generated: 2026-07-14
 Commit: `2c3a87858`
-Branch: `docs/init-deep-20260714`
+Branch: `main`
 
 Metadata above records the source state used for this generation pass.
 
