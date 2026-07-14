@@ -1,0 +1,34 @@
+# packages/coding-agent/examples
+
+Runnable examples for the public Senpi SDK and extension API. Examples are documentation-quality code and must reflect shipped APIs, not private core internals.
+
+## STRUCTURE
+
+```text
+extensions/        Tools, commands, UI, providers, hooks, resources
+extensions/*/      Multi-file examples and nested private workspaces
+sdk/               Programmatic SDK usage
+rpc-extension-ui.ts RPC-compatible extension UI example
+```
+
+## CONVENTIONS
+
+- Import public package surfaces such as `@code-yeongyu/senpi` and `@earendil-works/pi-ai`; do not reach into `src/core/` internals.
+- Keep examples small enough to teach one pattern, while preserving real error, cleanup, cancellation, and persistence behavior where relevant.
+- Extension factories have no top-level runtime side effects. Register work through the public `pi.*` API and lifecycle events.
+- Use configurable keybindings and themed TUI helpers rather than hardcoded keys, colors, or raw terminal writes.
+- Tool string enums use the shared `StringEnum` helper for provider compatibility.
+- Stateful examples persist reconstructable state in session entries or tool-result details so fork/resume behavior remains valid.
+- Nested example packages are private workspaces with exact-pinned dependencies. Treat their manifests and lock impact as production dependency changes.
+
+## DOCUMENTATION CONTRACT
+
+- Keep `extensions/README.md`, `docs/extensions.md`, and `docs/sdk.md` aligned with public API changes.
+- New public extension capabilities should include a focused example when usage is not obvious from types alone.
+- Do not present experimental or internal behavior as stable API.
+
+## VALIDATION
+
+- Run the focused tests for the public API demonstrated by the example.
+- Typecheck examples through root `npm run check`.
+- Interactive examples require real CLI or visual QA when their behavior changes.
