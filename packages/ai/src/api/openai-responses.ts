@@ -766,10 +766,14 @@ function buildWebSocketHeaders(
 	}
 	if (sessionId) {
 		const compat = getCompat(model);
-		if (compat.sendSessionIdHeader) {
+		if (compat.sessionAffinityFormat === "openai") {
 			headers.set("session_id", sessionId);
 		}
-		headers.set("x-client-request-id", sessionId);
+		if (compat.sessionAffinityFormat === "openai" || compat.sessionAffinityFormat === "openai-nosession") {
+			headers.set("x-client-request-id", sessionId);
+		} else if (compat.sessionAffinityFormat === "openrouter") {
+			headers.set("x-session-id", sessionId);
+		}
 	}
 	headers.delete("accept");
 	headers.delete("content-type");
