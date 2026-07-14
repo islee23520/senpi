@@ -4,9 +4,20 @@
 
 ### Added
 
+- Added Radius gateway support for custom `models.json` providers, including Radius OAuth login and dynamic model discovery.
+- Added inherited forced tool-call support for OpenAI Responses and OpenAI Codex models ([#6588](https://github.com/earendil-works/pi-mono/pull/6588)).
+
 ### Changed
 
+- Stopped including the current date in the system prompt so prompts no longer bake in stale date context ([#6621](https://github.com/earendil-works/pi/issues/6621)).
+- Stopped sending OpenAI Responses session-id fields to OpenCode models that opt out of session IDs ([#6645](https://github.com/earendil-works/pi-mono/pull/6645) by [@davidbrai](https://github.com/davidbrai)).
+
 ### Fixed
+
+- Clarified the interactive `/login` option labels.
+- Fixed `senpi uninstall` under npm to pass `--legacy-peer-deps`, avoiding uninstall failures from unrelated peer dependency conflicts ([#6604](https://github.com/earendil-works/pi-mono/pull/6604) by [@davidbrai](https://github.com/davidbrai)).
+- Fixed branch summaries when the selected model uses ambient auth instead of a literal API key ([#6595](https://github.com/earendil-works/pi-mono/pull/6595) by [@davidbrai](https://github.com/davidbrai)).
+- Fixed inherited Anthropic empty-usage handling, OpenAI/Azure Responses encrypted reasoning replay, Bedrock stop-reason errors, OpenRouter session affinity, and GitHub Copilot MAI-Code routing from the upstream AI package.
 
 ### Removed
 
