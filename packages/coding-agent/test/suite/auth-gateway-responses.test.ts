@@ -24,21 +24,27 @@ describe("auth gateway Responses and Pi adapters", () => {
 		const adapter = createAuthGatewayResponsesPiAdapter({ runtime });
 
 		// When: the Responses client chains from the first response and a Pi-native client asks for SSE.
-		const first = await adapter.responses({ input: "first prompt", model: "gateway-model", stream: false });
+		const first = await adapter.responses({
+			body: { input: "first prompt", model: "gateway-model", stream: false },
+		});
 		expect(first.kind).toBe("json");
 		if (first.kind !== "json") throw new Error("Expected JSON response");
 		const firstId = readResponseId(first.body);
 		const second = await adapter.responses({
-			input: "second prompt",
-			model: "gateway-model",
-			previous_response_id: firstId,
-			prompt_cache_key: "cache-key",
-			stream: true,
+			body: {
+				input: "second prompt",
+				model: "gateway-model",
+				previous_response_id: firstId,
+				prompt_cache_key: "cache-key",
+				stream: true,
+			},
 		});
 		const pi = await adapter.pi({
-			context: { messages: [{ content: "pi prompt", role: "user", timestamp: 1 }] },
-			modelId: "gateway-model",
-			stream: true,
+			body: {
+				context: { messages: [{ content: "pi prompt", role: "user", timestamp: 1 }] },
+				modelId: "gateway-model",
+				stream: true,
+			},
 		});
 
 		// Then: chaining preserves prior context/cache identity and both protocols expose their canonical events.
@@ -82,12 +88,14 @@ describe("auth gateway Responses and Pi adapters", () => {
 
 		// When: a Pi-native request is disconnected and a Responses stream reports a provider failure.
 		const aborted = await adapter.pi({
-			context: { messages: [{ content: "stop", role: "user", timestamp: 1 }] },
-			modelId: "gateway-model",
+			body: {
+				context: { messages: [{ content: "stop", role: "user", timestamp: 1 }] },
+				modelId: "gateway-model",
+				stream: true,
+			},
 			signal: controller.signal,
-			stream: true,
 		});
-		const failed = await adapter.responses({ input: "fail", model: "gateway-model", stream: true });
+		const failed = await adapter.responses({ body: { input: "fail", model: "gateway-model", stream: true } });
 
 		// Then: disconnect cancellation reaches the runtime and terminal frames never reveal provider details.
 		expect(aborted).toEqual({

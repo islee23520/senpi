@@ -40,10 +40,11 @@ export class AuthBrokerRemoteStore {
 	async select(
 		pool: AuthBrokerCredentialPool,
 		selector: AuthBrokerCredentialSelector,
+		sessionId?: string,
 	): Promise<Extract<AuthBrokerWireResponse, { readonly operation: "selection_lease" }>["lease"]> {
 		const response = await this.transport.request({
 			...this.message("selection_lease", AUTH_BROKER_CAPABILITIES.selectionLease),
-			payload: { pool, selector },
+			payload: { pool, selector, ...(sessionId === undefined ? {} : { sessionId }) },
 		});
 		if (response.operation !== "selection_lease") throw new Error("Unexpected broker response");
 		return response.lease;

@@ -113,6 +113,37 @@ describe("auth gateway observability", () => {
 		});
 		expect(JSON.stringify(checks.body)).not.toContain("access-token-must-not-leak");
 	});
+
+	it("reports configured credentials without consuming a provider lease by default", async () => {
+		// Given: a broker transport that exposes metadata but rejects credential selection.
+		const operations: string[] = [];
+		const broker = new AuthBrokerRemoteStore(
+			{
+				async request(request: unknown) {
+					const message = parseAuthBrokerWireRequest(request);
+					operations.push(message.operation);
+					if (message.operation !== "metadata_snapshot") throw new Error("unexpected credential lease");
+					return metadataResponse(message, [credential("account-a", "operator:a", "openai")]);
+				},
+			},
+			0,
+		);
+		const handler = createAuthGatewayObservabilityHandler({
+			broker,
+			models: [{ modelId: "gpt-authorized", provider: "openai" }],
+		});
+		const gateway = await startGateway(handler);
+
+		// When: the default credential diagnostic runs without an upstream-specific checker.
+		const checks = await fetchJson(`${gateway.url}/v1/credentials/check`);
+
+		// Then: it reports only metadata-backed configuration and does not consume a one-use lease.
+		expect(checks.body).toEqual({
+			data: [{ credentialId: "account-a", provider: "openai", status: "configured", type: "api_key" }],
+			object: "list",
+		});
+		expect(operations).toEqual(["metadata_snapshot"]);
+	});
 });
 
 async function startGateway(

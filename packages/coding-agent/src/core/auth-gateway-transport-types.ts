@@ -21,11 +21,26 @@ export type AuthGatewayTransportRequest = {
 	readonly signal: AbortSignal;
 };
 
-export type AuthGatewayTransportResponse = {
+export type AuthGatewaySseFrame = {
+	readonly data: unknown;
+	readonly event?: string;
+};
+
+type AuthGatewayJsonResponse = {
 	readonly body?: unknown;
+	readonly frames?: never;
 	readonly headers?: Readonly<Record<string, string>>;
 	readonly statusCode: number;
 };
+
+type AuthGatewaySseResponse = {
+	readonly body?: never;
+	readonly frames: AsyncIterable<AuthGatewaySseFrame>;
+	readonly headers?: Readonly<Record<string, string>>;
+	readonly statusCode: 200;
+};
+
+export type AuthGatewayTransportResponse = AuthGatewayJsonResponse | AuthGatewaySseResponse;
 
 export type AuthGatewayTransportOptions = {
 	readonly allowRemoteBind?: boolean;

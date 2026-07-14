@@ -7,7 +7,7 @@ export type AuthGatewayAuthorizedModel = {
 	readonly provider: string;
 };
 
-type CredentialStatus = "available" | "disabled" | "unavailable";
+type CredentialStatus = "available" | "configured" | "disabled" | "unavailable";
 
 type CredentialDiagnostic = {
 	readonly credentialId: string;
@@ -38,7 +38,7 @@ export function createAuthGatewayObservabilityHandler(
 
 class GatewayObservabilityHandler {
 	private readonly broker: AuthBrokerRemoteStore;
-	private readonly checkCredential: (credential: AuthBrokerCredentialMetadata) => Promise<"available">;
+	private readonly checkCredential: ((credential: AuthBrokerCredentialMetadata) => Promise<"available">) | undefined;
 	private readonly models: readonly AuthGatewayAuthorizedModel[];
 	private readonly usageCacheTtlMs: number;
 	private usageCache: { readonly data: readonly CredentialDiagnostic[]; readonly validUntil: number } | undefined;
@@ -52,12 +52,7 @@ class GatewayObservabilityHandler {
 			throw new AuthGatewayObservabilityError("Usage cache TTL must be a positive integer.");
 		}
 		this.broker = options.broker;
-		this.checkCredential =
-			options.checkCredential ??
-			(async (credential) => {
-				await this.broker.select(credential.pool, { credentialId: credential.credentialId, kind: "credential" });
-				return "available";
-			});
+		this.checkCredential = options.checkCredential;
 		this.models = options.models;
 		this.usageCacheTtlMs = options.usageCacheTtlMs ?? DEFAULT_USAGE_CACHE_TTL_MS;
 	}
@@ -125,6 +120,14 @@ class GatewayObservabilityHandler {
 
 	private async checkOne(credential: AuthBrokerCredentialMetadata): Promise<CredentialDiagnostic> {
 		if (credential.disabled !== undefined) return diagnosticFor(credential);
+		if (this.checkCredential === undefined) {
+			return {
+				credentialId: credential.credentialId,
+				provider: credential.pool.provider,
+				status: "configured",
+				type: credential.pool.type,
+			};
+		}
 		try {
 			await this.checkCredential(credential);
 			return diagnosticFor(credential);

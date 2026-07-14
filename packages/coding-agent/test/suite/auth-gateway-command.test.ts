@@ -102,13 +102,21 @@ describe("auth gateway command", () => {
 			updatedAt: "2026-07-11T00:00:00.000Z",
 		});
 		vault.disableCredential("disabled-openai-account", "test failure");
+		vault.upsertCredential({
+			createdAt: "2026-07-11T00:00:00.000Z",
+			credentialId: "configured-openai-account",
+			identityKey: "operator:configured",
+			material: { apiKey: "configured-provider-key", type: "api_key" },
+			pool: { provider: "openai", type: "api_key" },
+			updatedAt: "2026-07-11T00:00:00.000Z",
+		});
 		const broker = new AuthBrokerService(vault, [
 			{ authentication: brokerToken, capabilities: Object.values(AUTH_BROKER_CAPABILITIES), trustedGateway: true },
 		]);
 		const server = await startAuthBrokerServer({ bind: { host: "127.0.0.1", port: 0 }, broker, version: "test" });
 		try {
 			// When: startup has no broker bearer, while status and check use a valid broker bearer.
-			const [missingAuth, status, check] = await Promise.all([
+			const [missingAuth, status, check, plainCheck] = await Promise.all([
 				executeAuthGatewayCommand(["auth-gateway", "serve"], { agentDir, brokerUrl: server.url }),
 				executeAuthGatewayCommand(["auth-gateway", "status", "--json"], {
 					agentDir,
@@ -120,6 +128,11 @@ describe("auth gateway command", () => {
 					brokerToken,
 					brokerUrl: server.url,
 				}),
+				executeAuthGatewayCommand(["auth-gateway", "check"], {
+					agentDir,
+					brokerToken,
+					brokerUrl: server.url,
+				}),
 			]);
 
 			// Then: no listener starts without broker auth, disabled account is reported, and diagnostics stay redacted.
@@ -127,7 +140,11 @@ describe("auth gateway command", () => {
 			expect(missingAuth?.stderr).toContain("requires broker authentication");
 			expect(check?.exitCode).toBe(1);
 			expect(check?.stdout).toContain("disabled-openai-account");
-			for (const output of [missingAuth, status, check].map((result) => `${result?.stdout}${result?.stderr}`)) {
+			expect(plainCheck?.stdout).toContain("configured openai api_key configured-openai-account");
+			expect(plainCheck?.stdout).not.toContain("ready openai api_key configured-openai-account");
+			for (const output of [missingAuth, status, check, plainCheck].map(
+				(result) => `${result?.stdout}${result?.stderr}`,
+			)) {
 				expect(output).not.toContain(brokerToken);
 				expect(output).not.toContain(gatewayToken);
 			}

@@ -16,6 +16,8 @@ senpi auth-gateway serve --bind=127.0.0.1:4000 \
 
 `auth-broker.sqlite`, `auth-broker.token`, and `auth-gateway.token` are in the agent directory (`~/.senpi/agent` by default). The directory is mode `0700`; token and backup files are mode `0600`. Use `senpi auth-broker status --json`, `senpi auth-gateway status --json`, and `senpi auth-gateway check --json` for redacted operational status.
 
+Credential checks report whether an account is configured or disabled in broker metadata. They do not call the upstream provider or prove that a token is currently accepted; real provider-call outcomes update broker cooldown and health state.
+
 ## Remote deployment and CORS
 
 The broker accepts loopback binds only. Keep it on the trusted gateway host, or use a private TLS tunnel with mutual TLS authentication. Never publish broker tokens, vault files, or broker HTTP endpoints.

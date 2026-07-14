@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ResolvedGatewayAuth } from "./auth-gateway-transport-auth.ts";
+import { writeGatewayResponse, writeJson } from "./auth-gateway-transport-response.ts";
 import type { AuthGatewayTransportOptions } from "./auth-gateway-transport-types.ts";
 
 const GATEWAY_ROUTES = new Map<string, readonly string[]>([
@@ -88,8 +89,9 @@ export async function handleGatewayRequest(options: {
 						peerAddress: resolvePeerAddress(request, options.trustedProxy),
 						signal: controller.signal,
 					});
-		if (!controller.signal.aborted)
-			writeJson(response, result.statusCode, result.body ?? null, { ...corsHeaders, ...result.headers });
+		if (!controller.signal.aborted) {
+			await writeGatewayResponse(response, result, controller.signal, { ...corsHeaders, ...result.headers });
+		}
 	} catch (error: unknown) {
 		if (controller.signal.aborted) return;
 		if (error instanceof GatewayRequestError) {
@@ -196,18 +198,6 @@ async function readJsonBody(request: IncomingMessage, maxBodyBytes: number, idle
 		request.once("end", end);
 		request.once("error", failed);
 	});
-}
-
-function writeJson(
-	response: ServerResponse,
-	statusCode: number,
-	body: unknown,
-	headers: Readonly<Record<string, string>> | undefined = undefined,
-): void {
-	if (response.writableEnded) return;
-	response
-		.writeHead(statusCode, { "content-type": "application/json; charset=utf-8", ...headers })
-		.end(JSON.stringify(body));
 }
 
 class GatewayRequestError extends Error {

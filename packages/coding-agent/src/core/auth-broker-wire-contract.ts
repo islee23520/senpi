@@ -59,6 +59,7 @@ export type SelectionLeaseRequest = AuthBrokerRequestBase<"selection_lease", "ga
 	readonly payload: {
 		readonly pool: AuthBrokerCredentialPool;
 		readonly selector: AuthBrokerCredentialSelector;
+		readonly sessionId?: string;
 	};
 };
 
@@ -258,8 +259,14 @@ export function parseAuthBrokerWireResponse(value: unknown): AuthBrokerWireRespo
 
 function parseSelectionLeasePayload(record: Record<string, unknown>): SelectionLeaseRequest["payload"] {
 	const payload = readRecord(record, "payload");
-	assertExactKeys(payload, ["pool", "selector"]);
-	return { pool: parsePool(readRecord(payload, "pool")), selector: parseSelector(readRecord(payload, "selector")) };
+	assertExactKeys(payload, ["pool", "selector", "sessionId"]);
+	const sessionId = payload.sessionId;
+	if (sessionId !== undefined && (typeof sessionId !== "string" || sessionId.length === 0)) throw invalidMessage();
+	return {
+		pool: parsePool(readRecord(payload, "pool")),
+		selector: parseSelector(readRecord(payload, "selector")),
+		...(sessionId === undefined ? {} : { sessionId }),
+	};
 }
 
 function parseCredentialPayload(record: Record<string, unknown>): RefreshRequest["payload"] {

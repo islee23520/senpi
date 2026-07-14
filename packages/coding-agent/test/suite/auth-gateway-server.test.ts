@@ -162,6 +162,33 @@ describe("auth gateway server", () => {
 		expect(dispatches).toBe(1);
 	});
 
+	it("streams adapter frames as server-sent events", async () => {
+		// Given: an authenticated gateway whose adapter emits two deterministic frames.
+		const handle = await startGateway({
+			onRequest: async () => ({
+				frames: (async function* () {
+					yield { data: { delta: "gateway response" }, event: "message" };
+					yield { data: "[DONE]", event: "message" };
+				})(),
+				statusCode: 200,
+			}),
+		});
+
+		// When: a client requests a streaming chat completion.
+		const response = await fetch(`${handle.url}/v1/chat/completions`, {
+			body: JSON.stringify({ messages: [], model: "fixture", stream: true }),
+			headers: { Authorization: `Bearer ${gatewayToken}`, "content-type": "application/json" },
+			method: "POST",
+		});
+		const body = await response.text();
+
+		// Then: the transport preserves SSE framing and terminates the response.
+		expect(response.status).toBe(200);
+		expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+		expect(body).toContain('event: message\ndata: {"delta":"gateway response"}\n\n');
+		expect(body).toContain("data: [DONE]\n\n");
+	});
+
 	it("bounds concurrent requests and aborts in-flight work during graceful shutdown", async () => {
 		// Given: a one-request gateway whose adapter waits for shutdown cancellation.
 		let entered: (() => void) | undefined;

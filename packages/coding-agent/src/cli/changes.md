@@ -1,5 +1,23 @@
 # changes
 
+## Auth gateway command (2026-07-14)
+
+### What changed
+
+- Added auth-gateway serve, token, status, and check commands with private token files and loopback-only defaults.
+- The serve command now wires real provider routes as well as diagnostics and closes provider runtime work on shutdown.
+- Plain credential checks label active metadata as `configured`, not as an unverified upstream-ready result.
+
+### Why extension system couldn't handle this
+
+- Gateway startup and process lifecycle occur before an interactive extension host exists.
+
+### Expected merge conflict zones
+
+- MEDIUM: top-level command dispatch.
+- LOW: fork-only auth-gateway CLI modules.
+
+
 ## Neo launcher flags and daemon plumbing (2026-07-06)
 
 ### What changed

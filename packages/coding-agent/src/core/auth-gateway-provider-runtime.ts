@@ -104,7 +104,11 @@ class GatewayProviderRuntime implements AuthGatewayProviderRuntime {
 				this.release(controller, call.signal, abort);
 				return { kind: "aborted", statusCode: 499 };
 			}
-			const lease = await this.broker.select(pool, call.selector ?? { kind: "automatic" });
+			const lease = await this.broker.select(
+				pool,
+				call.selector ?? { kind: "automatic" },
+				call.streamOptions?.sessionId,
+			);
 			leaseId = lease.leaseId;
 			if (controller.signal.aborted) {
 				await this.report(lease.leaseId, "unavailable");

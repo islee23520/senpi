@@ -35,7 +35,7 @@ describe("auth gateway provider runtime", () => {
 		try {
 			// When: concurrent calls flow through the single runtime seam.
 			const [first, second] = await Promise.all([
-				runtime.stream(callRequest()),
+				runtime.stream(callRequest({ sessionId: "cache-affinity-a" })),
 				runtime.stream(callRequest({ modelId: "gateway-faux-1" })),
 			]);
 
@@ -44,6 +44,7 @@ describe("auth gateway provider runtime", () => {
 			expect(second.kind).toBe("stream");
 			if (first.kind !== "stream" || second.kind !== "stream") throw new Error("Expected gateway streams");
 			expect([first.leaseId, second.leaseId].sort()).toEqual(["lease-a", "lease-b"]);
+			expect(broker.selectionSessionIds).toEqual(["cache-affinity-a", undefined]);
 			await Promise.all([first.stream.result(), second.stream.result()]);
 			await flushReports();
 			const unauthorized = await expectStream(runtime.stream(callRequest()));
@@ -146,35 +147,41 @@ function createRuntime(
 	return runtime;
 }
 
-function callRequest(overrides: { readonly modelId?: string; readonly signal?: AbortSignal } = {}) {
+function callRequest(
+	overrides: { readonly modelId?: string; readonly sessionId?: string; readonly signal?: AbortSignal } = {},
+) {
 	const context: Context = { messages: [] };
 	return {
 		context,
 		modelId: overrides.modelId ?? "gateway-faux-1",
 		provider: "gateway-provider",
 		signal: overrides.signal,
+		streamOptions: overrides.sessionId === undefined ? undefined : { sessionId: overrides.sessionId },
 	};
 }
 
 function createBroker(leaseIds: readonly string[]): {
 	readonly outcomes: Array<{ readonly leaseId: string; readonly status: string }>;
+	readonly selectionSessionIds: Array<string | undefined>;
 	readonly store: AuthBrokerRemoteStore;
 } {
 	const outcomes: Array<{ readonly leaseId: string; readonly status: string }> = [];
+	const selectionSessionIds: Array<string | undefined> = [];
 	let selectionIndex = 0;
 	const store = new AuthBrokerRemoteStore({
 		async request(request: unknown) {
 			const message = parseAuthBrokerWireRequest(request);
-			return brokerResponse(message, leaseIds, outcomes, () => selectionIndex++);
+			return brokerResponse(message, leaseIds, outcomes, selectionSessionIds, () => selectionIndex++);
 		},
 	});
-	return { outcomes, store };
+	return { outcomes, selectionSessionIds, store };
 }
 
 function brokerResponse(
 	request: AuthBrokerWireRequest,
 	leaseIds: readonly string[],
 	outcomes: Array<{ readonly leaseId: string; readonly status: string }>,
+	selectionSessionIds: Array<string | undefined>,
 	nextSelection: () => number,
 ) {
 	switch (request.operation) {
@@ -197,6 +204,11 @@ function brokerResponse(
 				},
 			} as const;
 		case "selection_lease": {
+			selectionSessionIds.push(
+				"sessionId" in request.payload && typeof request.payload.sessionId === "string"
+					? request.payload.sessionId
+					: undefined,
+			);
 			const leaseId = leaseIds[nextSelection()];
 			if (leaseId === undefined) throw new Error("Fixture lease exhausted");
 			return {

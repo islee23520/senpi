@@ -1,18 +1,21 @@
-import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { getAgentDir, VERSION } from "../config.ts";
-import { AuthBrokerRemoteStore } from "../core/auth-broker-remote-store.ts";
-import { parseAuthBrokerWireResponse } from "../core/auth-broker-wire-contract.ts";
+import type { AuthGatewayAuthorizedModel } from "../core/auth-gateway-observability.ts";
 import {
-	type AuthGatewayAuthorizedModel,
-	createAuthGatewayObservabilityHandler,
-} from "../core/auth-gateway-observability.ts";
+	type AuthGatewayRequestRouterOptions,
+	createAuthGatewayRequestRouter,
+} from "../core/auth-gateway-request-router.ts";
 import { type AuthGatewayTransportHandle, startAuthGatewayTransport } from "../core/auth-gateway-transport.ts";
+import {
+	AuthGatewayBrokerConfigError,
+	brokerConfig,
+	brokerStore,
+	requiredBrokerConfig,
+} from "./auth-gateway-broker-client.ts";
+import { formatGatewayStatus } from "./auth-gateway-output.ts";
+import { AuthGatewayParseError, parseAuthorizedModel, parseBind } from "./auth-gateway-parse.ts";
+import { gatewayToken, gatewayTokenPath, readToken, replaceGatewayToken } from "./auth-gateway-token.ts";
 
 const DEFAULT_BIND = "127.0.0.1:4000";
-const GATEWAY_TOKEN_FILE = "auth-gateway.token";
-const BROKER_TOKEN_FILE = "auth-broker.token";
 
 const AUTH_GATEWAY_USAGE = `Usage: senpi auth-gateway <command>
 
@@ -34,11 +37,6 @@ type ParsedCommand = {
 	readonly regenerate: boolean;
 };
 
-type BrokerConfig = {
-	readonly token: string;
-	readonly url: string;
-};
-
 export type AuthGatewayCommandExecution = {
 	readonly exitCode: number;
 	readonly stderr: string;
@@ -50,6 +48,9 @@ export type AuthGatewayCommandOptions = {
 	readonly brokerToken?: string;
 	readonly brokerUrl?: string;
 	readonly onGatewayStarted?: (handle: AuthGatewayTransportHandle) => Promise<void>;
+	readonly resolveModel?: AuthGatewayRequestRouterOptions["resolveModel"];
+	readonly resolveRequest?: AuthGatewayRequestRouterOptions["resolveRequest"];
+	readonly streamSimple?: AuthGatewayRequestRouterOptions["streamSimple"];
 };
 
 export async function handleAuthGatewayCommand(args: readonly string[]): Promise<boolean> {
@@ -72,7 +73,10 @@ export async function executeAuthGatewayCommand(
 	try {
 		return await execute(parseCommand(args.slice(1)), options);
 	} catch (error) {
-		const usageError = error instanceof AuthGatewayCommandError;
+		const usageError =
+			error instanceof AuthGatewayCommandError ||
+			error instanceof AuthGatewayBrokerConfigError ||
+			error instanceof AuthGatewayParseError;
 		const message = usageError ? error.message : "Auth gateway command failed";
 		return { exitCode: usageError ? 2 : 1, stderr: `Error: ${message}\n`, stdout: "" };
 	}
@@ -124,14 +128,6 @@ function requiredValue(args: readonly string[], index: number, flag: string): st
 	return value;
 }
 
-function parseAuthorizedModel(value: string): AuthGatewayAuthorizedModel {
-	const separator = value.indexOf("/");
-	if (separator < 1 || separator === value.length - 1) {
-		throw new AuthGatewayCommandError("--model must use provider/model format");
-	}
-	return { modelId: value.slice(separator + 1), provider: value.slice(0, separator) };
-}
-
 async function execute(
 	command: ParsedCommand,
 	options: AuthGatewayCommandOptions,
@@ -160,17 +156,17 @@ async function statusCommand(
 ): Promise<AuthGatewayCommandExecution> {
 	const agentDir = agentDirectory(options);
 	const tokenPresent = (await readToken(gatewayTokenPath(agentDir))) !== undefined;
-	const broker = await brokerConfig(options, false);
+	const broker = await brokerConfig(options, agentDir, false);
 	if (broker === undefined) {
-		return statusResult(command.json, {
+		return formatGatewayStatus(command.json, {
 			brokerConfigured: false,
 			credentialCount: 0,
 			gatewayTokenPresent: tokenPresent,
 			ready: false,
 		});
 	}
-	const snapshot = await snapshotFor(broker);
-	return statusResult(command.json, {
+	const snapshot = await brokerStore(broker).metadataSnapshot();
+	return formatGatewayStatus(command.json, {
 		brokerConfigured: true,
 		credentialCount: snapshot.credentials.length,
 		gatewayTokenPresent: tokenPresent,
@@ -182,8 +178,8 @@ async function checkCommand(
 	command: ParsedCommand,
 	options: AuthGatewayCommandOptions,
 ): Promise<AuthGatewayCommandExecution> {
-	const broker = await requiredBrokerConfig(options);
-	const snapshot = await snapshotFor(broker);
+	const broker = await requiredBrokerConfig(options, agentDirectory(options));
+	const snapshot = await brokerStore(broker).metadataSnapshot();
 	const credentials = snapshot.credentials.map((credential) => ({
 		credentialId: credential.credentialId,
 		disabled: credential.disabled !== undefined,
@@ -196,7 +192,7 @@ async function checkCommand(
 	}
 	const lines = credentials.map(
 		(credential) =>
-			`${credential.disabled ? "disabled" : "ready"} ${credential.provider} ${credential.type} ${credential.credentialId}`,
+			`${credential.disabled ? "disabled" : "configured"} ${credential.provider} ${credential.type} ${credential.credentialId}`,
 	);
 	return { exitCode: failed === 0 ? 0 : 1, stderr: "", stdout: `${lines.join("\n")}\n` };
 }
@@ -205,16 +201,22 @@ async function serveCommand(
 	command: ParsedCommand,
 	options: AuthGatewayCommandOptions,
 ): Promise<AuthGatewayCommandExecution> {
-	const broker = await requiredBrokerConfig(options);
+	const broker = await requiredBrokerConfig(options, agentDirectory(options));
 	const store = brokerStore(broker);
 	await store.metadataSnapshot();
 	const bind = parseBind(command.bind ?? DEFAULT_BIND);
-	const observability = createAuthGatewayObservabilityHandler({ broker: store, models: command.models });
+	const router = createAuthGatewayRequestRouter({
+		broker: store,
+		models: command.models,
+		resolveModel: options.resolveModel,
+		resolveRequest: options.resolveRequest,
+		streamSimple: options.streamSimple,
+	});
 	const handle = await startAuthGatewayTransport({
 		auth: { kind: "token-file", path: gatewayTokenPath(agentDirectory(options)) },
 		brokerUrl: broker.url,
 		host: bind.host,
-		onRequest: observability,
+		onRequest: router.handle,
 		port: bind.port,
 		version: VERSION,
 	});
@@ -222,130 +224,22 @@ async function serveCommand(
 		try {
 			await options.onGatewayStarted(handle);
 		} finally {
+			router.close();
 			await handle.close();
 		}
 		return { exitCode: 0, stderr: "", stdout: "" };
 	}
 	process.stdout.write(`auth-gateway listening on ${handle.url}\n`);
-	await waitForShutdown(handle);
+	try {
+		await waitForShutdown(handle);
+	} finally {
+		router.close();
+	}
 	return { exitCode: 0, stderr: "", stdout: `auth-gateway stopped (${handle.url})\n` };
-}
-
-function statusResult(
-	json: boolean,
-	status: {
-		readonly brokerConfigured: boolean;
-		readonly credentialCount: number;
-		readonly gatewayTokenPresent: boolean;
-		readonly ready: boolean;
-	},
-): AuthGatewayCommandExecution {
-	if (json) return { exitCode: status.ready ? 0 : 1, stderr: "", stdout: `${JSON.stringify(status)}\n` };
-	const output = `broker: ${status.brokerConfigured ? "configured" : "missing"}\ncredentials: ${status.credentialCount}\ngateway token: ${status.gatewayTokenPresent ? "present" : "missing"}\n`;
-	return { exitCode: status.ready ? 0 : 1, stderr: "", stdout: output };
 }
 
 function agentDirectory(options: AuthGatewayCommandOptions): string {
 	return options.agentDir ?? getAgentDir();
-}
-
-async function brokerConfig(options: AuthGatewayCommandOptions, required: boolean): Promise<BrokerConfig | undefined> {
-	const url = options.brokerUrl ?? process.env.SENPI_AUTH_BROKER_URL;
-	if (url === undefined || url.length === 0) {
-		if (!required) return undefined;
-		throw new AuthGatewayCommandError(
-			"auth-gateway requires broker authentication: set SENPI_AUTH_BROKER_URL and SENPI_AUTH_BROKER_TOKEN",
-		);
-	}
-	const token =
-		options.brokerToken ??
-		process.env.SENPI_AUTH_BROKER_TOKEN ??
-		(await readToken(join(agentDirectory(options), BROKER_TOKEN_FILE)));
-	if (token === undefined) {
-		throw new AuthGatewayCommandError(
-			"auth-gateway requires broker authentication: set SENPI_AUTH_BROKER_TOKEN or auth-broker.token",
-		);
-	}
-	return { token, url };
-}
-
-async function requiredBrokerConfig(options: AuthGatewayCommandOptions): Promise<BrokerConfig> {
-	const broker = await brokerConfig(options, true);
-	if (broker === undefined) throw new AuthGatewayCommandError("auth-gateway requires broker authentication");
-	return broker;
-}
-
-async function snapshotFor(broker: BrokerConfig) {
-	return brokerStore(broker).metadataSnapshot();
-}
-
-function brokerStore(broker: BrokerConfig): AuthBrokerRemoteStore {
-	return new AuthBrokerRemoteStore({
-		async request(request: unknown) {
-			const response = await fetch(new URL("/v1/broker", broker.url), {
-				body: JSON.stringify(request),
-				headers: { authorization: `Bearer ${broker.token}`, "content-type": "application/json" },
-				method: "POST",
-			});
-			if (response.status === 401 || response.status === 403) {
-				throw new AuthGatewayCommandError("Broker authentication failed.");
-			}
-			if (!response.ok) throw new AuthGatewayCommandError("Broker snapshot request failed.");
-			return parseAuthBrokerWireResponse(await response.json());
-		},
-	});
-}
-
-function parseBind(value: string): { readonly host: string; readonly port: number } {
-	const match = /^(127\.0\.0\.1|localhost|\[::1\]):(\d+)$/.exec(value);
-	if (match === null)
-		throw new AuthGatewayCommandError("Invalid gateway bind; use 127.0.0.1:PORT, [::1]:PORT, or localhost:PORT");
-	const port = Number(match[2]);
-	if (!Number.isInteger(port) || port < 0 || port > 65_535)
-		throw new AuthGatewayCommandError("Invalid gateway bind port");
-	const host = match[1] === "[::1]" ? "::1" : match[1];
-	return { host, port };
-}
-
-function gatewayTokenPath(agentDir: string): string {
-	return join(agentDir, GATEWAY_TOKEN_FILE);
-}
-
-async function gatewayToken(agentDir: string): Promise<string> {
-	const path = gatewayTokenPath(agentDir);
-	const current = await readToken(path);
-	if (current !== undefined) return current;
-	const handle = await startAuthGatewayTransport({ auth: { kind: "token-file", path }, port: 0 });
-	try {
-		const token = await readToken(path);
-		if (token === undefined) throw new AuthGatewayCommandError("Unable to create gateway token safely");
-		return token;
-	} finally {
-		await handle.close();
-	}
-}
-
-async function replaceGatewayToken(agentDir: string): Promise<string> {
-	const path = gatewayTokenPath(agentDir);
-	await mkdir(agentDir, { mode: 0o700, recursive: true });
-	await chmod(agentDir, 0o700);
-	const token = randomBytes(32).toString("base64url");
-	const temporary = `${path}.${randomBytes(8).toString("hex")}.tmp`;
-	await writeFile(temporary, `${token}\n`, { flag: "wx", mode: 0o600 });
-	await chmod(temporary, 0o600);
-	await rename(temporary, path);
-	await chmod(path, 0o600);
-	return token;
-}
-
-async function readToken(path: string): Promise<string | undefined> {
-	try {
-		const token = (await readFile(path, "utf8")).trim();
-		return token.length === 0 ? undefined : token;
-	} catch (error) {
-		if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-		throw error;
-	}
 }
 
 async function waitForShutdown(handle: AuthGatewayTransportHandle): Promise<void> {

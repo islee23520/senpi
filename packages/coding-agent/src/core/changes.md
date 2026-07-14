@@ -1,5 +1,31 @@
 # changes
 
+## Auth gateway provider proxy (2026-07-14)
+
+### What changed
+
+- Added loopback transport, bearer authentication, provider adapters, broker-backed runtime selection, and redacted
+  diagnostics for OpenAI Chat, Anthropic Messages, Responses, and pi streams.
+- HTTP disconnect signals now reach provider runtimes; SSE frames use the real transport response path.
+- Responses chaining uses opaque capability IDs and a bounded retained-context store.
+- Default credential diagnostics report metadata-backed `configured` state without consuming a one-use broker lease.
+- Provider runtime selection forwards stable session identifiers to the broker for credential affinity.
+
+### Why
+
+- Gateway credential injection must happen at the final provider request boundary without exposing broker material to
+  clients or extensions.
+
+### Why extension system couldn't handle this
+
+- The standalone gateway owns HTTP authentication, request cancellation, streaming framing, and broker lease outcomes
+  outside an interactive agent session.
+
+### Expected merge conflict zones
+
+- MEDIUM: provider request/stream option construction and main CLI dispatch.
+- LOW: fork-only auth-gateway transport and adapter modules.
+
 ## Upstream model context overflow recovery (2026-07-08)
 
 ### What changed
