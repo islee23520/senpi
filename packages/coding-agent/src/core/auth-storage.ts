@@ -13,7 +13,12 @@ import {
 	type OAuthLoginCallbacks,
 	type OAuthProviderId,
 } from "@earendil-works/pi-ai/compat";
-import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@earendil-works/pi-ai/oauth";
+import {
+	getOAuthApiKey,
+	getOAuthProvider,
+	getOAuthProviders,
+	type OAuthProviderInterface,
+} from "@earendil-works/pi-ai/oauth";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
@@ -43,6 +48,19 @@ export type AuthStatus = {
 
 export interface GetApiKeyOptions {
 	includeFallback?: boolean;
+}
+
+export type ResolvedCredentialAuth = {
+	readonly apiKey: string;
+	readonly headers?: Readonly<Record<string, string>>;
+};
+
+type RequestAuthOAuthProvider = OAuthProviderInterface & {
+	getRequestAuth(credentials: OAuthCredentials): Promise<ResolvedCredentialAuth>;
+};
+
+function supportsRequestAuth(provider: OAuthProviderInterface): provider is RequestAuthOAuthProvider {
+	return "getRequestAuth" in provider && typeof provider.getRequestAuth === "function";
 }
 
 type LockResult<T> = {
@@ -471,16 +489,24 @@ export class AuthStorage {
 	 * 4. Environment variable
 	 */
 	async getApiKey(providerId: string, options: GetApiKeyOptions = {}): Promise<string | undefined> {
+		return (await this.getRequestAuth(providerId, options))?.apiKey;
+	}
+
+	async getRequestAuth(
+		providerId: string,
+		options: GetApiKeyOptions = {},
+	): Promise<ResolvedCredentialAuth | undefined> {
 		// Runtime override takes highest priority
 		const runtimeKey = this.runtimeOverrides.get(providerId);
 		if (runtimeKey) {
-			return runtimeKey;
+			return { apiKey: runtimeKey };
 		}
 
 		const cred = this.data[providerId];
 
 		if (cred?.type === "api_key") {
-			return resolveConfigValue(cred.key, cred.env);
+			const apiKey = await resolveConfigValue(cred.key, cred.env);
+			return apiKey === undefined ? undefined : { apiKey };
 		}
 
 		if (cred?.type === "oauth") {
@@ -498,7 +524,7 @@ export class AuthStorage {
 				try {
 					const result = await this.refreshOAuthTokenWithLock(providerId);
 					if (result) {
-						return result.apiKey;
+						return this.resolveOAuthRequestAuth(provider, result.newCredentials);
 					}
 				} catch (error) {
 					this.recordError(error);
@@ -508,7 +534,7 @@ export class AuthStorage {
 
 					if (updatedCred?.type === "oauth" && Date.now() < updatedCred.expires) {
 						// Another instance refreshed successfully, use those credentials
-						return provider.getApiKey(updatedCred);
+						return this.resolveOAuthRequestAuth(provider, updatedCred);
 					}
 
 					// Refresh truly failed - return undefined so model discovery skips this provider
@@ -517,7 +543,7 @@ export class AuthStorage {
 				}
 			} else {
 				// Token not expired, use current access token
-				return provider.getApiKey(cred);
+				return this.resolveOAuthRequestAuth(provider, cred);
 			}
 		}
 
@@ -525,9 +551,18 @@ export class AuthStorage {
 
 		// Fall back to environment variable
 		const envKey = getEnvApiKey(providerId);
-		if (envKey) return envKey;
+		if (envKey) return { apiKey: envKey };
 
 		return undefined;
+	}
+
+	private async resolveOAuthRequestAuth(
+		provider: OAuthProviderInterface,
+		credentials: OAuthCredentials,
+	): Promise<ResolvedCredentialAuth> {
+		return supportsRequestAuth(provider)
+			? provider.getRequestAuth(credentials)
+			: { apiKey: provider.getApiKey(credentials) };
 	}
 
 	/**

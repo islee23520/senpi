@@ -10,6 +10,37 @@
 
 ### Removed
 
+## [2026.7.14] - 2026-07-14
+
+### Added
+
+### Changed
+
+- Improved the bundled `eval` tool instructions and examples to teach persistent-state reuse, batch file processing, and parallel session-tool fan-out within a single cell.
+
+### Fixed
+
+- Fixed built-in web search discovery so model aliases sharing a provider endpoint no longer multiply serial fallback attempts, aborting a search stops pending native authentication discovery, and dotted private host spellings are rejected before auth or fetch ([upstream #5](https://github.com/code-yeongyu/pi-websearch/pull/5), [upstream #6](https://github.com/code-yeongyu/pi-websearch/pull/6)).
+
+### Removed
+
+## [2026.7.13] - 2026-07-13
+
+### Added
+
+- Added a bundled persistent-kernel `eval` extension for JavaScript, Python, Ruby, and Julia, with persistent state, `agent()` and `output()` bridges, structured status streaming, bounded spillable output, rich terminal rendering, completion schemas, and cancellation-safe cleanup.
+
+### Changed
+
+- Reworked the GPT-5.6 prompt preset into a Hephaestus-parity autonomous deep worker with explicit manual QA, failure recovery, shared-worktree safeguards, and outcome-based stop rules.
+
+### Fixed
+
+- Fixed post-compaction queued input and tool continuations so they no longer deadlock, lose ownership, or surface stale continuation failures while the TUI and neo resume work.
+- Fixed project-trust reloads dropping builtin and bundled extensions, including the bundled `eval` extension.
+
+### Removed
+
 ## [2026.7.11] - 2026-07-11
 
 ### Added

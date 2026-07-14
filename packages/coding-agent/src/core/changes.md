@@ -1,5 +1,22 @@
 # changes
 
+## Provider login and model-resolution parity (2026-07-14)
+
+### What changed
+
+- auth-providers.ts, model-resolver.ts, and provider-display-names.ts now consume the expanded pi-ai provider catalog
+  for consistent /login, display, and default-model behavior.
+- AuthStorage and ModelRegistry apply provider-specific OAuth request tokens and headers instead of reducing every
+  legacy credential to one raw string.
+
+### Why extension system couldn't handle this
+
+- Login selection and startup model resolution run in core before user extensions can provide a replacement catalog.
+
+### Expected merge conflict zones
+
+- MEDIUM: provider display/default maps when upstream changes model resolution or login discovery.
+
 ## Upstream model context overflow recovery (2026-07-08)
 
 ### What changed

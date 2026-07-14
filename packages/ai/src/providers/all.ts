@@ -24,7 +24,6 @@ import { googleAntigravityProvider, googleGeminiCliProvider } from "./google-gem
 import { googleVertexProvider } from "./google-vertex.ts";
 import { groqProvider } from "./groq.ts";
 import { huggingfaceProvider } from "./huggingface.ts";
-import { kagiProvider } from "./kagi.ts";
 import { kiloProvider } from "./kilo.ts";
 import { kimiCodeProvider } from "./kimi-code.ts";
 import { kimiCodingProvider } from "./kimi-coding.ts";
@@ -50,12 +49,10 @@ import { opencodeGoProvider } from "./opencode-go.ts";
 import { opencodeZenProvider } from "./opencode-zen.ts";
 import { openrouterProvider } from "./openrouter.ts";
 import { openrouterImagesProvider } from "./openrouter-images.ts";
-import { parallelProvider } from "./parallel.ts";
 import { perplexityProvider } from "./perplexity.ts";
 import { qianfanProvider } from "./qianfan.ts";
 import { qwenPortalProvider } from "./qwen-portal.ts";
 import { syntheticProvider } from "./synthetic.ts";
-import { tavilyProvider } from "./tavily.ts";
 import { togetherProvider } from "./together.ts";
 import { veniceProvider } from "./venice.ts";
 import { vercelAIGatewayProvider } from "./vercel-ai-gateway.ts";
@@ -161,7 +158,6 @@ export function builtinProviders(): Provider[] {
 		googleVertexProvider(),
 		groqProvider(),
 		huggingfaceProvider(),
-		kagiProvider(),
 		kiloProvider(),
 		kimiCodeProvider(),
 		kimiCodingProvider(),
@@ -186,12 +182,10 @@ export function builtinProviders(): Provider[] {
 		opencodeGoProvider(),
 		opencodeZenProvider(),
 		openrouterProvider(),
-		parallelProvider(),
 		perplexityProvider(),
 		qianfanProvider(),
 		qwenPortalProvider(),
 		syntheticProvider(),
-		tavilyProvider(),
 		togetherProvider(),
 		veniceProvider(),
 		vercelAIGatewayProvider(),

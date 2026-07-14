@@ -925,7 +925,8 @@ export class ModelRegistry {
 		try {
 			const providerConfig = this.providerRequestConfigs.get(model.provider);
 			const providerEnv = this.authStorage.getProviderEnv(model.provider);
-			const apiKeyFromAuthStorage = await this.authStorage.getApiKey(model.provider, { includeFallback: false });
+			const storedAuth = await this.authStorage.getRequestAuth(model.provider, { includeFallback: false });
+			const apiKeyFromAuthStorage = storedAuth?.apiKey;
 			const apiKey =
 				apiKeyFromAuthStorage ??
 				(providerConfig?.apiKey
@@ -949,8 +950,8 @@ export class ModelRegistry {
 			);
 
 			let headers =
-				model.headers || providerHeaders || modelHeaders
-					? { ...model.headers, ...providerHeaders, ...modelHeaders }
+				storedAuth?.headers || model.headers || providerHeaders || modelHeaders
+					? { ...storedAuth?.headers, ...model.headers, ...providerHeaders, ...modelHeaders }
 					: undefined;
 
 			if (providerConfig?.authHeader) {
