@@ -19,7 +19,7 @@ extui/         Remote extension UI projection
 
 ## INVARIANTS
 
-- Bubble Tea `Update` paths remain deterministic and non-blocking; long work returns commands/messages.
+- Keep Bubble Tea `Update` paths deterministic and non-blocking; new long-running work should return commands/messages. Treat the existing editor autocomplete goroutine and direct state update as a compatibility exception, not a pattern to extend.
 - Keybindings and colors come from registries/themes. Do not hardcode shortcuts or styling in feature code.
 - Preserve Unicode cell width, grapheme, wrapping, cursor, selection, and terminal-image behavior across viewport sizes.
 - Overlay focus, stacking, cancellation, and resize behavior must remain explicit. Components may not write directly around the renderer.

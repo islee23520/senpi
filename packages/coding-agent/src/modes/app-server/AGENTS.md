@@ -1,6 +1,6 @@
 # packages/coding-agent/src/modes/app-server
 
-Codex-compatible app-server mode. It exposes Senpi threads and turns over JSON-RPC-shaped stdio, Unix-socket, and authenticated WebSocket transports.
+Codex-compatible app-server mode. It exposes Senpi threads and turns over JSON-RPC-shaped stdio, Unix-socket, and authenticated WebSocket transports. Paths below are relative to this directory unless they start with `packages/`.
 
 ## STRUCTURE
 
