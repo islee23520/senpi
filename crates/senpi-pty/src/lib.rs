@@ -126,7 +126,13 @@ pub fn start_pty_session(
             },
         );
         if status == Status::Ok {
-            let _ = delivered_rx.recv_timeout(Duration::from_secs(5));
+            loop {
+                match delivered_rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) if on_data.aborted() => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+            }
         }
     })
     .map_err(to_napi_error)?;

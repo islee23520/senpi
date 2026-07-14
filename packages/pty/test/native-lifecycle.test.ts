@@ -26,6 +26,19 @@ async function waitForThreadCountAtMost(expected: number): Promise<number> {
 }
 
 describe.skipIf(!hasDarwinArm64Prebuild)("native callback lifecycle", () => {
+	it("delivers delayed data before waitExit resolves in a live environment", () => {
+		const result = spawnSync(process.execPath, [fixture("native-delayed-callback.mjs").pathname], {
+			encoding: "utf8",
+			timeout: 12_000,
+		});
+
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({
+			events: ["data", "waitExit"],
+			output: "LATE_CALLBACK_MARKER",
+		});
+	}, 15_000);
+
 	it("surfaces a JavaScript data callback failure", () => {
 		const result = spawnSync(process.execPath, [fixture("native-callback-throws.mjs").pathname], {
 			encoding: "utf8",

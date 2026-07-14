@@ -51,8 +51,8 @@ teardown`. Regression test: `packages/pty/test/registry.test.ts`.
 - `crates/senpi-pty/src/session.rs`: synchronous and background waits close the PTY writer/master
   and join the reader before reporting exit, preserving final output from fast-exiting commands.
 - `crates/senpi-pty/src/lib.rs`: native data callbacks wait until the JavaScript callback has run,
-  preserve callback exceptions, and bound the wait when an N-API environment tears down, so the
-  reader join guarantees delivery without leaking a blocked reader thread.
+  preserve callback exceptions, and unblock only when the thread-safe function reports N-API
+  environment teardown, so the reader join guarantees delivery without leaking a blocked thread.
 - `core/extensions/builtin/terminal/runtime-session.ts`: constructs `TerminalSession` explicitly,
   registers output/exit listeners, then calls `start()` so startup output cannot beat subscription.
 
