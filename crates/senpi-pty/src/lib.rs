@@ -120,13 +120,13 @@ pub fn start_pty_session(
         let status = on_data.call_with_return_value(
             chunk.to_vec(),
             ThreadsafeFunctionCallMode::NonBlocking,
-            move |_result, _env| {
+            move |result, _env| {
                 let _ = delivered_tx.send(());
-                Ok(())
+                result.map(|_| ())
             },
         );
         if status == Status::Ok {
-            let _ = delivered_rx.recv();
+            let _ = delivered_rx.recv_timeout(Duration::from_secs(5));
         }
     })
     .map_err(to_napi_error)?;
