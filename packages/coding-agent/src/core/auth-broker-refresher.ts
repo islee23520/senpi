@@ -40,6 +40,7 @@ export class AuthBrokerRefresher {
 	#running = false;
 	#nextSweepAt: number;
 	#activeTick: Promise<void> | undefined;
+	#startPromise: Promise<void> | undefined;
 
 	constructor(opts: AuthBrokerRefresherOptions) {
 		this.#service = opts.service;
@@ -49,24 +50,36 @@ export class AuthBrokerRefresher {
 		this.#nextSweepAt = this.#now();
 	}
 
-	start(): void {
+	async start(): Promise<void> {
 		if (this.#timer !== undefined) return;
-		// Kick once immediately so a freshly-booted broker does not hand out
-		// near-expired tokens for the first interval.
-		this.#nextSweepAt = this.#now();
-		void this.tick();
-		this.#timer = setInterval(() => {
-			void this.tick();
-		}, this.#refreshIntervalMs);
+		const existing = this.#startPromise;
+		if (existing !== undefined) return existing;
+		const starting = this.startOnce();
+		this.#startPromise = starting;
+		try {
+			await starting;
+		} finally {
+			if (this.#startPromise === starting) this.#startPromise = undefined;
+		}
 	}
 
 	async stop(): Promise<void> {
+		const starting = this.#startPromise;
+		if (starting !== undefined) await starting.catch(() => undefined);
 		if (this.#timer !== undefined) {
 			clearInterval(this.#timer);
 			this.#timer = undefined;
 		}
 		const active = this.#activeTick;
 		if (active !== undefined) await active.catch(() => undefined);
+	}
+
+	private async startOnce(): Promise<void> {
+		this.#nextSweepAt = this.#now();
+		await this.tick();
+		this.#timer = setInterval(() => {
+			void this.tick();
+		}, this.#refreshIntervalMs);
 	}
 
 	getSchedule(): AuthBrokerRefresherSchedule {

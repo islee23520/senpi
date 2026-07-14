@@ -263,8 +263,15 @@ async function serveCommand(command: ParsedCommand, agentDir: string): Promise<A
 		refreshOAuthCredential,
 	);
 	const refresher = new AuthBrokerRefresher({ service: broker });
-	const handle = await startAuthBrokerServer({ bind, broker, version: VERSION });
-	refresher.start();
+	let handle: Awaited<ReturnType<typeof startAuthBrokerServer>>;
+	try {
+		await refresher.start();
+		handle = await startAuthBrokerServer({ bind, broker, version: VERSION });
+	} catch (error) {
+		await refresher.stop();
+		vault.close();
+		throw error;
+	}
 	let resolveStop: (() => void) | undefined;
 	const stopped = new Promise<void>((resolveStopPromise) => {
 		resolveStop = resolveStopPromise;

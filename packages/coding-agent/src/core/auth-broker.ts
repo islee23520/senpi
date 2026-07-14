@@ -62,7 +62,7 @@ export class SqliteCredentialVault implements CredentialVault {
 
 	save(records: readonly CredentialRecord[]): void {
 		this.transaction(() => {
-			this.db.exec("DELETE FROM credentials; DELETE FROM leases; DELETE FROM state;");
+			this.db.exec("DELETE FROM leases; DELETE FROM credentials; DELETE FROM state;");
 			for (const record of records) this.upsertCredential(record);
 		});
 	}

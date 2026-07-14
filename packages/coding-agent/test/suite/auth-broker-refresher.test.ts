@@ -162,9 +162,9 @@ describe("auth broker refresher", () => {
 			skewMs: DEFAULT_AUTH_BROKER_REFRESH_SKEW_MS,
 		});
 
-		refresher.start();
+		await refresher.start();
 		expect(refresher.getSchedule().enabled).toBe(true);
-		refresher.stop();
+		await refresher.stop();
 		expect(refresher.getSchedule().enabled).toBe(false);
 		// A second tick is idempotent: the token was already renewed far into the future.
 		await refresher.tick();
@@ -191,7 +191,7 @@ describe("auth broker refresher", () => {
 			refreshIntervalMs: 1000,
 			now: () => NOW,
 		});
-		refresher.start();
+		const starting = refresher.start();
 		while (!started) await Promise.resolve();
 		const stopP = Promise.resolve(refresher.stop());
 		let settled = false;
@@ -201,7 +201,7 @@ describe("auth broker refresher", () => {
 		for (let i = 0; i < 5; i++) await Promise.resolve();
 		expect(settled).toBe(false);
 		resolveGate();
-		await stopP;
+		await Promise.all([starting, stopP]);
 		vault.close();
 	});
 });

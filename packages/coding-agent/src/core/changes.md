@@ -1,5 +1,28 @@
 # changes
 
+## Credential broker and pooled selection (2026-07-14)
+
+### What changed
+
+- Added the credential-vault, selection-lease, broker wire contract, remote store, and background OAuth refresh surfaces.
+- ModelRegistry and SDK requests can select pooled credentials, preserve session affinity, and report sanitized outcomes.
+- Restore now clears dependent leases before replacing credentials, and startup awaits the initial OAuth refresh sweep.
+
+### Why
+
+- Multi-account credentials require an atomic owner for selection, refresh, cooldown, and secret redaction instead of
+  duplicating those policies in individual providers.
+
+### Why extension system couldn't handle this
+
+- Credential resolution and model request construction occur in core before extension hooks can safely lease or refresh
+  secret material.
+
+### Expected merge conflict zones
+
+- HIGH: auth-storage.ts, model-registry.ts, and sdk.ts credential-resolution paths.
+- MEDIUM: broker wire contracts and vault schema when auth persistence changes upstream.
+
 ## Upstream model context overflow recovery (2026-07-08)
 
 ### What changed
