@@ -23,7 +23,7 @@ turn-adapter.ts       Agent/session events to app-server turn events
 - WebSocket listeners bind IP literals. Bearer auth is required unless explicitly disabled for loopback, and `Origin` requests remain rejected.
 - Keep connection subscriptions, thread ownership, archive/unload, and turn cancellation consistent across disconnect and daemon shutdown.
 - Approval payloads and diagnostics can contain sensitive material. Keep token-file permissions restricted, do not assume diagnostics are redacted, and add explicit redaction before exposing them beyond the local process.
-- Generated files under `protocol/generated/` are evidence, not build input. Never edit them directly. Prefer the non-generated facade; keep any necessary type-only imports isolated until the facade covers them.
+- Generated files under `protocol/generated/` are protocol evidence and compile-time type inputs, not runtime implementations. Never edit them directly. Prefer the non-generated facade; keep direct type-only imports isolated until the facade covers them.
 
 ## WHERE TO LOOK
 
