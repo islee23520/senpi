@@ -1,6 +1,6 @@
 # packages/coding-agent/examples
 
-Runnable examples for the public Senpi SDK and extension API. Examples are documentation-quality code and must reflect shipped APIs, not private core internals. Paths below are relative to this directory unless they start with `packages/`.
+Runnable examples for the public Senpi SDK and extension API. Examples are documentation-quality code and must reflect shipped APIs, not private core internals. Unqualified paths below are relative to this directory; `packages/...` paths are repository-relative.
 
 ## STRUCTURE
 
@@ -13,7 +13,7 @@ rpc-extension-ui.ts RPC-compatible extension UI example
 
 ## CONVENTIONS
 
-- Import public package surfaces such as `@code-yeongyu/senpi` and `@earendil-works/pi-ai`; do not reach into `src/core/` internals.
+- Import public package surfaces such as `@code-yeongyu/senpi` and `@earendil-works/pi-ai`; do not reach into `packages/coding-agent/src/core/` internals.
 - Keep examples small enough to teach one pattern, while preserving real error, cleanup, cancellation, and persistence behavior where relevant.
 - Extension factories have no top-level runtime side effects. Register work through the public `pi.*` API and lifecycle events.
 - New interactive examples should use configurable keybindings and themed TUI helpers. Existing demos may keep fixed controls when the control scheme is part of the example. Direct terminal writes belong only in examples explicitly teaching a terminal protocol; ordinary SDK examples may use normal stdout.
@@ -23,7 +23,7 @@ rpc-extension-ui.ts RPC-compatible extension UI example
 
 ## DOCUMENTATION CONTRACT
 
-- Keep `extensions/README.md`, `docs/extensions.md`, and `docs/sdk.md` aligned with public API changes.
+- Keep `extensions/README.md`, `packages/coding-agent/docs/extensions.md`, and `packages/coding-agent/docs/sdk.md` aligned with public API changes.
 - New public extension capabilities should include a focused example when usage is not obvious from types alone.
 - Do not present experimental or internal behavior as stable API.
 

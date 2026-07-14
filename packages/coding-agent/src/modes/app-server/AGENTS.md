@@ -1,6 +1,6 @@
 # packages/coding-agent/src/modes/app-server
 
-Codex-compatible app-server mode. It exposes Senpi threads and turns over JSON-RPC-shaped stdio, Unix-socket, and authenticated WebSocket transports. Paths below are relative to this directory unless they start with `packages/`.
+Codex-compatible app-server mode. It exposes Senpi threads and turns over JSON-RPC-shaped stdio, Unix-socket, and authenticated WebSocket transports. Unqualified paths below are relative to this directory; `packages/...` paths are repository-relative.
 
 ## STRUCTURE
 
@@ -34,7 +34,7 @@ turn-adapter.ts       Agent/session events to app-server turn events
 | Change thread/session projection | `threads/` |
 | Change transport behavior | `transports/` |
 | Change approvals | `server/approval-*.ts`, `server/approvals.ts` |
-| Change wire types | `protocol/` and `docs/app-server.md` |
+| Change wire types | `protocol/` and `packages/coding-agent/docs/app-server.md` |
 
 ## GENERATED PROTOCOL
 
@@ -46,6 +46,6 @@ turn-adapter.ts       Agent/session events to app-server turn events
 
 - Run focused app-server Vitest suites from `packages/coding-agent`.
 - Run `npm run qa:app-server` for the handshake, multiclient, approval, and real-client probes.
-- Run the matching `test/qa/app-server/` driver for focused Unix-socket, malformed-input, and lifecycle scenarios.
-- Protocol or documentation changes must keep `docs/app-server.md` examples and `test/qa/app-server/` checks aligned.
+- Run the matching `packages/coding-agent/test/qa/app-server/` driver for focused Unix-socket, malformed-input, and lifecycle scenarios.
+- Protocol or documentation changes must keep `packages/coding-agent/docs/app-server.md` examples and `packages/coding-agent/test/qa/app-server/` checks aligned.
 - Runtime changes also require root `npm run check` and the applicable real CLI QA evidence gate.
