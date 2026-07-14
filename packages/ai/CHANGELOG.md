@@ -17,6 +17,7 @@
 - Fixed OpenAI/Azure Responses reasoning replay to backfill `encrypted_content` from completed responses when reasoning blocks omit it ([#6608](https://github.com/earendil-works/pi-mono/pull/6608) by [@davidbrai](https://github.com/davidbrai)).
 - Fixed Bedrock Converse streams to surface unhandled stop reasons as error messages ([#6598](https://github.com/earendil-works/pi-mono/pull/6598) by [@davidbrai](https://github.com/davidbrai)).
 - Fixed OpenRouter session-affinity headers for OpenAI-compatible completion and Responses providers ([#6496](https://github.com/earendil-works/pi-mono/pull/6496) by [@houskape](https://github.com/houskape)).
+- Fixed OpenAI Responses WebSocket session-affinity headers to use each provider's configured affinity format.
 - Fixed GitHub Copilot MAI-Code models to route through the Responses endpoint ([#6544](https://github.com/earendil-works/pi-mono/pull/6544) by [@houskape](https://github.com/houskape)).
 
 ### Removed
