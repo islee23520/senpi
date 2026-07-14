@@ -28,9 +28,9 @@ extui/         Remote extension UI projection
 
 ## VISUAL QA
 
-- Use the matching `internal/ui/<area>/qaharness` for behavior and rendering changes.
-- Captures are ANSI/HTML/grid triplets under `qa/triplets/`; registered claims live in `qa/visual-claims*.json`.
-- Verify manifests with `node qa/xterm-render.mjs verify-manifest <manifest.json>` at representative widths and capability modes.
+- Use the matching `<area>/qaharness` for behavior and rendering changes.
+- Captures are ANSI/HTML/grid triplets under `packages/neo/qa/triplets/`; registered claims live in `packages/neo/qa/visual-claims*.json`.
+- Verify manifests with `node packages/neo/qa/xterm-render.mjs verify-manifest <manifest.json>` at representative widths and capability modes.
 - Never update snapshots or claims merely to hide a rendering regression; inspect the cell grid and terminal output first.
 
 ## VALIDATION
