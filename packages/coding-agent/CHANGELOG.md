@@ -6,6 +6,10 @@
 
 ### Changed
 
+- Tuned the `gpt-5.6` system prompt preset against the oh-my-opencode Hephaestus GPT-5.6 prompts: verification wording now names validators senpi can actually run (type check/lint instead of a nonexistent diagnostics tool), parallel tool calls are the stated default with serial as the exception and no `;`/`&&` chaining of unrelated shell steps, todo items are named by deliverable and reconciled at turn end, and bracketed `【F:...】`-style citations are banned from output.
+- Reframed the skill-loading trigger in every system prompt to load skills on loose description match, stating the cost asymmetry (an irrelevant load costs little; a missed relevant skill degrades the work).
+- Added an instruction-file precedence rule to the dynamic system prompt's Project Context section: instruction files bind files under their directory, deeper files win on conflict, and explicit user instructions override.
+
 ### Fixed
 
 ### Removed
