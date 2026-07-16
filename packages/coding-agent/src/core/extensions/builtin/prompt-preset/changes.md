@@ -1,5 +1,22 @@
 # prompt-preset Extension Changes
 
+## Grok 4.5 preset (2026-07-17)
+
+### What changed
+- Added `grok-4.5.ts`: thin `tuningSection` preset for Grok 4.5 (xAI). Two model-specific corrections: (1) answer from already-provided session context / guidance instead of re-asking the user when the transcript is sufficient, with an explicit default-to-low reasoning stance; (2) progressive work continuity — after one unit finishes, immediately start the next in-scope unit or natural derived follow-on rather than stalling.
+- `presets.ts`: `hasGrok45Signal` / `isGrok45Model` match `grok-4.5`, `grok-4p5`, `grok_4_5`, etc. without catching `grok-4.3` / `grok-4.20-*`.
+- `settings.ts`: `"grok-4.5"` joins `PromptPresetName` / `VALID_PRESETS`.
+- `test/suite/prompt-presets-grok-4-5.test.ts`: id resolution, negative neighbors, settings force, catalog coverage (`xai/grok-4.5`, `opencode/grok-4.5`, …).
+
+### Why
+- Grok 4.5 holds big-picture context well but still re-interrogates the user when the session already has the answer, and drops the ball between incremental steps. Prompt-level stance fixes both without a full-core rewrite.
+
+### Why extension system couldn't handle this differently
+- Preset selection and family tuning are owned by this builtin; no core prompt code changed.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `presets.ts` matcher list / `settings.ts` union if upstream adds its own Grok preset.
+
 ## Overview
 Per-model prompt preset extension. Selects a tuned system prompt based on the active model and exposes it through the dynamic prompt builder.
 
