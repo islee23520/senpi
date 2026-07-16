@@ -2,22 +2,29 @@
 
 ## [Unreleased]
 
+### Added
+
+- Preserved fork compatibility for extension OAuth callback types and faux-provider registration through the `compat` surface.
+
+## [0.80.8] - 2026-07-16
+
 ### Breaking Changes
 
 - Changed runtime authentication to provider-scoped `Models.checkAuth()`, `getAuth()`, `login()`, and `logout()` APIs. `checkAuth()` now returns `AuthCheck | undefined`, and API-key auth resolvers no longer receive a model.
-- Removed the legacy built-in OAuth provider objects, global OAuth registry APIs, and public low-level built-in login/refresh functions. Use canonical `Provider.auth.oauth` methods instead; the `oauth` subpath retains extension compatibility types.
+- Removed the legacy built-in OAuth provider objects, global OAuth registry APIs, and public low-level built-in login/refresh functions. Use canonical `Provider.auth.oauth` methods instead; the `oauth` subpath now retains only extension compatibility types.
 - Renamed the canonical login interaction interface from `AuthLoginCallbacks` to `AuthInteraction`; it exposes the provider-neutral `prompt()`/`notify()` protocol used by API-key and OAuth flows.
-- Changed the `Models` request contract: `getAuth(model)` now includes model headers, while `getAuth(providerId)` remains provider-scoped, and Models stream options may include `transformHeaders`.
-- Changed dynamic model refresh to `Models.refresh(options)`, which refreshes every configured dynamic provider and returns per-provider errors and cancellation state. `Provider.refreshModels(context)` now receives the effective credential, scoped model storage, network policy, and abort signal.
+- Changed the `Models` request contract: `getAuth(model)` now includes model headers, while `getAuth(providerId)` remains provider-scoped, and Models stream options may include `transformHeaders`. Custom `Models` implementations must execute the transform after merging auth/model and explicit headers, then remove it before provider dispatch.
+- Changed dynamic model refresh to `Models.refresh(options)`, which refreshes every configured dynamic provider and returns per-provider errors/cancellation state. `Provider.refreshModels(context)` now receives the effective credential, scoped model storage, network policy, and abort signal.
 
 ### Added
 
 - Added provider-owned authentication and availability resolution to `Models`, including stored OAuth refresh and interactive login support through `CredentialStore`.
 - Added async non-secret credential enumeration through `CredentialStore.list()` and credential-aware `Provider.filterModels()` availability policy.
-- Added neutral auth-flow information and link events plus provider-owned Amazon Bedrock and Google Vertex AI credential selection flows.
+- Added neutral auth-flow information/link events and provider-owned Amazon Bedrock and Google Vertex AI credential selection flows.
 - Added `ModelsStore` with an in-memory default for restoring and persisting dynamic provider catalogs.
 - Added the dynamic Radius `pi-messages` gateway provider with OAuth and credential-specific catalog refresh.
-- Preserved fork compatibility for extension OAuth callback types and faux-provider registration through the `compat` surface.
+- Added `Models.refresh({ force: true })` to let providers bypass freshness checks for explicit refreshes.
+- Added xAI device-code OAuth login and routed Grok 4.5 through OpenAI Responses, with low, medium, and high thinking support ([#6651](https://github.com/earendil-works/pi-mono/pull/6651) by [@Jaaneek](https://github.com/Jaaneek)).
 
 ### Changed
 
@@ -27,9 +34,7 @@
 
 - Fixed Cloudflare Workers AI and AI Gateway streams to materialize account and gateway endpoint placeholders after auth resolution, including compat streaming with custom model objects.
 - Fixed lazy provider streams to preserve their final assistant message when forwarding an inner stream.
-- Fixed OpenAI Codex session-affinity IDs to stay within the backend's 64-character limit ([#6653](https://github.com/earendil-works/pi/pull/6653) by [@davidbrai](https://github.com/davidbrai)).
-
-### Removed
+- Fixed OpenAI Codex session IDs longer than 64 characters to meet the API limit ([#6630](https://github.com/earendil-works/pi-mono/issues/6630)).
 
 ## [2026.7.14-3] - 2026-07-14
 
