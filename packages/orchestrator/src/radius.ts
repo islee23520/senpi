@@ -1,6 +1,7 @@
 // allow: SIZE_OK - upstream experimental Radius client kept cohesive during this merge; split in a dedicated behavior-locked refactor.
 import { hostname, platform } from "node:os";
-import { AuthStorage, type OAuthCredential } from "@code-yeongyu/senpi";
+import { readStoredCredential } from "@code-yeongyu/senpi";
+import type { OAuthCredential } from "@earendil-works/pi-ai";
 import { getOrchestratorDir, getSocketPath, VERSION } from "./config.ts";
 import { loadMachine, saveMachine } from "./storage.ts";
 import type { InstanceRecord, MachineRecord, RadiusRegistration } from "./types.ts";
@@ -117,15 +118,9 @@ export function getRadiusOrchestratorBaseUrl(): string {
 	return new URL(DEFAULT_ORCHESTRATOR_BASE_PATH, getRadiusUrl()).toString();
 }
 
-const radiusAuthStorage = AuthStorage.create();
-
 function getStoredRadiusCredential(): OAuthCredential | undefined {
-	radiusAuthStorage.reload();
-	const credential = radiusAuthStorage.get(RADIUS_PROVIDER);
-	if (credential?.type !== "oauth") {
-		return undefined;
-	}
-	return credential;
+	const credential = readStoredCredential(RADIUS_PROVIDER);
+	return credential?.type === "oauth" ? credential : undefined;
 }
 
 export function getRadiusAccessToken(): string {
