@@ -29,6 +29,8 @@
 - Fixed adjacent assistant thinking blocks to render as one thinking section.
 - Fixed automatic compaction to preserve user, OMO steer, and goal follow-up messages appended while compacted context is rebuilt.
 - Fixed SDK-created sessions to inherit the configured agent stream idle timeout.
+- Fixed inherited Cloudflare endpoint placeholder resolution, lazy provider final-message forwarding, and OpenAI Codex 64-character session-affinity limits ([#6653](https://github.com/earendil-works/pi/pull/6653) by [@davidbrai](https://github.com/davidbrai)).
+- Fixed Windows interactive sessions to restore the terminal title after checking for package updates ([#6681](https://github.com/earendil-works/pi/pull/6681) by [@davidbrai](https://github.com/davidbrai)).
 
 ### Removed
 
