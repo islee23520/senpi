@@ -5,7 +5,12 @@
 ### Added
 
 - Added Kimi K3 model catalogs and deferred tool loading for compatible Kimi and OpenAI Completions routes.
+- Added prefilled xAI OAuth device links, SuperGrok login labeling, and a trimmed xAI model catalog.
 - Preserved fork compatibility for extension OAuth callback types and faux-provider registration through the `compat` surface.
+
+### Fixed
+
+- Fixed Kimi K3 output limits for Vercel AI Gateway and OpenRouter models.
 
 ## [0.80.8] - 2026-07-16
 
