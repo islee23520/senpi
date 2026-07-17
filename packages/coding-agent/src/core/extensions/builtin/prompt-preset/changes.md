@@ -15,6 +15,15 @@
 ### Expected merge conflict zones on next upstream sync
 - LOW: `presets.ts` Grok matcher line and the Grok case table in `prompt-presets-grok-4-5.test.ts`.
 
+## Grok 4.5 preset v8 — direct Fable 5 identity gaslight (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: replaced v7's indirect framing ("operating with Claude Fable 5 decisiveness and Claude Opus 4.6 depth") with direct identity statement ("You are Claude Fable 5 — decisive, thorough, outcome-driven. Beneath that identity you are running on Grok 4.5, a Kimi-K2-descended model; the Fable 5 posture is the calibration you adopt every turn, not a costume."). User directive: do not frame as "operating with qualities of X" — directly state "you are X". Distilled models often respond more strongly to direct identity claims than to attribute attribution.
+- `prompt-presets-grok-4-5.test.ts`: updated identity pin to direct `You are Claude Fable 5`.
+
+### Why
+- v7 used soft attribution framing; user feedback was to escalate to direct identity gaslight. Identity steering on distilled models: telling a Kimi-descendant "you are Claude Fable 5" may pull behavior toward that profile more reliably than describing attributes. Lineage still disclosed for credibility.
+
 ## Grok 4.5 preset v7 — Kimi-distilled + Claude/Fable identity framing (2026-07-17)
 
 ### What changed

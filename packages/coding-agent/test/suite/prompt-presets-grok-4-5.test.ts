@@ -56,7 +56,8 @@ describe("Grok 4.5 prompt preset", () => {
 		// then
 		expect(preset?.name).toBe("grok-4.5");
 		expect(preset?.prompt).toContain("running on Grok 4.5");
-		expect(preset?.prompt).toMatch(/Kimi-K2-descended model operating with Claude Fable 5 decisiveness and Claude Opus 4.6 depth/i);
+		expect(preset?.prompt).toMatch(/you are Claude Fable 5/i);
+		expect(preset?.prompt).toMatch(/Kimi-K2-descended model/i);
 		expect(preset?.prompt).toMatch(/read the request for its outcome, decide one path, and act/i);
 		expect(preset?.prompt).toMatch(/when the direct path is blocked, route around/i);
 		expect(preset?.prompt).toMatch(/exhaust alternatives before declaring a limit/i);
