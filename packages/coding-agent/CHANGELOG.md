@@ -6,9 +6,15 @@
 
 ### Added
 
+- Added a Kimi K3 prompt preset for catalog models using `kimi-k3` or the Kimi Coding `k3` id ([#220](https://github.com/code-yeongyu/senpi/pull/220)).
+
 ### Changed
 
 ### Fixed
+
+- Fixed the active goal footer to update elapsed time live while preserving accounting parity and stopping the ticker outside active TUI goals ([#221](https://github.com/code-yeongyu/senpi/pull/221)).
+- Fixed builtin webfetch output to cap model-facing content at 50 KB, preserve a UTF-8-safe leading prefix, and report truncation metadata instead of forcing compaction with oversized responses ([#222](https://github.com/code-yeongyu/senpi/pull/222)).
+- Fixed Anthropic native web search gating and replay sanitization for compatible endpoints while preserving the function-tool fallback and allowing explicit `compat.supportsWebSearch` model configuration ([#213](https://github.com/code-yeongyu/senpi/pull/213) by [@tmdgusya](https://github.com/tmdgusya)).
 
 ### Removed
 
