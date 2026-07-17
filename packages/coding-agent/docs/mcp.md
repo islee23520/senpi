@@ -149,6 +149,22 @@ Skills can carry MCP servers too (an `mcp.json` sidecar next to SKILL.md, or a
 reveal their `includeTools` matches when the skill loads. A name collision
 with a configured server resolves in favor of your config.
 
+### Server sources
+
+Servers are merged from these sources, in precedence order:
+
+- `global` — `<agentDir>/mcp.json`
+- `claude` — imported `.mcp.json` (requires project trust)
+- `project` — `.senpi/mcp.json` (requires project trust)
+- `extension` — declared by an extension via `pi.registerMcpServer()` during
+  factory load (see [extensions.md](extensions.md#piregistermcpservername-config))
+- `skill` — declared in a skill's `mcp.json` sidecar or SKILL.md frontmatter
+
+A name collision resolves as follows: trusted user config (including an
+`enabled: false` entry) wins over extension declarations; an extension
+declaration replaces an untrusted placeholder and records a diagnostic.
+Extension-declared servers use bare names (no prefix).
+
 ## Resources and prompts
 
 - `mcp_list_resources` / `mcp_read_resource` register automatically when a
