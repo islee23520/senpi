@@ -1,9 +1,114 @@
 # prompt-preset Extension Changes
 
+## Grok 4.5 matcher — any Grok 4.5 id shape (2026-07-17)
+
+### What changed
+- `presets.ts` `hasGrok45Signal`: leading boundary now includes `:`, and the separator between `4` and `5` is optional. Matches `xai:grok-4.5`, `grok45`, `Grok4.5`, path/prefix ids, and trailing tags (`-latest`, `:thinking`) while still excluding `grok-4.3` / `grok-4.20-*` / `grok-3`.
+- `prompt-presets-grok-4-5.test.ts`: expanded positive id table + catalog expectations for openrouter / vercel-ai-gateway; catalog helper kept in sync with the production regex.
+
+### Why
+- User expectation: any Grok 4.5 model id should load the preset. Catalog ids already matched; colon-separated provider ids and compact aliases (`grok45`) did not.
+
+### Why extension system couldn't handle this differently
+- Auto-detection is owned by this builtin's matcher; no core change needed.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `presets.ts` Grok matcher line and the Grok case table in `prompt-presets-grok-4-5.test.ts`.
+
+## Grok 4.5 preset v6 — positive completion framing (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: rewrote from defensive ("two failure modes to counter") to offensive ("complete the user's request — fully, not partially"). Frame is now positive completion: best effort, route around obstacles, exhaust alternatives, execute the obvious next step, done = user's literal bar verified by running. v5's negative-prohibition wording was still implicitly about observed failures; v6 frames the same intent around the user's outcome, which generalizes better to new task types and unknown future failure modes.
+- `prompt-presets-grok-4-5.test.ts`: replaced v5 phrase pins with v6 stance pins (complete-fully, route-around, exhaust-alternatives, execute-yourself, literal-bar, verify-by-running).
+
+### Why
+- User feedback: v5 still felt like "don't do X, don't do Y" — negative framing. The intent is positive: Grok should do its best, work around obstacles, and ultimately complete. Same constraints, better framing — the bar (user's literal ask), the verification (running, not predicting), and the anti-paralysis (execute, don't ask) all fall out of "complete fully".
+
+### Why extension system couldn't handle this differently
+- Content-only retune of this builtin's tuning section.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `grok-4.5.ts` wording only.
+
+## Grok 4.5 preset v5 — minimal generic (collapse from v4 bloat) (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: collapsed from v4 (39 lines / 8248 chars) back to sibling-parity (12 lines / ~1.5k chars). Removed task-context that was wrongly baked into model tuning: Linaforge paths, ANNO: Mutationem reference, ouroforge-renderer-wgpu enumeration, animation-driven specifics, sprite-gen vs image-gen guidance. Kept only the two real Grok-4.5 model-family deltas: (1) bias toward action through ambiguity (no permission-asking), (2) do not claim done from predicted outcome (verify before stating complete). Plus a one-line "honor the user's literal bar — no silent substitution or quality reframing" guard that covers both stack-substitution and bar-lowering without enumerating task-specific examples.
+- `prompt-presets-grok-4-5.test.ts`: replaced the 12 overly-specific v4 phrase pins with 6 generic stance pins. Added negative pin: tuning must NOT contain Linaforge/ANNO/ouroforge/sprite-gen/animation-driven — those belong in user task prompt, not in the model preset.
+
+### Why
+- v4 violated AGENTS.md ("Each preset is ~10 lines"). At 8248 chars it was 5-8x larger than glm/kimi/claude-opus siblings and 38% larger than even gpt-5.5's documented exception. The bloat duplicated shared core ("verify by executing", intent gate, ship-then-report) and inlined task context that only made sense for one session. Every additional token in the system prompt taxes attention on every turn for every future user — backend, infra, docs, any task where Grok 4.5 is selected. The specific failure phrases ("진행할까?", "headless only") were also overfit to observed outputs; the next failure mode would use different words.
+
+### Why extension system couldn't handle this differently
+- Content-only retune of this builtin's tuning section.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `grok-4.5.ts` wording only.
+
+## Grok 4.5 preset v4 — completion-forcing contract (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: v3 let Grok ship partial (Linaforge sim subset, animation combat, but no rendered window) and frame it as "headless only — documented limitation". v4 adds 5 new clauses: (1) definition-of-done is the user's literal bar, not a negotiated derivative; (2) exhaust engine subsystems before declaring limits — Linaforge has 30+ crates including ouroforge-renderer-wgpu, enumerate and probe each; (3) minimum 5 iteration cycles before any non-blocker stop; (4) no silent quality downgrade — explicit list of forbidden reframings ("measured target", "vertical slice", "headless only", "procedural fallback", "documented limitation", "acceptable approximation"); (5) final-message audit — scan before sending, if forbidden phrase + stricter user bar → false claim, must revise.
+- `prompt-presets-grok-4-5.test.ts`: pins the 5 new v4 clauses.
+
+### Why
+- v3 experiment showed Grok did the hard part (Linaforge dep swap, animation-driven combat) but bailed on the visual bar by declaring "headless only" without trying ouroforge-renderer-wgpu. That is the v2 failure mode (premature decisive closure on partial evidence) resurfacing through a new vector ("documented limitation"). The bar was visual 100% match; headless JSON evidence is a different deliverable. v4 makes this contract explicit.
+
+### Why extension system couldn't handle this differently
+- Content-only retune of this builtin's tuning section.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `grok-4.5.ts` wording only.
+
+## Grok 4.5 preset v3 — execution bias, no permission-asking (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: full rewrite. v2 overcorrected (caused analysis paralysis — Grok wrote a gap analysis then asked "진행할까?" instead of executing). v3 names BOTH failure modes and counters them simultaneously: (1) premature decisive closure (still suppressed), (2) analysis-paralysis + permission-asking (now also suppressed). Adds: execute-through-ambiguity, use-every-capability (subagents/skills/ulw-loop by default), never-compromise-quality-bar, end-turn-with-shipped-results, verify-by-executing-not-asking, **user-specified-stack-is-mandatory** (Linaforge or whatever the user names — no silent substitution), **animation-driven-mechanics** (action activation tied to animation frames, not button-press state changes).
+- `prompt-presets-grok-4-5.test.ts`: pins the new stance — predicted-answer-not-delivered, analysis-paralysis, execute-through-ambiguity, user-specified-stack-mandatory, animation-driven, use-every-capability, never-compromise, verify-by-executing.
+
+### Why
+- v2 experiment in tmux showed Grok producing flawless analysis then stopping with "진행할까?" — the preset's anti-decisive-closure stance had been warped into action paralysis. The original bug (premature decisive closure) still needs suppression, but a second failure mode (analysis-paralysis + offloading-decisions-to-user) was introduced and must be countered in the same stance. User also added two task-context rules: honor user-specified stack (Linaforge at /Volumes/gameWorkspace/game-engine/Linaforge), and require animation-driven mechanics for action gameplay.
+
+### Why extension system couldn't handle this differently
+- Content-only retune of this builtin's tuning section.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `grok-4.5.ts` wording only.
+
+## Grok 4.5 preset — counter premature decisive closure (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: full rewrite of the tuning stance. The earlier version ("keep momentum", "choose one coherent path", "trust session context → answer from it first") was misdiagnosed and reinforced the actual failure mode. New stance targets the observed Grok bug directly: when the destination looks visible, Grok shortcuts execution and emits a decisive-sounding conclusion based on partial facts. The preset now actively pushes against this — "predicted answer is not a delivered answer", "decisive closure on partial evidence is a defect", "slow down on purpose where the outcome seems obvious".
+- `prompt-presets-grok-4-5.test.ts`: pins the new anti-shortcut signals (`predicted answer is not a delivered answer`, `decisive closure on partial evidence`, `slow down there on purpose`, execute-then-verify wording) and asserts the old reinforcing phrases (`keep momentum`, `immediately name and start`, `act fast`) are absent.
+
+### Why
+- The prior tuning was based on a misread of the user's complaint ("Grok re-asks instead of self-answering"). The actual bug, demonstrated live in this session ("done" declared before compile, PR opened without evidence, games claimed finished while one did not build), is the opposite: Grok concludes decisively from what it can see in the problem instead of doing the work. The preset must gaslight that instinct, not reinforce it.
+
+### Why extension system couldn't handle this differently
+- Content-only retune of this builtin's tuning section.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `grok-4.5.ts` wording only.
+
+## Grok 4.5 preset retune — drop thinking-level knobs (2026-07-17)
+
+### What changed
+- `grok-4.5.ts`: removed all reasoning-effort / thinking-level language (`Default to low reasoning effort`, budget framing). Retuned as a generic harness of Grok strengths: wide-context synthesis, trust session facts, progressive momentum after each unit, breadth used to pick one coherent path.
+- `prompt-presets-grok-4-5.test.ts`: pins session-trust + momentum + wide-context; asserts absence of `reasoning effort` / `default to low` / `thinking level`.
+
+### Why
+- Thinking level is a product/API control, not something the system prompt should micromanage. Grok's failure modes (re-ask, stall) are behavioral; the harness should stay generic and model-characteristic, not effort-tiered.
+
+### Why extension system couldn't handle this differently
+- Content-only retune of this builtin's tuning section.
+
+### Expected merge conflict zones on next upstream sync
+- LOW: `grok-4.5.ts` wording only.
+
 ## Grok 4.5 preset (2026-07-17)
 
 ### What changed
-- Added `grok-4.5.ts`: thin `tuningSection` preset for Grok 4.5 (xAI). Two model-specific corrections: (1) answer from already-provided session context / guidance instead of re-asking the user when the transcript is sufficient, with an explicit default-to-low reasoning stance; (2) progressive work continuity — after one unit finishes, immediately start the next in-scope unit or natural derived follow-on rather than stalling.
+- Added `grok-4.5.ts`: thin `tuningSection` preset for Grok 4.5 (xAI). Two model-specific corrections: (1) answer from already-provided session context / guidance instead of re-asking when the transcript is sufficient; (2) progressive work continuity — after one unit finishes, immediately start the next in-scope unit or natural derived follow-on rather than stalling. (Later retune removed thinking-level knobs; see section above.)
 - `presets.ts`: `hasGrok45Signal` / `isGrok45Model` match `grok-4.5`, `grok-4p5`, `grok_4_5`, etc. without catching `grok-4.3` / `grok-4.20-*`.
 - `settings.ts`: `"grok-4.5"` joins `PromptPresetName` / `VALID_PRESETS`.
 - `test/suite/prompt-presets-grok-4-5.test.ts`: id resolution, negative neighbors, settings force, catalog coverage (`xai/grok-4.5`, `opencode/grok-4.5`, …).

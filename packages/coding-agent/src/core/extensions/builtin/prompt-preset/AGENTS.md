@@ -22,7 +22,7 @@ prompt-preset/
 ├── claude-opus-4-7.ts   # Claude Opus 4.7 preset
 ├── claude-opus-4-8.ts   # Claude Opus 4.8 preset
 ├── glm-5-2.ts           # GLM 5.2 preset
-├── grok-4.5.ts          # Grok 4.5 preset — session-context answers + progressive next-step momentum (default low reasoning)
+├── grok-4.5.ts          # Grok 4.5 preset — wide-context synthesis, session-trust, progressive momentum (no thinking-level knobs)
 ├── kimi-k2-6.ts         # Kimi K2.6 preset
 ├── kimi-k2-7.ts         # Kimi K2.7 preset
 └── changes.md           # Fork tracker (model-family rename 2026-04-30, file-operations 2026-05-07)

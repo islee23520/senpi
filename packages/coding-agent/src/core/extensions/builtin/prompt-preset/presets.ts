@@ -81,7 +81,9 @@ function isGlm52Model(model: ModelWithPromptPresetMetadata): boolean {
 }
 
 function hasGrok45Signal(value: string): boolean {
-	return /(?:^|[/@._-])grok(?:[._-]|p)?4(?:[._-]|p)5(?:$|[/@._:-])/.test(normalizeModelId(value));
+	// Match any Grok 4.5 id shape: grok-4.5, grok4.5, grok45, grok-4p5, provider:model,
+	// path/prefix ids, and trailing tags (:thinking, -latest). Keep 4.3 / 4.20 / 3 out.
+	return /(?:^|[/@:._-])grok(?:[._-]|p)?4(?:[._-]|p)?5(?:$|[/@._:-])/.test(normalizeModelId(value));
 }
 
 function isGrok45Model(model: ModelWithPromptPresetMetadata): boolean {

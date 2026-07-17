@@ -23,7 +23,8 @@ function createModel(id: string, provider: string, api: Api = "openai-responses"
 
 function hasGrok45CatalogSignal(model: Model<Api>): boolean {
 	const searchable = `${model.id} ${model.name}`.toLowerCase().replace(/\s+/g, "-");
-	return /(?:^|[/@._-])grok(?:[._-]|p)?4(?:[._-]|p)5(?:$|[/@._:-])/.test(searchable);
+	// Keep in sync with presets.ts hasGrok45Signal — colon provider sep + compact grok45.
+	return /(?:^|[/@:._-])grok(?:[._-]|p)?4(?:[._-]|p)?5(?:$|[/@._:-])/.test(searchable);
 }
 
 function getGrok45CatalogModels(): Model<Api>[] {
@@ -35,8 +36,15 @@ describe("Grok 4.5 prompt preset", () => {
 		"grok-4.5",
 		"Grok 4.5",
 		"xai/grok-4.5",
+		"x-ai/grok-4.5",
+		"xai:grok-4.5",
 		"grok-4p5",
 		"grok_4_5:thinking",
+		"grok45",
+		"Grok4.5",
+		"grok-4.5-latest",
+		"grok-4.5-thinking",
+		"accounts/xai/models/grok-4.5",
 	])("resolves %s to the grok-4.5 preset", (modelId) => {
 		// given
 		const settings: PromptPresetSettings = { promptPreset: "auto" };
@@ -48,9 +56,14 @@ describe("Grok 4.5 prompt preset", () => {
 		// then
 		expect(preset?.name).toBe("grok-4.5");
 		expect(preset?.prompt).toContain("running on Grok 4.5");
-		expect(preset?.prompt).toMatch(/session context/i);
-		expect(preset?.prompt).toMatch(/progressive/i);
-		expect(preset?.prompt).toMatch(/\blow\b/i);
+		expect(preset?.prompt).toMatch(/complete the user's request .+ fully, not partially/i);
+		expect(preset?.prompt).toMatch(/when the direct path is blocked, route around/i);
+		expect(preset?.prompt).toMatch(/exhaust alternatives before declaring a limit/i);
+		expect(preset?.prompt).toMatch(/execute the obvious next step yourself/i);
+		expect(preset?.prompt).toMatch(/done means the user's literal bar/i);
+		expect(preset?.prompt).toMatch(/verify by running/i);
+		const tuning = preset?.prompt.slice(preset.prompt.indexOf("You are running on Grok 4.5")) ?? "";
+		expect(tuning).not.toMatch(/\bLinaforge\b|\bANNO\b|ouroforge|sprite-gen|animation-driven mechanics/i);
 		expect(preset?.prompt).not.toContain("apply_patch");
 	});
 
@@ -97,7 +110,14 @@ describe("Grok 4.5 prompt preset", () => {
 			.map((model) => `${model.provider}/${model.id}`);
 
 		// then
-		expect(catalogModelIds).toEqual(expect.arrayContaining(["xai/grok-4.5", "opencode/grok-4.5"]));
+		expect(catalogModelIds).toEqual(
+			expect.arrayContaining([
+				"xai/grok-4.5",
+				"opencode/grok-4.5",
+				"openrouter/x-ai/grok-4.5",
+				"vercel-ai-gateway/xai/grok-4.5",
+			]),
+		);
 		expect(misses).toEqual([]);
 	});
 });
