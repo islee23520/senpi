@@ -8,7 +8,11 @@
 
 ### Changed
 
+- Renamed the MCP discovery tool from `mcp_search` to `tool_search` so its public name matches its behavior ([#227](https://github.com/code-yeongyu/senpi/pull/227)).
+
 ### Fixed
+
+- Fixed payload hooks reintroducing Moonshot-incompatible function schemas by normalizing the final tool list after `onPayload` and immediately before request submission.
 
 ### Removed
 

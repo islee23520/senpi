@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed payload hooks reintroducing Moonshot-incompatible function schemas by normalizing the final tool list after `onPayload` and immediately before request submission.
+
 ### Removed
 
 ## [2026.7.17-2] - 2026-07-17

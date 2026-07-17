@@ -1,5 +1,25 @@
 # AI Source Changes
 
+## 2026-07-17 - Final-boundary Moonshot tool schema normalization
+
+### What changed and why
+
+- `api/openai-completions.ts`: re-normalizes function tool parameter schemas after `onPayload` and immediately before
+  the OpenAI SDK request. Payload hooks can replace or inject tools after the ordinary `convertTools` pass; those tools
+  previously bypassed the Moonshot/MFJS compatibility transform and could retain a parent `type` beside `anyOf`, which
+  Moonshot rejects with HTTP 400.
+- `../test/openai-completions-tool-schema-compat.test.ts`: captures the real HTTP request and locks the post-hook wire
+  shape.
+
+### Why the higher-level extension system couldn't handle this alone
+
+- `before_provider_request` is exposed through `onPayload`, so the provider adapter is the only layer that can validate
+  the complete tool list after every hook has run.
+
+### Expected merge conflict zones
+
+- LOW: `api/openai-completions.ts` around the `onPayload` callback and final request submission.
+
 ## 2026-07-16 - Anthropic native web_search endpoint guard and server_tool_use input streaming
 
 ### What changed and why
