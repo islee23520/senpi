@@ -233,7 +233,7 @@ function getAnthropicCompat(
 		// search but reject the replayed server_tool_use / web_search_tool_result
 		// blocks on the next request (kimi-coding 400s with `tool_call_id is not
 		// found`).
-		supportsWebSearch: model.compat?.supportsWebSearch ?? model.provider === "anthropic",
+		supportsWebSearch: model.compat?.supportsWebSearch ?? isAnthropicApiBaseUrl(model.baseUrl),
 	};
 }
 
@@ -402,7 +402,7 @@ function isAnthropicServerToolUseBlock(raw: unknown): raw is { readonly type: "s
 // stream their input via input_json_delta. Result-shaped blocks must replay
 // byte-for-byte (encrypted_content), so never merge an `input` into them.
 function isProviderNativeToolUseBlock(raw: unknown): boolean {
-	return isRecord(raw) && typeof raw.type === "string" && raw.type.endsWith("_tool_use");
+	return isRecord(raw) && (raw.type === "server_tool_use" || raw.type === "mcp_tool_use");
 }
 
 // Endpoints without `supportsWebSearch` reject replayed web-search server-tool
@@ -581,7 +581,6 @@ function sanitizeUnsupportedNativeTools(
 	const tools = payload.tools;
 	const sanitized: AnthropicPayloadWithRequestMetadata = { ...payload };
 	let changed = false;
-	const removedToolNames = new Set<string>();
 
 	if (Array.isArray(tools)) {
 		const supportedTools: typeof tools = [];
@@ -595,9 +594,6 @@ function sanitizeUnsupportedNativeTools(
 					(rejectsNativeWebSearch && isAnthropicWebSearchToolType(hookTool.type)))
 			) {
 				changed = true;
-				if (typeof hookTool.name === "string") {
-					removedToolNames.add(hookTool.name);
-				}
 				continue;
 			}
 
@@ -624,8 +620,12 @@ function sanitizeUnsupportedNativeTools(
 
 	if (changed && isRecord(sanitized.tool_choice)) {
 		const toolChoiceName = sanitized.tool_choice.name;
+		const hasSelectedTool =
+			typeof toolChoiceName === "string" &&
+			Array.isArray(sanitized.tools) &&
+			sanitized.tools.some((tool) => isRecord(tool) && tool.name === toolChoiceName);
 		const shouldRemoveToolChoice =
-			(typeof toolChoiceName === "string" && removedToolNames.has(toolChoiceName)) || sanitized.tools === undefined;
+			sanitized.tools === undefined || (typeof toolChoiceName === "string" && !hasSelectedTool);
 		if (shouldRemoveToolChoice) {
 			delete sanitized.tool_choice;
 		}

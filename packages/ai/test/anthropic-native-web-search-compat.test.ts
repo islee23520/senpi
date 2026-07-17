@@ -64,6 +64,11 @@ const functionTool = {
 	description: "Read a file.",
 	parameters: Type.Object({ path: Type.String() }),
 };
+const webSearchFunctionTool = {
+	name: "web_search",
+	description: "Search the web through a function fallback.",
+	parameters: Type.Object({ query: Type.String() }),
+};
 
 const kimiCodingModel: Model<"anthropic-messages"> = {
 	...getModel("anthropic", "claude-sonnet-4-5"),
@@ -78,10 +83,17 @@ function createContext(): Context {
 	};
 }
 
-async function captureParams(model: Model<"anthropic-messages">): Promise<Record<string, unknown>> {
+async function captureParams(
+	model: Model<"anthropic-messages">,
+	options?: {
+		readonly context?: Context;
+		readonly toolChoice?: { readonly type: "tool"; readonly name: string };
+	},
+): Promise<Record<string, unknown>> {
 	const captured: { params?: Record<string, unknown> } = {};
-	const stream = streamAnthropic(model, createContext(), {
+	const stream = streamAnthropic(model, options?.context ?? createContext(), {
 		client: createCapturingClient(createSseResponse(minimalEvents), captured),
+		...(options?.toolChoice ? { toolChoice: options.toolChoice } : {}),
 		onPayload: (payload) => {
 			const params = payload as Record<string, unknown>;
 			const tools = Array.isArray(params.tools) ? params.tools : [];
@@ -112,10 +124,51 @@ describe("Anthropic native web_search tool guard", () => {
 		expect(toolNames).toContain("read");
 	});
 
+	it("keeps a forced named choice when a same-name function fallback remains", async () => {
+		const params = await captureParams(kimiCodingModel, {
+			context: {
+				messages: [{ role: "user", content: "Hello", timestamp: Date.now() }],
+				tools: [webSearchFunctionTool],
+			},
+			toolChoice: { type: "tool", name: "web_search" },
+		});
+
+		expect(params.tools).toMatchObject([
+			{
+				name: "web_search",
+				description: "Search the web through a function fallback.",
+				input_schema: webSearchFunctionTool.parameters,
+			},
+		]);
+		expect(params.tool_choice).toEqual({ type: "tool", name: "web_search" });
+	});
+
+	it("removes a forced named choice when its native tool is the only matching tool", async () => {
+		const params = await captureParams(kimiCodingModel, {
+			context: {
+				messages: [{ role: "user", content: "Hello", timestamp: Date.now() }],
+				tools: [],
+			},
+			toolChoice: { type: "tool", name: "web_search" },
+		});
+
+		expect(params.tools).toBeUndefined();
+		expect(params.tool_choice).toBeUndefined();
+	});
+
 	it("keeps web_search_* tools for the first-party Anthropic endpoint", async () => {
 		const params = await captureParams(getModel("anthropic", "claude-sonnet-4-5"));
 
 		expect(toolTypes(params)).toContain("web_search_20250305");
+	});
+
+	it("strips web_search_* tools when the Anthropic provider is redirected to a custom endpoint", async () => {
+		const params = await captureParams({
+			...getModel("anthropic", "claude-sonnet-4-5"),
+			baseUrl: "https://anthropic-proxy.example/v1",
+		});
+
+		expect(toolTypes(params)).not.toContain("web_search_20250305");
 	});
 
 	it("keeps web_search_* tools when a compatible endpoint opts in via compat", async () => {

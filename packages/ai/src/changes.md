@@ -5,28 +5,34 @@
 ### What changed and why
 
 - `types.ts`: added `AnthropicMessagesCompat.supportsWebSearch`. Default (resolved in
-  `getAnthropicCompat`): true only for the first-party `anthropic` provider; Anthropic-compatible providers can
+  `getAnthropicCompat`): true only for the first-party `api.anthropic.com` endpoint; compatible providers and
+  provider overrides can
   opt in per model via `compat`.
 - `api/anthropic-messages.ts`: `sanitizeUnsupportedNativeTools` now also strips hook-injected native `web_search_*`
   tools when the resolved compat does not support them, mirroring the existing native computer tool guard and the
   OpenAI Responses `web_search_preview` compat guard (2026-05-15). Anthropic-compatible endpoints such as kimi-coding
   execute the server-side search but reject the replayed `server_tool_use` / `web_search_tool_result` blocks on the
-  next request (kimi-coding 400s with `tool_call_id is not found`), wedging the session.
+  next request (kimi-coding 400s with `tool_call_id is not found`), wedging the session. Named `tool_choice` is
+  preserved when a same-name function fallback remains and removed only when the retained tool list no longer
+  contains that choice.
 - `api/anthropic-messages.ts`: same-model provider-native replay also drops web-search server-tool blocks
   (`server_tool_use` named `web_search` and `web_search_tool_result`) when the endpoint lacks `supportsWebSearch`.
   Sessions that already recorded such blocks against an incompatible endpoint were permanently wedged — every
   request replayed the rejected blocks; dropping the pair loses the searched context but unwedges the session.
-- `api/anthropic-messages.ts`: streaming now accumulates `input_json_delta` for tool_use-shaped provider-native
-  blocks (`*_tool_use`, e.g. `server_tool_use`) and merges the parsed input into the stored raw block at
+- `api/anthropic-messages.ts`: streaming now accumulates `input_json_delta` for Anthropic's confirmed
+  provider-native tool-use blocks (`server_tool_use` and beta `mcp_tool_use`) and merges the parsed input into the stored raw block at
   `content_block_stop` (or in the abort/error finalizer for interrupted streams). Previously the block kept the
   `content_block_start` snapshot (`input: {}`), so every same-model replay sent the server tool call with an empty
-  input. Result-shaped blocks are never touched — their `encrypted_content` must replay byte-for-byte.
+  input. Unknown and result-shaped blocks are never touched; their raw provider payload must remain verbatim.
 
 ### Files modified
 
 - `types.ts`
 - `api/anthropic-messages.ts`
 - `../test/anthropic-native-web-search-compat.test.ts`
+- `../test/anthropic-provider-native-replay.test.ts`
+- `../test/anthropic-web-search-replay-encryption.test.ts`
+- `../test/anthropic.provider-native.test.ts`
 - (see also `../../coding-agent/src/core/changes.md` for the models.json compat schema entry)
 
 ### Why the higher-level extension system couldn't handle this alone
