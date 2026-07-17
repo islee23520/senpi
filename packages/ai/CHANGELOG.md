@@ -11,6 +11,7 @@
 ### Fixed
 
 - Fixed payload hooks reintroducing Moonshot-incompatible function schemas by normalizing the final tool list after `onPayload` and immediately before request submission.
+- Fixed model regeneration dropping the supported `kimi-for-coding` and `kimi-k2-thinking` catalog IDs when the live metadata source omits them.
 
 ### Removed
 
