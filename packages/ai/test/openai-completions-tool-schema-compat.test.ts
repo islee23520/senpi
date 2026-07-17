@@ -99,6 +99,45 @@ describe("tool-schema-compat", () => {
 	});
 
 	describe("normalizeToolParametersForMoonshot", () => {
+		it("flattens a root union of object parameter shapes", () => {
+			const schema = {
+				anyOf: [
+					{
+						type: "object",
+						required: ["app", "element_index"],
+						properties: {
+							app: { type: "string" },
+							element_index: { type: "integer" },
+						},
+						additionalProperties: false,
+					},
+					{
+						type: "object",
+						required: ["app", "x", "y"],
+						properties: {
+							app: { type: "string" },
+							x: { type: "number" },
+							y: { type: "number" },
+						},
+						additionalProperties: false,
+					},
+				],
+			};
+
+			const normalized = normalizeToolParametersForMoonshot(schema);
+
+			expect(normalized).toEqual({
+				type: "object",
+				required: ["app"],
+				properties: {
+					app: { type: "string" },
+					element_index: { type: "integer" },
+					x: { type: "number" },
+					y: { type: "number" },
+				},
+			});
+		});
+
 		it("strips format and examples annotations", () => {
 			const schema = {
 				type: "object",
@@ -213,10 +252,11 @@ describe("tool-schema-compat", () => {
 							name: "injected_tool",
 							description: "Injected after the initial conversion",
 							parameters: {
-								anyOf: [
-									{ type: "object", properties: { path: { type: "string" } } },
-									{ type: "object", properties: { query: { type: "string" } } },
-								],
+								type: "object",
+								properties: {
+									path: { type: "string" },
+									query: { type: "string" },
+								},
 							},
 						},
 					},

@@ -1,5 +1,25 @@
 # AI Source Changes
 
+## 2026-07-17 - Moonshot root object-union compatibility
+
+### What changed and why
+
+- `utils/tool-schema-compat.ts`: Moonshot normalization now flattens a root `anyOf`/`oneOf` of object parameter
+  shapes into one `type: "object"` schema. Properties are merged and only branch-common required fields remain.
+  Kimi rejects a root combiner without `type`, but also rejects a sibling root `type` beside that combiner, so the
+  union must be represented as a permissive object at the function-parameter boundary.
+- `../test/openai-completions-tool-schema-compat.test.ts`: covers the real `click`-style coordinate/index union and
+  the final post-hook request payload.
+
+### Why the higher-level extension system couldn't handle this alone
+
+- The provider adapter owns the final wire schema after payload hooks and is the only layer shared by direct
+  Moonshot requests and custom Moonshot-compatible gateways.
+
+### Expected merge conflict zones
+
+- LOW: `utils/tool-schema-compat.ts` if upstream expands its provider-specific schema normalizers.
+
 ## 2026-07-17 - Final-boundary Moonshot tool schema normalization
 
 ### What changed and why

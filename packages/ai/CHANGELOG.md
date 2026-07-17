@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed Kimi/Moonshot function parameters with root object unions by flattening them into a compatible object schema.
+
 ### Removed
 
 ## [2026.7.17-3] - 2026-07-17
