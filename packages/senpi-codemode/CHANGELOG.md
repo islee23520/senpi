@@ -7,6 +7,7 @@
 ### Added
 
 ### Changed
+- Changed the Kimi K-series eval prompt dialect to make eval-first, whole-step parallel batching the default: strong positive emphasis now directs multi-call work into one `eval` cell, parallelizes independent calls, handles failures in-kernel, and returns distilled facts.
 
 ### Fixed
 
