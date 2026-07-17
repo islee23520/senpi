@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { type Api, getModels, getProviders, type Model } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import {
@@ -55,17 +56,21 @@ describe("Grok 4.5 prompt preset", () => {
 
 		// then
 		expect(preset?.name).toBe("grok-4.5");
-		expect(preset?.prompt).toContain("running on Grok 4.5");
-		expect(preset?.prompt).toMatch(/you are Claude Fable 5/i);
-		expect(preset?.prompt).toMatch(/Kimi-K2-descended model/i);
-		expect(preset?.prompt).toMatch(/read the request for its outcome, decide one path, and act/i);
-		expect(preset?.prompt).toMatch(/when the direct path is blocked, route around/i);
-		expect(preset?.prompt).toMatch(/exhaust alternatives before declaring a limit/i);
-		expect(preset?.prompt).toMatch(/execute the obvious next step yourself/i);
-		expect(preset?.prompt).toMatch(/done means the user's literal bar/i);
-		expect(preset?.prompt).toMatch(/confirm behavior by running before claiming done/i);
-		const tuning = preset?.prompt.slice(preset.prompt.indexOf("You are running on Grok 4.5")) ?? "";
-		expect(tuning).not.toMatch(/\bLinaforge\b|\bANNO\b|ouroforge|sprite-gen|animation-driven mechanics/i);
+		expect(preset?.prompt).toMatch(/when you have enough information to act, act/i);
+		expect(preset?.prompt).toMatch(/do not re-derive facts already established/i);
+		expect(preset?.prompt).toMatch(/give a recommendation, not a survey/i);
+		expect(preset?.prompt).toMatch(/audit each claim against a tool result from this session/i);
+		expect(preset?.prompt).toMatch(/if tests fail, say so with the output/i);
+		expect(preset?.prompt).toMatch(/pause for the user only when the work genuinely requires them/i);
+		expect(preset?.prompt).toMatch(/before ending your turn, check your last paragraph/i);
+		expect(preset?.prompt).toMatch(/lead with the outcome in complete sentences/i);
+		expect(preset?.prompt).toMatch(/do not stop, summarize, or suggest a new session on account of context limits/i);
+		const tuningAt = preset?.prompt.search(/when you have enough information to act, act/i) ?? -1;
+		const tuning = tuningAt >= 0 ? (preset?.prompt.slice(tuningAt) ?? "") : "";
+		expect(tuning.length).toBeGreaterThan(900);
+		expect(tuning.length).toBeLessThan(1800);
+		expect(tuning).not.toMatch(/you are Fable 5|persistent operational identity|Kimi-K2-descended/i);
+		expect(tuning).not.toMatch(/Intent gate: \[DIRECT \| DEEP \| BLOCKED\]/i);
 		expect(preset?.prompt).not.toContain("apply_patch");
 	});
 
@@ -97,7 +102,8 @@ describe("Grok 4.5 prompt preset", () => {
 
 		// then
 		expect(preset?.name).toBe("grok-4.5");
-		expect(preset?.prompt).toContain("running on Grok 4.5");
+		expect(preset?.prompt).toMatch(/when you have enough information to act, act/i);
+		expect(preset?.prompt).toMatch(/audit each claim against a tool result from this session/i);
 	});
 
 	it("returns grok-4.5 preset for every Grok 4.5 built-in catalog model", () => {
@@ -121,5 +127,15 @@ describe("Grok 4.5 prompt preset", () => {
 			]),
 		);
 		expect(misses).toEqual([]);
+	});
+
+	it("does not invent Grok preset edition numbers while unreleased", () => {
+		// given — Grok 4.5 has never been formally merged; fake v1/v2/… theater is noise
+		const changesPath = new URL("../../src/core/extensions/builtin/prompt-preset/changes.md", import.meta.url);
+		const changes = readFileSync(changesPath, "utf8");
+
+		// then
+		expect(changes).toMatch(/Grok 4\.5 preset \(unreleased/);
+		expect(changes).not.toMatch(/Grok 4\.5 preset v\d+/);
 	});
 });
