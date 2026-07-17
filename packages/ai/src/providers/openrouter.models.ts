@@ -3445,13 +3445,13 @@ export const OPENROUTER_MODELS = {
 		reasoning: true,
 		input: ["text"],
 		cost: {
-			input: 0.1,
+			input: 0.12,
 			output: 0.24,
 			cacheRead: 0,
 			cacheWrite: 0,
 		},
 		contextWindow: 40960,
-		maxTokens: 40960,
+		maxTokens: 16384,
 	} satisfies Model<"openai-completions">,
 	"qwen/qwen3-235b-a22b": {
 		id: "qwen/qwen3-235b-a22b",
@@ -4688,9 +4688,9 @@ export const OPENROUTER_MODELS = {
 		thinkingLevelMap: {"xhigh":"xhigh"},
 		input: ["text"],
 		cost: {
-			input: 0.9366,
-			output: 2.9436,
-			cacheRead: 0.17394,
+			input: 0.9338,
+			output: 2.9348,
+			cacheRead: 0.17342,
 			cacheWrite: 0,
 		},
 		contextWindow: 1048576,
