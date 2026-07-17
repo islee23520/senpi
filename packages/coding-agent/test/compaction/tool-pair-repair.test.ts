@@ -330,14 +330,16 @@ describe("compaction tool-pair repair behavior", () => {
 
 	describe("Given a flagged tool call carrying an errorMessage", () => {
 		describe("When tool-pair-repair runs", () => {
-			it("Then the synthesized result content uses the errorMessage text", () => {
+			it("Then the synthesized result appends the retry instruction to the errorMessage", () => {
 				const messages = buildFlaggedDanglingCallSession("custom truncation reason");
 
 				const reconstructed = repairOrphanedToolResults(messages);
 
 				const synth = reconstructed.at(-1) as ToolResultMessage;
 				expect(synth.isError).toBe(true);
-				expect(findText(synth.content)).toBe("custom truncation reason");
+				expect(findText(synth.content)).toBe(
+					"custom truncation reason. Re-issue the tool call with complete arguments.",
+				);
 			});
 		});
 	});

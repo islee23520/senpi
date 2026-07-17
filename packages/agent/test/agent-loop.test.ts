@@ -748,7 +748,7 @@ describe("agentLoop with AgentMessage", () => {
 		expect(callIndex).toBe(2);
 	});
 
-	it("should retry after an incomplete flagged-only tool call", async () => {
+	it("should retry after an incomplete flagged-only tool call with an error message", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const execute = vi.fn(async () => ({
 			content: [{ type: "text" as const, text: "should not execute" }],
@@ -787,6 +787,7 @@ describe("agentLoop with AgentMessage", () => {
 									name: "echo",
 									arguments: { value: "partial" },
 									incomplete: true,
+									errorMessage: "Tool call was truncated mid-arguments",
 								},
 							],
 							"toolUse",
@@ -816,7 +817,9 @@ describe("agentLoop with AgentMessage", () => {
 		);
 		expect(toolResult?.isError).toBe(true);
 		const errorText = toolResult?.content.find((content) => content.type === "text");
-		expect(errorText && "text" in errorText ? errorText.text : "").toContain("Re-issue the tool call");
+		expect(errorText && "text" in errorText ? errorText.text : "").toBe(
+			"Tool call was truncated mid-arguments. Re-issue the tool call with complete arguments.",
+		);
 	});
 
 	it("should not call beforeToolCall for an incomplete flagged tool call", async () => {

@@ -533,7 +533,10 @@ async function readNextAssistantEvent(
 	});
 }
 
-function createIncompleteToolCallErrorMessage(toolName: string): string {
+function createIncompleteToolCallErrorMessage(toolName: string, errorMessage?: string): string {
+	if (errorMessage !== undefined) {
+		return `${errorMessage}${errorMessage.endsWith(".") ? "" : "."} Re-issue the tool call with complete arguments.`;
+	}
 	return `Tool call "${toolName}" was not executed: the response ended before the tool call was complete because it hit the output token limit. Re-issue the tool call with complete arguments.`;
 }
 
@@ -852,7 +855,7 @@ async function prepareToolCall(
 		return {
 			kind: "immediate",
 			toolCall,
-			result: createErrorToolResult(toolCall.errorMessage ?? createIncompleteToolCallErrorMessage(toolCall.name)),
+			result: createErrorToolResult(createIncompleteToolCallErrorMessage(toolCall.name, toolCall.errorMessage)),
 			isError: true,
 		};
 	}

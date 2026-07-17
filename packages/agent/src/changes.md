@@ -16,6 +16,7 @@
 - The flagged error result keeps the inner loop alive (`failToolCallsFromTruncatedMessage` already
   returns `{ terminate: false }`), so the loop streams another assistant turn and the model re-issues
   the truncated call — the retry contract.
+- Flagged-call diagnostics always append `Re-issue the tool call with complete arguments.` to parser-provided error messages without duplicating a final period.
 - `proxy.ts` `toolcall_end` wire event gains an optional full `toolCall` payload so a flagged call
   (which emits no argument deltas) can still be delivered to clients. The client prefers the payload
   and falls back to delta reconstruction; against an older server that omits it, the client degrades

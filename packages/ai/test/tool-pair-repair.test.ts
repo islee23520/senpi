@@ -212,10 +212,10 @@ describe("repairOrphanedToolResults", () => {
 		expect(resultText(realResult)).toBe("real output");
 	});
 
-	it("uses the tool call's errorMessage when present for the retry-diagnostic text", () => {
+	it("appends the retry instruction to the tool call's errorMessage without a duplicate period", () => {
 		const messages: Message[] = [
 			userMsg("run", 1),
-			assistantWithFlaggedCall("call-err", "bash", 2, "custom truncation reason"),
+			assistantWithFlaggedCall("call-err", "bash", 2, "custom truncation reason."),
 		];
 
 		const result = repairOrphanedToolResults(messages);
@@ -223,6 +223,6 @@ describe("repairOrphanedToolResults", () => {
 		expect(result).toHaveLength(3);
 		const synth = result[2] as ToolResultMessage;
 		expect(synth.isError).toBe(true);
-		expect(resultText(synth)).toBe("custom truncation reason");
+		expect(resultText(synth)).toBe("custom truncation reason. Re-issue the tool call with complete arguments.");
 	});
 });

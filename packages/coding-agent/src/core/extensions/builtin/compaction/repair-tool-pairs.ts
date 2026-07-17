@@ -9,7 +9,10 @@ export const TOOL_RESULT_PLACEHOLDER = "Tool output unavailable (context compact
  * Duplicated verbatim in the sibling pair-repair copy — the two packages
  * intentionally do not share this constant (no new cross-package dependency).
  */
-function incompleteToolCallRetryText(name: string): string {
+function incompleteToolCallRetryText(name: string, errorMessage?: string): string {
+	if (errorMessage !== undefined) {
+		return `${errorMessage}${errorMessage.endsWith(".") ? "" : "."} Re-issue the tool call with complete arguments.`;
+	}
 	return `Tool call "${name}" was not executed: the response ended before the tool call was complete. Re-issue the tool call with complete arguments.`;
 }
 
@@ -48,7 +51,7 @@ export function repairOrphanedToolResults(messages: Message[]): Message[] {
 				if (block.type !== "toolCall" || !dangling.has(block.id)) continue;
 				const incomplete = block.incomplete === true;
 				const text = incomplete
-					? (block.errorMessage ?? incompleteToolCallRetryText(block.name))
+					? incompleteToolCallRetryText(block.name, block.errorMessage)
 					: TOOL_RESULT_PLACEHOLDER;
 				output.push({
 					role: "toolResult",
