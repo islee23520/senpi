@@ -207,7 +207,7 @@ describe("OpenAI Codex OAuth", () => {
 				onPrompt: async () => {
 					throw new Error("Prompt should not be used");
 				},
-				onSelect: async (prompt) => {
+				onSelect: async (prompt: any) => {
 					selectPrompts.push(prompt);
 					return "device_code";
 				},

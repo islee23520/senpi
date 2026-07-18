@@ -119,7 +119,6 @@ describe.sequential("GitLab Duo OAuth", () => {
 			}),
 		);
 		const result = await gitlabDuoProvider().auth.apiKey?.resolve({
-			model: { provider: "gitlab-duo", baseUrl: "https://cloud.gitlab.com" } as never,
 			ctx: { env: async () => "gitlab-raw-pat", fileExists: async () => false },
 		});
 		expect(result?.auth).toEqual({

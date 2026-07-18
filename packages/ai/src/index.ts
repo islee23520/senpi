@@ -21,22 +21,19 @@ export type { PiMessagesEvent, PiMessagesOptions, PiMessagesRewriteImpact } from
 export * from "./auth/context.ts";
 export * from "./auth/credential-store.ts";
 export * from "./auth/helpers.ts";
+export * from "./auth/types.ts";
 export type {
 	OAuthAuthInfo,
-	OAuthCredentials,
 	OAuthDeviceCodeInfo,
 	OAuthLoginCallbacks,
 	OAuthPrompt,
-	OAuthProvider,
 	OAuthProviderId,
-	OAuthProviderInfo,
-	OAuthProviderInterface,
 	OAuthSelectOption,
 	OAuthSelectPrompt,
-} from "./auth/oauth/types.ts";
-export * from "./auth/types.ts";
+} from "./compat/extension-oauth-types.ts";
 export * from "./images-models.ts";
 export * from "./models.ts";
+export * from "./models-store.ts";
 export * from "./providers/faux.ts";
 export * from "./session-resources.ts";
 export * from "./types.ts";

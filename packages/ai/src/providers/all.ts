@@ -51,6 +51,7 @@ import { openrouterImagesProvider } from "./openrouter-images.ts";
 import { perplexityProvider } from "./perplexity.ts";
 import { qianfanProvider } from "./qianfan.ts";
 import { qwenPortalProvider } from "./qwen-portal.ts";
+import { radiusProvider } from "./radius.ts";
 import { syntheticProvider } from "./synthetic.ts";
 import { togetherProvider } from "./together.ts";
 import { veniceProvider } from "./venice.ts";
@@ -137,6 +138,8 @@ export function getBuiltinModels<TProvider extends BuiltinProvider>(
 }
 
 /** All built-in providers, freshly constructed. */
+export { radiusProvider };
+
 export function builtinProviders(): Provider[] {
 	return [
 		alibabaCodingPlanProvider(),
@@ -187,6 +190,7 @@ export function builtinProviders(): Provider[] {
 		opencodeZenProvider(),
 		openrouterProvider(),
 		perplexityProvider(),
+		radiusProvider(),
 		qianfanProvider(),
 		qwenPortalProvider(),
 		syntheticProvider(),

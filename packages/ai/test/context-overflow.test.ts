@@ -271,8 +271,8 @@ describe("Context overflow error handling", () => {
 	// =============================================================================
 
 	describe.skipIf(!process.env.XAI_API_KEY)("xAI", () => {
-		it("grok-code-fast-1 - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("xai", "grok-code-fast-1");
+		it("grok-4.3 - should detect overflow via isContextOverflow", async () => {
+			const model = getModel("xai", "grok-4.3");
 			const result = await testContextOverflow(model, process.env.XAI_API_KEY!);
 			logResult(result);
 

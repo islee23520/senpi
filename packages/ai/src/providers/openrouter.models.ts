@@ -1915,9 +1915,9 @@ export const OPENROUTER_MODELS = {
 		reasoning: true,
 		input: ["text", "image"],
 		cost: {
-			input: 1,
-			output: 4.4,
-			cacheRead: 0.2,
+			input: 0.85,
+			output: 3.79,
+			cacheRead: 0.178,
 			cacheWrite: 0,
 		},
 		contextWindow: 262144,
@@ -1939,7 +1939,7 @@ export const OPENROUTER_MODELS = {
 			cacheWrite: 0,
 		},
 		contextWindow: 1048576,
-		maxTokens: 4096,
+		maxTokens: 131072,
 	} satisfies Model<"openai-completions">,
 	"nex-agi/nex-n2-mini": {
 		id: "nex-agi/nex-n2-mini",
@@ -4724,9 +4724,9 @@ export const OPENROUTER_MODELS = {
 		thinkingLevelMap: {"xhigh":"xhigh"},
 		input: ["text"],
 		cost: {
-			input: 0.2912,
-			output: 0.9152,
-			cacheRead: 0.05408,
+			input: 0.2744,
+			output: 0.8624,
+			cacheRead: 0.05096,
 			cacheWrite: 0,
 		},
 		contextWindow: 1048576,
@@ -4874,7 +4874,7 @@ export const OPENROUTER_MODELS = {
 			cacheWrite: 0,
 		},
 		contextWindow: 1048576,
-		maxTokens: 4096,
+		maxTokens: 131072,
 	} satisfies Model<"openai-completions">,
 	"~openai/gpt-latest": {
 		id: "~openai/gpt-latest",

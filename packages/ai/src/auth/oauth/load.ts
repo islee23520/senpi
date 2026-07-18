@@ -24,7 +24,7 @@ type OAuthFlowLoaders = {
 	xai: () => OAuthAuth | Promise<OAuthAuth>;
 	googleGeminiCli: () => OAuthAuth | Promise<OAuthAuth>;
 	googleAntigravity: () => OAuthAuth | Promise<OAuthAuth>;
-	radius: (options: { id: string; name: string; gateway: string }) => OAuthAuth | Promise<OAuthAuth>;
+	radius: (options: { name: string; gateway: string }) => OAuthAuth | Promise<OAuthAuth>;
 };
 
 let bundledLoaders: OAuthFlowLoaders | undefined;
@@ -97,11 +97,11 @@ export const loadGoogleAntigravityOAuth = async (): Promise<OAuthAuth> => {
 		.googleAntigravityOAuth;
 };
 
-export const loadRadiusOAuth = async (options: { id: string; name: string; gateway: string }): Promise<OAuthAuth> => {
+export const loadRadiusOAuth = async (options: { name: string; gateway: string }): Promise<OAuthAuth> => {
 	if (bundledLoaders) return bundledLoaders.radius(options);
 	return (
 		(await importOAuthModule("./radius.ts")) as {
-			createRadiusOAuth: (input: { id: string; name: string; gateway: string }) => OAuthAuth;
+			createRadiusOAuth: (input: { name: string; gateway: string }) => OAuthAuth;
 		}
 	).createRadiusOAuth(options);
 };

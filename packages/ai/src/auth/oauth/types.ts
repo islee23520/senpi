@@ -42,7 +42,7 @@ export type OAuthSelectOption = {
 
 export type OAuthSelectPrompt = {
 	message: string;
-	options: OAuthSelectOption[];
+	options: readonly OAuthSelectOption[];
 };
 
 export interface OAuthLoginCallbacks {

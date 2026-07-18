@@ -174,8 +174,9 @@ export const MOONSHOTAI_MODELS = {
 		api: "openai-completions",
 		provider: "moonshotai",
 		baseUrl: "https://api.moonshot.ai/v1",
-		compat: {"supportsStore":false,"supportsDeveloperRole":false,"supportsReasoningEffort":false,"maxTokensField":"max_tokens","supportsStrictMode":false,"thinkingFormat":"deepseek"},
+		compat: {"supportsStore":false,"supportsDeveloperRole":false,"supportsReasoningEffort":false,"maxTokensField":"max_tokens","supportsStrictMode":false,"thinkingFormat":"deepseek","requiresReasoningContentOnAssistantMessages":true,"deferredToolsMode":"kimi"},
 		reasoning: true,
+		thinkingLevelMap: {"off":null,"minimal":null,"low":null,"medium":null,"high":null,"xhigh":null,"max":"max"},
 		input: ["text", "image"],
 		cost: {
 			input: 3,

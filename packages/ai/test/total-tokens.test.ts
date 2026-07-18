@@ -241,11 +241,11 @@ describe("totalTokens field", () => {
 	// =========================================================================
 
 	describe.skipIf(!process.env.XAI_API_KEY)("xAI", () => {
-		it("grok-code-fast-1 - should return totalTokens equal to sum of components", {
+		it("grok-4.3 - should return totalTokens equal to sum of components", {
 			retry: 3,
 			timeout: 60000,
 		}, async () => {
-			const llm = getModel("xai", "grok-code-fast-1");
+			const llm = getModel("xai", "grok-4.3");
 
 			console.log(`\nxAI / ${llm.id}:`);
 			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.XAI_API_KEY });

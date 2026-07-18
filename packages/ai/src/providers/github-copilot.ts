@@ -16,6 +16,15 @@ export function githubCopilotProvider(): Provider<"anthropic-messages" | "openai
 			oauth: lazyOAuth({ name: "GitHub Copilot", load: loadGitHubCopilotOAuth }),
 		},
 		models: Object.values(GITHUB_COPILOT_MODELS),
+		filterModels: (models, credential) => {
+			if (credential?.type !== "oauth") return models;
+			const availableModelIds = credential.availableModelIds;
+			if (!Array.isArray(availableModelIds) || !availableModelIds.every((id) => typeof id === "string")) {
+				return models;
+			}
+			const available = new Set(availableModelIds);
+			return models.filter((model) => available.has(model.id));
+		},
 		api: {
 			"anthropic-messages": anthropicMessagesApi(),
 			"openai-completions": openAICompletionsApi(),
