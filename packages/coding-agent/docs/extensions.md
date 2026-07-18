@@ -1376,6 +1376,52 @@ pi.registerTool({
 });
 ```
 
+### pi.registerMcpServer(name, config)
+
+Register an MCP server that the agent can use. This is a **factory-time only**
+API: it must be called inside the extension factory before the factory returns.
+Calling it after startup throws because registration is tied to extension load.
+
+`config` accepts the same fields as `mcpServers.<name>` in `mcp.json` (see the
+[MCP server fields reference](mcp.md#server-fields-mcpserversname)): `type`,
+`command`, `args`, `env`, `cwd`, `url`, `headers`, `auth`, `enabled`,
+`lifecycle`, timeouts, `includeTools`, `excludeTools`, `directTools`,
+`exposure`, and `logLevel`.
+
+```typescript
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+export default function (pi: ExtensionAPI) {
+  pi.registerMcpServer("docs", {
+    type: "stdio",
+    command: "npx",
+    args: ["-y", "@example/docs-mcp"],
+    env: { DOCS_TOKEN: "${DOCS_TOKEN}" },
+  });
+}
+```
+
+Validation runs synchronously when you call `registerMcpServer`. An invalid
+declaration (unknown fields, a stdio server without `command`, an http server
+without `url`, etc.) throws an error and fails **only** the declaring extension;
+other extensions still load.
+
+Same-name precedence:
+
+- User config from `mcp.json` (`global`, imported `claude`, or trusted
+  `project`) wins over an extension-declared server, including `enabled: false`.
+- An extension-declared server replaces an untrusted placeholder from an
+  untrusted project config and records a diagnostic.
+- Across extensions, the first loaded extension wins; later collisions log a
+  warning naming both extension paths.
+
+A stdio declaration that omits `cwd` defaults to the extension's registration
+cwd (the cwd passed to the factory), not the ambient `process.cwd()`.
+
+Extension factories re-run on `/reload`, so declarations are refreshed then.
+In-process senpi-task children load no extensions, so they see no
+extension-declared MCP servers.
+
 ### pi.sendMessage(message, options?)
 
 Inject a custom message into the session. Custom messages participate in LLM context. For durable TUI-only content that should not be sent to the LLM, use [`pi.appendEntry()`](#piappendentrycustomtype-data) with [`pi.registerEntryRenderer()`](#piregisterentryrenderercustomtype-renderer).
