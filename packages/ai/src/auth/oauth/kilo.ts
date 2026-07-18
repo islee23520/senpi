@@ -1,4 +1,4 @@
-import type { OAuthAuth } from "../../auth/types.ts";
+import type { OAuthAuth } from "../types.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from "./types.ts";
 
 export const KILO_DEVICE_AUTH_BASE_URL = "https://api.kilo.ai/api/device-auth";

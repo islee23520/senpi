@@ -18,7 +18,6 @@ import { fireworksProvider } from "./fireworks.ts";
 import { fuguProvider } from "./fugu.ts";
 import { githubCopilotProvider } from "./github-copilot.ts";
 import { gitlabDuoProvider } from "./gitlab-duo.ts";
-import { glmZcodeProvider } from "./glm-zcode.ts";
 import { googleProvider } from "./google.ts";
 import { googleAntigravityProvider, googleGeminiCliProvider } from "./google-gemini-cli.ts";
 import { googleVertexProvider } from "./google-vertex.ts";
@@ -156,7 +155,7 @@ export function builtinProviders(): Provider[] {
 		fuguProvider(),
 		githubCopilotProvider(),
 		gitlabDuoProvider(),
-		glmZcodeProvider(),
+		googleProvider(),
 		googleProvider(),
 		googleGeminiCliProvider(),
 		googleAntigravityProvider(),

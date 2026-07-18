@@ -1,5 +1,26 @@
-import type { OAuthAuth } from "../../auth/types.ts";
-import { getProviderEnvValue } from "../provider-env.ts";
+/**
+ * Kimi Code OAuth flow (device-code against auth.kimi.com).
+ *
+ * Kimi reconciliation (reviewer point #3):
+ * `kimi-coding` (main) and `kimi-code` (this PR) are the SAME product — Kimi
+ * For Coding at api.kimi.com/coding, same `KIMI_API_KEY`, same `KimiCLI/1.5`
+ * User-Agent, OAuth host auth.kimi.com. They differ only in API flavor:
+ * `kimi-coding` speaks the Anthropic-messages API; `kimi-code` speaks the
+ * OpenAI-completions API (baseUrl .../coding/v1). Because a single provider
+ * entry is bound to one `api`/`baseUrl`, they cannot collapse into one
+ * provider without dropping a flavor, so both provider entries are kept.
+ *
+ * Login entry decision: the OAuth flow lives here on `kimi-code` (the
+ * OpenAI-flavor provider). The OAuth `access` token is the bearer the
+ * `kimi-coding` Anthropic-flavor endpoint also accepts, so one login
+ * credential could serve both; wiring OAuth into `kimi-coding` (currently
+ * api-key-only via `envApiKeyAuth`) is deferred to a follow-up that owns the
+ * shared-credential architecture. Until then, `kimi-coding` keeps api-key
+ * auth and `kimi-code` owns OAuth — two providers, one product.
+ */
+
+import { getProviderEnvValue } from "../../utils/provider-env.ts";
+import type { OAuthAuth } from "../types.ts";
 import { pollOAuthDeviceCodeFlow } from "./device-code.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from "./types.ts";
 

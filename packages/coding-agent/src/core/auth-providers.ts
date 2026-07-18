@@ -14,7 +14,7 @@ import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 
 /** Built-in model providers (used to decide API-key vs oauth login eligibility). */
 const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
-const OAUTH_ONLY_MODEL_PROVIDERS = new Set(["openai-codex-device"]);
+const OAUTH_ONLY_MODEL_PROVIDERS = new Set(["openai-codex-device", "google-gemini-cli", "google-antigravity"]);
 
 /** One provider entry for a login/logout selector. */
 export interface AuthProviderInfo {

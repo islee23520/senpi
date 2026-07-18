@@ -29,7 +29,6 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	fugu: "fugu",
 	"github-copilot": "gpt-5.4",
 	"gitlab-duo": "claude-sonnet-4-6",
-	"glm-zcode": "glm-5.2",
 	google: "gemini-3.1-pro-preview",
 	"google-antigravity": "claude-sonnet-4-5",
 	"google-gemini-cli": "gemini-2.5-pro",

@@ -1,4 +1,4 @@
-import type { OAuthAuth } from "../../auth/types.ts";
+import type { OAuthAuth } from "../types.ts";
 import { oauthErrorHtml, oauthSuccessHtml } from "./oauth-page.ts";
 import { generatePKCE } from "./pkce.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from "./types.ts";

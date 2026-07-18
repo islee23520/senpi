@@ -1,7 +1,7 @@
 import { openAICompletionsApi } from "../api/openai-completions.lazy.ts";
 import { envApiKeyAuth, lazyOAuth } from "../auth/helpers.ts";
+import { loadXaiOAuth } from "../auth/oauth/load.ts";
 import { createProvider, type Provider } from "../models.ts";
-import { loadXaiOAuth } from "../utils/oauth/load.ts";
 import { XAI_MODELS } from "./xai.models.ts";
 
 export function xaiProvider(): Provider<"openai-completions"> {

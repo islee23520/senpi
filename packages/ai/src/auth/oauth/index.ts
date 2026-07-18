@@ -20,7 +20,6 @@ export {
 	refreshGitHubCopilotToken,
 } from "./github-copilot.ts";
 export * from "./gitlab-duo.ts";
-export * from "./glm-zcode.ts";
 export { googleAntigravityOAuthProvider, loginAntigravity, refreshAntigravityToken } from "./google-antigravity.ts";
 export { googleGeminiCliOAuthProvider, loginGeminiCli, refreshGoogleCloudToken } from "./google-gemini-cli.ts";
 export * from "./kilo.ts";
@@ -35,7 +34,6 @@ export {
 	refreshOpenAICodexToken,
 } from "./openai-codex.ts";
 export * from "./openai-codex-device.ts";
-export * from "./perplexity.ts";
 
 // Radius (pi-messages gateway)
 export {
@@ -59,19 +57,17 @@ export {
 // Provider Registry
 // ============================================================================
 
-import { getProviderEnvValue } from "../provider-env.ts";
+import { getProviderEnvValue } from "../../utils/provider-env.ts";
 import { anthropicOAuthProvider } from "./anthropic.ts";
 import { cursorOAuthProvider } from "./cursor.ts";
 import { githubCopilotOAuthProvider } from "./github-copilot.ts";
 import { gitlabDuoOAuthProvider } from "./gitlab-duo.ts";
-import { glmZcodeOAuthProvider } from "./glm-zcode.ts";
 import { googleAntigravityOAuthProvider } from "./google-antigravity.ts";
 import { googleGeminiCliOAuthProvider } from "./google-gemini-cli.ts";
 import { kiloOAuthProvider } from "./kilo.ts";
 import { kimiCodeOAuthProvider } from "./kimi-code.ts";
 import { openaiCodexOAuthProvider } from "./openai-codex.ts";
 import { openaiCodexDeviceOAuthProvider } from "./openai-codex-device.ts";
-import { perplexityOAuthProvider } from "./perplexity.ts";
 import { createRadiusOAuthProvider, DEFAULT_RADIUS_GATEWAY } from "./radius.ts";
 import type { OAuthCredentials, OAuthProviderId, OAuthProviderInfo, OAuthProviderInterface } from "./types.ts";
 import { xaiOAuthProvider } from "./xai.ts";
@@ -89,9 +85,7 @@ const BUILT_IN_OAUTH_PROVIDERS: OAuthProviderInterface[] = [
 	kimiCodeOAuthProvider,
 	cursorOAuthProvider,
 	gitlabDuoOAuthProvider,
-	perplexityOAuthProvider,
 	kiloOAuthProvider,
-	glmZcodeOAuthProvider,
 	xaiOAuthProvider,
 	googleGeminiCliOAuthProvider,
 	googleAntigravityOAuthProvider,

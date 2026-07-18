@@ -24,7 +24,8 @@ export type KnownApi =
 	| "google-vertex"
 	| "pi-messages"
 	| "azure-openai-responses"
-	| "mistral-conversations";
+	| "mistral-conversations"
+	| "cursor-connect";
 
 export type Api = KnownApi | (string & {});
 
@@ -49,7 +50,6 @@ export type KnownProvider =
 	| "fugu"
 	| "github-copilot"
 	| "gitlab-duo"
-	| "glm-zcode"
 	| "google"
 	| "google-antigravity"
 	| "google-gemini-cli"

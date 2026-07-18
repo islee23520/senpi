@@ -1,5 +1,5 @@
 import type { Api, ImagesApi, ImagesModel, Model, ProviderEnv, ProviderHeaders } from "../types.ts";
-import type { OAuthCredentials } from "../utils/oauth/types.ts";
+import type { OAuthCredentials } from "./oauth/types.ts";
 
 /**
  * Request auth for a single model request. If a value cannot be expressed as

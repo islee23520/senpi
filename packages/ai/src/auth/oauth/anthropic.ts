@@ -6,8 +6,8 @@
  */
 
 import type { Server } from "node:http";
-import type { OAuthAuth } from "../../auth/types.ts";
-import { getProviderEnvValue } from "../provider-env.ts";
+import { getProviderEnvValue } from "../../utils/provider-env.ts";
+import type { OAuthAuth } from "../types.ts";
 import { oauthErrorHtml, oauthSuccessHtml } from "./oauth-page.ts";
 import { generatePKCE } from "./pkce.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from "./types.ts";

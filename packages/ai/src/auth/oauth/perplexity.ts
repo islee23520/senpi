@@ -1,4 +1,4 @@
-import type { OAuthAuth } from "../../auth/types.ts";
+import type { OAuthAuth } from "../types.ts";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from "./types.ts";
 
 const API_VERSION = "2.18";

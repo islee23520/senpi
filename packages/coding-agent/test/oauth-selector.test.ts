@@ -38,6 +38,10 @@ describe("OAuthSelectorComponent", () => {
 		expect(isApiKeyLoginProvider("amazon-bedrock", oauthProviderIds, builtInProviderIds)).toBe(true);
 		expect(isApiKeyLoginProvider("custom-oauth", oauthProviderIds, builtInProviderIds)).toBe(false);
 		expect(isApiKeyLoginProvider("custom-api", oauthProviderIds, builtInProviderIds)).toBe(true);
+		// Google Cloud Code Assist providers are OAuth-only (serialized token+projectId).
+		expect(isApiKeyLoginProvider("google-gemini-cli", oauthProviderIds, builtInProviderIds)).toBe(false);
+		expect(isApiKeyLoginProvider("google-antigravity", oauthProviderIds, builtInProviderIds)).toBe(false);
+		expect(isApiKeyLoginProvider("openai-codex-device", oauthProviderIds, builtInProviderIds)).toBe(false);
 	});
 
 	it("shows stored OAuth auth distinctly in the API key selector", () => {

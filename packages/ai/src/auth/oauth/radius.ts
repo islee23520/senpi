@@ -19,6 +19,7 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 }
 
 import type { Api, Model, ThinkingLevelMap } from "../../types.ts";
+import type { OAuthAuth } from "../types.ts";
 import { pollOAuthDeviceCodeFlow } from "./device-code.ts";
 import { oauthErrorHtml, oauthSuccessHtml } from "./oauth-page.ts";
 import { generatePKCE } from "./pkce.ts";
@@ -552,6 +553,52 @@ export function createRadiusOAuthProvider(options: RadiusOAuthProviderOptions): 
 				);
 
 			return [...models, ...added];
+		},
+	};
+}
+
+/**
+ * Builds an `OAuthAuth` adapter around the legacy `OAuthProviderInterface`
+ * flow so Radius can be registered in `bundledLoaders`/`bun-oauth.ts` the same
+ * way as the other OAuth flows. Mirrors the `OAuthAuth.login` adapters in
+ * `anthropic.ts`/`cursor.ts` that bridge `AuthLoginCallbacks` to the legacy
+ * `OAuthLoginCallbacks` (`onAuth`/`onPrompt`/`onSelect`/`onDeviceCode`).
+ */
+export function createRadiusOAuth(options: RadiusOAuthProviderOptions): OAuthAuth {
+	const provider = createRadiusOAuthProvider(options);
+	return {
+		name: options.name,
+		async login(callbacks) {
+			const credentials = await provider.login({
+				onAuth: (info) => callbacks.notify({ type: "auth_url", url: info.url, instructions: info.instructions }),
+				onDeviceCode: (info) =>
+					callbacks.notify({
+						type: "device_code",
+						userCode: info.userCode,
+						verificationUri: info.verificationUri,
+						intervalSeconds: info.intervalSeconds,
+						expiresInSeconds: info.expiresInSeconds,
+					}),
+				onProgress: (message) => callbacks.notify({ type: "progress", message }),
+				onPrompt: (prompt) =>
+					callbacks.prompt({ type: "text", message: prompt.message, placeholder: prompt.placeholder }),
+				onSelect: async (prompt) => {
+					const selected = await callbacks.prompt({
+						type: "select",
+						message: prompt.message,
+						options: prompt.options,
+					});
+					return selected || undefined;
+				},
+				signal: callbacks.signal,
+			});
+			return { ...credentials, type: "oauth" };
+		},
+		async refresh(credential) {
+			return { ...(await provider.refreshToken(credential)), type: "oauth" };
+		},
+		async toAuth(credential) {
+			return { apiKey: provider.getApiKey(credential) };
 		},
 	};
 }

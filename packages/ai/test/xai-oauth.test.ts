@@ -1,14 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { xaiProvider } from "../src/providers/xai.ts";
 import {
 	discoverXaiOAuthEndpoints,
 	exchangeXaiAuthorizationCode,
 	getOAuthProvider,
 	refreshXaiToken,
-} from "../src/utils/oauth/index.ts";
-import { loginXai, parseXaiAuthorizationInput, xaiOAuth } from "../src/utils/oauth/xai.ts";
+} from "../src/auth/oauth/index.ts";
+import { loginXai, parseXaiAuthorizationInput, xaiOAuth } from "../src/auth/oauth/xai.ts";
+import { xaiProvider } from "../src/providers/xai.ts";
 
 function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -18,7 +18,7 @@ describe.sequential("xAI OAuth", () => {
 	afterEach(() => vi.unstubAllGlobals());
 
 	it("does not statically import node:http from the registry-loaded xAI module", async () => {
-		const source = await readFile(new URL("../src/utils/oauth/xai.ts", import.meta.url), "utf8");
+		const source = await readFile(new URL("../src/auth/oauth/xai.ts", import.meta.url), "utf8");
 		expect(source).not.toMatch(/^import .*node:http/m);
 	});
 

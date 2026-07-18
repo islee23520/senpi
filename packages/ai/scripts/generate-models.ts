@@ -2637,7 +2637,7 @@ async function generateModels() {
 		{
 			id: "default",
 			name: "Auto",
-			api: "openai-completions",
+			api: "cursor-connect",
 			provider: "cursor",
 			baseUrl: "https://api2.cursor.sh",
 			reasoning: false,
@@ -2662,7 +2662,7 @@ async function generateModels() {
 		{
 			id: "gpt-5.1-2025-11-13",
 			name: "GPT-5.1",
-			api: "openai-responses",
+			api: "openai-completions",
 			provider: "gitlab-duo",
 			baseUrl: "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
 			reasoning: true,
@@ -2694,27 +2694,6 @@ async function generateModels() {
 			cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
 			contextWindow: 200000,
 			maxTokens: 64000,
-		},
-		{
-			id: "glm-5.2",
-			name: "GLM-5.2 (ZCode)",
-			api: "anthropic-messages",
-			provider: "glm-zcode",
-			baseUrl: "https://api.z.ai/api/anthropic",
-			headers: {
-				"User-Agent": "ZCode/3.1.2",
-				"X-Title": "Z Code@electron",
-				"HTTP-Referer": "https://zcode.z.ai",
-				"X-ZCode-Agent": "glm",
-				"X-ZCode-App-Version": "3.1.2",
-				"X-Release-Channel": "production",
-			},
-			reasoning: true,
-			thinkingLevelMap: { minimal: null, low: "high", medium: "high", high: "high", max: "max" },
-			input: ["text"],
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-			contextWindow: 1000000,
-			maxTokens: 131072,
 		},
 	];
 	allModels.push(...oauthParityModels);

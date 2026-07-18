@@ -14,7 +14,6 @@ export const BUILT_IN_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 	fireworks: "Fireworks",
 	fugu: "Sakana Fugu",
 	"gitlab-duo": "GitLab Duo",
-	"glm-zcode": "GLM ZCode (Unofficial)",
 	google: "Google Gemini",
 	"google-antigravity": "Google Antigravity",
 	"google-gemini-cli": "Google Gemini CLI (Cloud Code Assist)",

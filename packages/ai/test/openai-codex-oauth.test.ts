@@ -3,7 +3,7 @@ import {
 	loginOpenAICodexDeviceCode,
 	openaiCodexOAuthProvider,
 	refreshOpenAICodexToken,
-} from "../src/utils/oauth/openai-codex.ts";
+} from "../src/auth/oauth/openai-codex.ts";
 
 function jsonResponse(body: unknown, status: number = 200): Response {
 	return new Response(JSON.stringify(body), {
