@@ -40,6 +40,10 @@ import { parseStreamingJson } from "../utils/json-parse.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { isForcedToolChoiceUnsupportedError, omitToolChoiceParam } from "../utils/tool-choice-fallback.ts";
+import {
+	normalizeToolParametersForMoonshot,
+	normalizeToolParametersForOpenAICompat,
+} from "../utils/tool-schema-compat.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import {
@@ -179,11 +183,12 @@ interface OpenAICompatCacheControl {
 
 type ResolvedOpenAICompletionsCompat = Omit<
 	Required<OpenAICompletionsCompat>,
-	"cacheControlFormat" | "toolCallFormat" | "deferredToolsMode"
+	"cacheControlFormat" | "toolCallFormat" | "deferredToolsMode" | "toolSchemaFlavor"
 > & {
 	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
 	toolCallFormat?: OpenAICompletionsCompat["toolCallFormat"];
 	deferredToolsMode?: OpenAICompletionsCompat["deferredToolsMode"];
+	toolSchemaFlavor?: OpenAICompletionsCompat["toolSchemaFlavor"];
 };
 
 type ResolvedChatTemplateKwargValue = string | number | boolean | null;
@@ -256,6 +261,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 			if (nextParams !== undefined) {
 				params = nextParams as OpenAICompletionsRequestParams;
 			}
+			params = normalizeRequestToolSchemas(params, compat);
 			const requestOptions = {
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
@@ -1230,17 +1236,45 @@ function convertTools(
 			throw new Error("Freeform tools cannot be sent to OpenAI Chat Completions; use Responses API");
 		}
 
+		const normalizedParameters =
+			compat.toolSchemaFlavor === "moonshot-mfjs"
+				? normalizeToolParametersForMoonshot(tool.parameters as Record<string, unknown>)
+				: normalizeToolParametersForOpenAICompat(tool.parameters as Record<string, unknown>);
+
 		return {
 			type: "function",
 			function: {
 				name: tool.name,
 				description: tool.description,
-				parameters: tool.parameters as FunctionParameters,
+				parameters: normalizedParameters as FunctionParameters,
 				// Only include strict if provider supports it. Some reject unknown fields.
 				...(compat.supportsStrictMode !== false && { strict: false }),
 			},
 		};
 	});
+}
+
+function normalizeRequestToolSchemas(
+	params: OpenAICompletionsRequestParams,
+	compat: ResolvedOpenAICompletionsCompat,
+): OpenAICompletionsRequestParams {
+	if (!params.tools) return params;
+
+	return {
+		...params,
+		tools: params.tools.map((tool) => {
+			if (tool.type !== "function" || !tool.function.parameters) return tool;
+
+			const parameters =
+				compat.toolSchemaFlavor === "moonshot-mfjs"
+					? normalizeToolParametersForMoonshot(tool.function.parameters)
+					: normalizeToolParametersForOpenAICompat(tool.function.parameters);
+			return {
+				...tool,
+				function: { ...tool.function, parameters },
+			};
+		}),
+	};
 }
 
 function parseChunkUsage(
@@ -1383,6 +1417,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		chatTemplateKwargs: {},
 		zaiToolStream: false,
 		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia,
+		toolSchemaFlavor: isMoonshot ? "moonshot-mfjs" : undefined,
 		supportsDisabledThinking: true,
 		toolCallFormat: undefined,
 		cacheControlFormat,
