@@ -29,17 +29,16 @@ import {
 	createAgentSessionServices,
 } from "./core/agent-session-services.ts";
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
-import { AuthStorage } from "./core/auth-storage.ts";
 import { exportFromFile } from "./core/export-html/index.ts";
 import type { InlineExtension } from "./core/extensions/types.ts";
 import { applyHttpProxySettings, configureHttpDispatcher } from "./core/http-dispatcher.ts";
-import type { ModelRegistry } from "./core/model-registry.ts";
 import {
 	getModelNarrowingPatterns,
 	resolveCliModel,
 	resolveModelScope,
 	type ScopedModel,
 } from "./core/model-resolver.ts";
+import type { ModelRuntime } from "./core/model-runtime.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
 import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import type { CreateAgentSessionOptions } from "./core/sdk.ts";
@@ -386,7 +385,7 @@ function buildSessionOptions(
 	parsed: Args,
 	scopedModels: ScopedModel[],
 	hasExistingSession: boolean,
-	modelRegistry: ModelRegistry,
+	modelRuntime: ModelRuntime,
 	settingsManager: SettingsManager,
 ): {
 	options: CreateAgentSessionOptions;
@@ -405,7 +404,7 @@ function buildSessionOptions(
 			cliProvider: parsed.provider,
 			cliModel: parsed.model,
 			cliThinking: parsed.thinking,
-			modelRegistry,
+			modelRuntime,
 		});
 		if (resolved.warning) {
 			diagnostics.push({ type: "warning", message: resolved.warning });
@@ -428,7 +427,7 @@ function buildSessionOptions(
 		// Check if saved default is in scoped models - use it if so, otherwise first scoped model
 		const savedProvider = settingsManager.getDefaultProvider();
 		const savedModelId = settingsManager.getDefaultModel();
-		const savedModel = savedProvider && savedModelId ? modelRegistry.find(savedProvider, savedModelId) : undefined;
+		const savedModel = savedProvider && savedModelId ? modelRuntime.getModel(savedProvider, savedModelId) : undefined;
 		const savedInScope = savedModel ? scopedModels.find((sm) => modelsAreEqual(sm.model, savedModel)) : undefined;
 
 		if (savedInScope) {
@@ -461,7 +460,7 @@ function buildSessionOptions(
 		}));
 	}
 
-	// API key from CLI - set in authStorage
+	// API key from CLI - set as a non-persistent runtime override
 	// (handled by caller before createAgentSession)
 
 	// Tools
@@ -599,13 +598,11 @@ export async function main(args: string[], options?: MainOptions) {
 	const resolvedSkillPaths = resolveCliPaths(cwd, parsed.skills);
 	const resolvedPromptTemplatePaths = resolveCliPaths(cwd, parsed.promptTemplates);
 	const resolvedThemePaths = resolveCliPaths(cwd, parsed.themes);
-	const authStorage = AuthStorage.create();
 
 	if (parsed.listModels !== undefined) {
 		const services = await createAgentSessionServices({
 			cwd,
 			agentDir,
-			authStorage,
 			settingsManager: startupSettingsManager,
 			extensionFlagValues: parsed.unknownFlags,
 			resourceLoaderOptions: {
@@ -626,7 +623,7 @@ export async function main(args: string[], options?: MainOptions) {
 			...collectSettingsDiagnostics(services.settingsManager, "model listing"),
 		]);
 		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
-		await listModels(services.modelRegistry, searchPattern);
+		await listModels(services.modelRuntime, searchPattern);
 		process.exit(0);
 	}
 
@@ -726,7 +723,6 @@ export async function main(args: string[], options?: MainOptions) {
 		const services = await createAgentSessionServices({
 			cwd,
 			agentDir,
-			authStorage,
 			settingsManager: runtimeSettingsManager,
 			extensionFlagValues: parsed.unknownFlags,
 			resourceLoaderReloadOptions: shouldResolveProjectTrust
@@ -766,7 +762,7 @@ export async function main(args: string[], options?: MainOptions) {
 				extensionFactories: options?.extensionFactories,
 			},
 		});
-		const { settingsManager, modelRegistry, resourceLoader } = services;
+		const { settingsManager, modelRuntime, resourceLoader } = services;
 		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
 			...projectTrustDiagnostics,
 			...services.diagnostics,
@@ -779,18 +775,12 @@ export async function main(args: string[], options?: MainOptions) {
 			legacyEnabledPatterns: settingsManager.getEnabledModels(),
 		});
 		const scopedModels =
-			modelPatterns && modelPatterns.length > 0 ? await resolveModelScope(modelPatterns, modelRegistry) : [];
+			modelPatterns && modelPatterns.length > 0 ? await resolveModelScope(modelPatterns, modelRuntime) : [];
 		const {
 			options: sessionOptions,
 			cliThinkingFromModel,
 			diagnostics: sessionOptionDiagnostics,
-		} = buildSessionOptions(
-			parsed,
-			scopedModels,
-			sessionManager.hasContextMessages(),
-			modelRegistry,
-			settingsManager,
-		);
+		} = buildSessionOptions(parsed, scopedModels, sessionManager.hasContextMessages(), modelRuntime, settingsManager);
 		diagnostics.push(...sessionOptionDiagnostics);
 
 		if (parsed.apiKey) {
@@ -800,7 +790,8 @@ export async function main(args: string[], options?: MainOptions) {
 					message: "--api-key requires a model to be specified via --model, --provider/--model, or --models",
 				});
 			} else {
-				authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsed.apiKey);
+				await modelRuntime.setRuntimeApiKey(sessionOptions.model.provider, parsed.apiKey);
+				await services.modelRuntime.getAvailable();
 			}
 		}
 
