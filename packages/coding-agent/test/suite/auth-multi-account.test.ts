@@ -8,7 +8,7 @@ import {
 import { AuthStorage } from "../../src/core/auth-storage.ts";
 
 describe("current single-account auth storage characterization", () => {
-	it("keeps one credential per provider and preserves independent providers", () => {
+	it("keeps one credential per provider and preserves independent providers", async () => {
 		// Given: the current AuthStorage with credentials for two providers.
 		const storage = AuthStorage.inMemory({
 			anthropic: { type: "api_key", key: "first-anthropic-key" },
@@ -21,7 +21,10 @@ describe("current single-account auth storage characterization", () => {
 		// Then: it replaces that provider's sole credential without changing OpenAI.
 		expect(storage.get("anthropic")).toEqual({ type: "api_key", key: "second-anthropic-key" });
 		expect(storage.get("openai")).toEqual({ type: "api_key", key: "openai-key" });
-		expect(storage.list()).toEqual(["anthropic", "openai"]);
+		expect(await storage.list()).toEqual([
+		{ providerId: "anthropic", type: "api_key" },
+		{ providerId: "openai", type: "api_key" },
+	]);
 	});
 });
 
@@ -56,7 +59,7 @@ function selectionRequest(): SelectionLeaseRequest {
 }
 
 describe("multi-account credential contracts", () => {
-	it("rotates A B A and preserves a healthy session affinity", () => {
+	it("rotates A B A and preserves a healthy session affinity", async () => {
 		const secondApiKeyRecord: CredentialRecord = {
 			...apiKeyRecord,
 			credentialId: "credential-b",
@@ -81,7 +84,7 @@ describe("multi-account credential contracts", () => {
 		expect(vault.issueSelectionLease(sessionRequest, "gateway-a").credentialId).toBe("credential-b");
 	});
 
-	it("does not fall back from an explicit pin and cools down after 401 or 429", () => {
+	it("does not fall back from an explicit pin and cools down after 401 or 429", async () => {
 		let now = 1_784_131_200_000;
 		const secondApiKeyRecord: CredentialRecord = {
 			...apiKeyRecord,
@@ -164,7 +167,7 @@ describe("multi-account credential contracts", () => {
 		selected?.reportOutcome("rate_limited");
 		await expect(storage.selectPooledCredential("openai")).rejects.toThrow("No eligible credential is available");
 	});
-	it("persists two redacted credential records and consumes one authenticated lease", () => {
+	it("persists two redacted credential records and consumes one authenticated lease", async () => {
 		// Given: two credentials from separate provider/type pools.
 		const original = InMemoryCredentialVault.fromRecords([apiKeyRecord, oauthRecord]);
 
@@ -185,7 +188,7 @@ describe("multi-account credential contracts", () => {
 		expect(lease.material).toEqual({ type: "api_key", apiKey: "test-api-key-a" });
 	});
 
-	it("rejects an invalid selector and a replayed or unauthenticated lease without logging secrets", () => {
+	it("rejects an invalid selector and a replayed or unauthenticated lease without logging secrets", async () => {
 		// Given: a vault with a single API-key credential and a captured log sink.
 		const logs: string[] = [];
 		const vault = InMemoryCredentialVault.fromRecords([apiKeyRecord, oauthRecord], (entry) =>
@@ -214,7 +217,7 @@ describe("multi-account credential contracts", () => {
 		expect(logs.join("\n")).not.toContain("test-refresh-token-b");
 	});
 
-	it("redacts malformed runtime selector errors", () => {
+	it("redacts malformed runtime selector errors", async () => {
 		// Given: an untyped runtime selector containing caller-supplied secret-like data.
 		const sentinel = "selector-secret-sentinel";
 		const logs: string[] = [];
@@ -237,7 +240,7 @@ describe("multi-account credential contracts", () => {
 		expect(logs.join("\n")).not.toContain(sentinel);
 	});
 
-	it("counts pool-only credentials as configured auth", () => {
+	it("counts pool-only credentials as configured auth", async () => {
 		const poolOnly = {
 			...apiKeyRecord,
 			pool: { provider: "custom-pool-provider", type: "api_key" as const },
