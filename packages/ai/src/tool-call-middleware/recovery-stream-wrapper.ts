@@ -3,6 +3,7 @@ import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream as AssistantMessageEventStreamImpl } from "../utils/event-stream.ts";
 import { createAntmlInvokeRecoveryStreamParser } from "./protocols/antml/recovery-stream.ts";
 import { createRecoveryCodeMask, type RecoveryCodeMaskSegment } from "./recovery-code-mask.ts";
+import { RecoveryNativeProjection } from "./recovery-native-projection.ts";
 import { StreamMessageProjection } from "./stream-wrapper-shared.ts";
 import type { StreamParserEvent } from "./types.ts";
 
@@ -29,9 +30,11 @@ export function wrapStreamWithInvokeRecovery(
 
 	void (async (): Promise<void> => {
 		let projection: StreamMessageProjection | null = null;
+		let nativeProjection: RecoveryNativeProjection | null = null;
 		let sawToolCall = false;
 		let activeInvoke = false;
 		let textOpen = false;
+		let currentInnerTextIndex: number | null = null;
 		let textBuffer = "";
 
 		const flushText = (): void => {
@@ -41,8 +44,8 @@ export function wrapStreamWithInvokeRecovery(
 		};
 
 		const projectParserEvents = (events: readonly StreamParserEvent[]): void => {
-			if (!projection) return;
-			for (const event of events) {
+			if (!projection || !nativeProjection) return;
+			for (const event of nativeProjection.assignRecoveredIds(events)) {
 				if (event.type === "text") {
 					textBuffer += event.text;
 					continue;
@@ -56,6 +59,7 @@ export function wrapStreamWithInvokeRecovery(
 					for (const toolCall of result.completedToolCalls) appendRecoveryDiagnostic(projection.message, toolCall);
 				}
 			}
+			if (currentInnerTextIndex != null) nativeProjection.extendText(currentInnerTextIndex);
 		};
 
 		const processSegment = (segment: RecoveryCodeMaskSegment): void => {
@@ -82,6 +86,8 @@ export function wrapStreamWithInvokeRecovery(
 			projectParserEvents(parser.finish());
 			flushText();
 			projection.finishText();
+			if (currentInnerTextIndex != null) nativeProjection?.extendText(currentInnerTextIndex);
+			currentInnerTextIndex = null;
 			textOpen = false;
 		};
 
@@ -93,27 +99,63 @@ export function wrapStreamWithInvokeRecovery(
 			return message;
 		};
 
+		const terminateForCollision = (source: AssistantMessage): void => {
+			if (!projection) return;
+			finishText();
+			projection.sync(source);
+			const message = projection.finalize(source, false);
+			message.content = message.content.filter((block) => block.type !== "toolCall");
+			message.stopReason = "error";
+			message.errorMessage = "Tool call ID collision in provider stream";
+			message.diagnostics = [
+				{
+					type: "text_tool_call_recovery_collision",
+					timestamp: Date.now(),
+					details: { protocol: "antml", status: "collision" },
+				},
+			];
+			outerStream.push({ type: "error", reason: "error", error: message });
+			outerStream.end(message);
+		};
+
+		const prepareContentEvent = (source: AssistantMessage, contentIndex: number): boolean => {
+			if (!projection || !nativeProjection) return false;
+			projection.sync(source);
+			nativeProjection.reserveVisibleIds(source);
+			return nativeProjection.synchronizeLower(source, contentIndex);
+		};
+
 		try {
 			for await (const event of innerStream) {
 				switch (event.type) {
 					case "start":
 						projection = new StreamMessageProjection(outerStream, event.partial);
+						nativeProjection = new RecoveryNativeProjection(outerStream, projection.message);
+						nativeProjection.reserveVisibleIds(event.partial);
 						outerStream.push({ type: "start", partial: projection.message });
 						break;
 					case "text_start":
-						if (!projection) break;
-						projection.sync(event.partial);
+						if (!prepareContentEvent(event.partial, event.contentIndex) || !projection || !nativeProjection) {
+							terminateForCollision(event.partial);
+							return;
+						}
+						currentInnerTextIndex = event.contentIndex;
+						nativeProjection.startText(event.contentIndex);
 						projection.startText(event.contentIndex);
 						textOpen = true;
 						break;
 					case "text_delta":
-						if (!projection) break;
-						projection.sync(event.partial);
+						if (!prepareContentEvent(event.partial, event.contentIndex)) {
+							terminateForCollision(event.partial);
+							return;
+						}
 						feedText(event.delta);
 						break;
 					case "text_end":
-						if (!projection) break;
-						projection.sync(event.partial);
+						if (!prepareContentEvent(event.partial, event.contentIndex)) {
+							terminateForCollision(event.partial);
+							return;
+						}
 						finishText();
 						break;
 					case "done": {
@@ -146,12 +188,41 @@ export function wrapStreamWithInvokeRecovery(
 						outerStream.end(message);
 						return;
 					}
+					case "toolcall_start": {
+						if (!prepareContentEvent(event.partial, event.contentIndex) || !nativeProjection) {
+							terminateForCollision(event.partial);
+							return;
+						}
+						const status = nativeProjection.projectNativeStart(event.partial, event.contentIndex);
+						if (status === "collision") {
+							terminateForCollision(event.partial);
+							return;
+						}
+						sawToolCall = sawToolCall || status === "projected";
+						break;
+					}
+					case "toolcall_delta":
+						if (!prepareContentEvent(event.partial, event.contentIndex) || !nativeProjection) {
+							terminateForCollision(event.partial);
+							return;
+						}
+						nativeProjection.projectNativeDelta(event.partial, event.contentIndex, event.delta);
+						break;
+					case "toolcall_end":
+						if (!prepareContentEvent(event.partial, event.contentIndex) || !nativeProjection) {
+							terminateForCollision(event.partial);
+							return;
+						}
+						nativeProjection.projectNativeEnd(event.contentIndex, event.toolCall);
+						sawToolCall = true;
+						break;
 					case "thinking_start":
 					case "thinking_delta":
 					case "thinking_end":
-					case "toolcall_start":
-					case "toolcall_delta":
-					case "toolcall_end":
+						if (!prepareContentEvent(event.partial, event.contentIndex)) {
+							terminateForCollision(event.partial);
+							return;
+						}
 						break;
 				}
 			}

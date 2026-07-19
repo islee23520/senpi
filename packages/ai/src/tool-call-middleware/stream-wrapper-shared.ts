@@ -76,7 +76,7 @@ export class StreamMessageProjection {
 	startText(contentIndex: number): void {
 		this.currentInnerTextIndex = contentIndex;
 		this.textBlockIndexByInnerIndex.set(contentIndex, null);
-		this.stream.push({ type: "text_start", contentIndex, partial: this.message });
+		this.stream.push({ type: "text_start", contentIndex: this.message.content.length, partial: this.message });
 	}
 
 	projectParserEvents(events: readonly StreamParserEvent[]): ParserProjectionResult {
