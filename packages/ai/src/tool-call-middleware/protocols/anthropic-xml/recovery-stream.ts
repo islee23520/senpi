@@ -23,36 +23,33 @@ type ActiveState = {
 	source: string;
 };
 type RecoveryState = IdleState | WrapperState | ActiveState | { readonly kind: "finished" };
-
+export interface RecoveryStreamParser extends StreamParser {
+	interrupt(): StreamParserEvent[];
+}
 const MAX_PARTIAL_TAG_VALIDATION_LENGTH = 128;
-
 function emitText(events: StreamParserEvent[], text: string): void {
 	if (text.length > 0) {
 		events.push({ type: "text", text });
 	}
 }
-
 function exceedsRetainedLimit(retainedLength: number, incoming: string): boolean {
 	return retainedLength + incoming.length > ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH;
 }
-
 /** Recovery-only eager ANTML parser; existing text-protocol parser semantics remain unchanged. */
 export function createInvokeRecoveryStreamParser(
 	tools: readonly Tool[],
 	config: InvokeProtocolConfig,
 	options?: ParserOptions,
-): StreamParser {
+): RecoveryStreamParser {
 	const resolveTool = createToolResolver(tools);
 	let state: RecoveryState = { kind: "idle", tag: "" };
 	let nextToolCallIndex = 0;
-
 	function reportOverflow(retainedLength: number): void {
 		options?.onError?.("ANTML recovery fragment exceeded the retained-input limit.", {
 			protocol: config.protocol,
 			retainedLength,
 		});
 	}
-
 	function startKnownInvoke(
 		events: StreamParserEvent[],
 		opening: string,
@@ -73,11 +70,9 @@ export function createInvokeRecoveryStreamParser(
 			source: opening,
 		};
 	}
-
 	function restoreAfterActive(active: ActiveState): void {
 		state = active.wrapper ? { kind: "wrapper", scanner: active.wrapper } : { kind: "idle", tag: "" };
 	}
-
 	function finishActive(events: StreamParserEvent[], active: ActiveState): void {
 		const block = scanInvokeBlock(active.source, findInvokeOpenTag(active.source, 0)!);
 		const argumentsRecord =
@@ -109,7 +104,6 @@ export function createInvokeRecoveryStreamParser(
 		}
 		restoreAfterActive(active);
 	}
-
 	function overflowActive(events: StreamParserEvent[], active: ActiveState): void {
 		reportOverflow(active.source.length);
 		events.push({ type: "toolcall_delta", index: active.index, argumentsDelta: "{}" });
@@ -124,7 +118,6 @@ export function createInvokeRecoveryStreamParser(
 		});
 		restoreAfterActive(active);
 	}
-
 	function handleIdleTag(events: StreamParserEvent[], idle: IdleState): void {
 		const invoke = findInvokeOpenTag(idle.tag, 0);
 		if (invoke?.index === 0 && invoke.length === idle.tag.length) {
@@ -145,7 +138,6 @@ export function createInvokeRecoveryStreamParser(
 		emitText(events, idle.tag);
 		state = { kind: "idle", tag: "" };
 	}
-
 	function feedIdleCharacter(events: StreamParserEvent[], character: string, idle: IdleState): void {
 		if (idle.tag.length === 0 && character !== "<") {
 			emitText(events, character);
@@ -175,7 +167,6 @@ export function createInvokeRecoveryStreamParser(
 			idle.tag = "";
 		}
 	}
-
 	function feedWrapperCharacter(events: StreamParserEvent[], scanner: RecoveryWrapperState, character: string): void {
 		for (const action of scanner.feed(character)) {
 			if (action.type === "text" || action.type === "closed") {
@@ -200,7 +191,6 @@ export function createInvokeRecoveryStreamParser(
 			}
 		}
 	}
-
 	function feedActiveCharacter(events: StreamParserEvent[], active: ActiveState, character: string): void {
 		if (exceedsRetainedLimit(active.source.length, character)) {
 			overflowActive(events, active);
@@ -218,7 +208,6 @@ export function createInvokeRecoveryStreamParser(
 			overflowActive(events, active);
 		}
 	}
-
 	return {
 		feed(textDelta: string): StreamParserEvent[] {
 			const events: StreamParserEvent[] = [];
@@ -233,6 +222,17 @@ export function createInvokeRecoveryStreamParser(
 				} else {
 					feedActiveCharacter(events, state, character);
 				}
+			}
+			return events;
+		},
+		interrupt(): StreamParserEvent[] {
+			const events: StreamParserEvent[] = [];
+			if (state.kind === "idle") {
+				emitText(events, state.tag);
+				state = { kind: "idle", tag: "" };
+			} else if (state.kind === "wrapper") {
+				emitText(events, state.scanner.finish());
+				state = { kind: "idle", tag: "" };
 			}
 			return events;
 		},

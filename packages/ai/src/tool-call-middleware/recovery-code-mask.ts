@@ -1,6 +1,8 @@
 export type RecoveryCodeMaskSegment = {
 	readonly text: string;
 	readonly scan: boolean;
+	/** Call recovery-parser interrupt before handling this masked span. */
+	readonly recoveryBoundary?: true;
 };
 
 export type RecoveryCodeMaskFeedOptions = {
@@ -11,55 +13,106 @@ export type RecoveryCodeMaskFeedOptions = {
 export interface RecoveryCodeMask {
 	/** Preserves text byte-for-byte while marking only non-code spans as scannable. */
 	feed(text: string, options?: RecoveryCodeMaskFeedOptions): readonly RecoveryCodeMaskSegment[];
-	/** Classifies a backtick run retained at the end of the final delta. */
+	/** Flushes retained state and terminally closes this mask. Further feeds throw. */
 	finish(): readonly RecoveryCodeMaskSegment[];
 }
 
 type MaskState =
 	| { readonly kind: "plain" }
 	| { readonly kind: "inline"; readonly delimiterLength: number }
-	| {
-			readonly kind: "fenced";
-			readonly delimiterLength: number;
-			closingLine: boolean;
-	  };
+	| { readonly kind: "fenced"; readonly delimiterLength: number; closingLine: boolean };
 
-function emit(segments: RecoveryCodeMaskSegment[], text: string, scan: boolean): void {
+function emit(segments: RecoveryCodeMaskSegment[], text: string, scan: boolean, recoveryBoundary = false): void {
 	if (text.length === 0) {
 		return;
 	}
 	const previous = segments.at(-1);
-	if (previous?.scan === scan) {
+	if (previous?.scan === scan && !previous.recoveryBoundary && !recoveryBoundary) {
 		segments[segments.length - 1] = { text: previous.text + text, scan };
 	} else {
-		segments.push({ text, scan });
+		segments.push(recoveryBoundary ? { text, scan, recoveryBoundary: true } : { text, scan });
 	}
 }
 
-/**
- * Incrementally identifies Markdown code spans without parsing Markdown generally.
- * Every input byte is returned exactly once; callers feed only `scan: true` spans
- * into invoke recovery.
- */
+function isLineBreak(character: string): boolean {
+	return character === "\r" || character === "\n";
+}
+
+/** Incrementally identifies code spans without implementing a general Markdown parser. */
 export function createRecoveryCodeMask(): RecoveryCodeMask {
 	let state: MaskState = { kind: "plain" };
 	let atLineStart = true;
 	let leadingSpaces = 0;
 	let plainIndent = "";
-	let pendingTicks = "";
+	let pendingTickCount = 0;
+	let pendingDeferredTicks = 0;
 	let pendingAtLineStart = false;
+	let finished = false;
 
-	function flushPlainIndent(segments: RecoveryCodeMaskSegment[], scan: boolean): void {
-		emit(segments, plainIndent, scan);
+	function flushPlainIndent(segments: RecoveryCodeMaskSegment[], scan: boolean, recoveryBoundary = false): void {
+		emit(segments, plainIndent, scan, recoveryBoundary);
 		plainIndent = "";
 	}
 
 	function updateLinePosition(character: string): void {
-		if (character === "\n") {
+		if (isLineBreak(character)) {
 			atLineStart = true;
 			leadingSpaces = 0;
 		} else {
 			atLineStart = false;
+		}
+	}
+
+	function completePendingTicks(segments: RecoveryCodeMaskSegment[]): void {
+		if (pendingTickCount === 0) {
+			return;
+		}
+		const tickCount = pendingTickCount;
+		const startedAtLineStart = pendingAtLineStart;
+		pendingTickCount = 0;
+		pendingAtLineStart = false;
+
+		if (state.kind === "plain") {
+			if (startedAtLineStart && tickCount >= 3) {
+				flushPlainIndent(segments, false, true);
+				state = { kind: "fenced", delimiterLength: tickCount, closingLine: false };
+			} else {
+				flushPlainIndent(segments, true);
+				if (pendingDeferredTicks > 0) {
+					emit(segments, "`".repeat(pendingDeferredTicks), false, true);
+				}
+				state = { kind: "inline", delimiterLength: tickCount };
+			}
+		} else if (state.kind === "inline") {
+			if (tickCount === state.delimiterLength) {
+				state = { kind: "plain" };
+			}
+		} else if (startedAtLineStart && tickCount >= state.delimiterLength) {
+			state.closingLine = true;
+		}
+		pendingDeferredTicks = 0;
+		atLineStart = false;
+		leadingSpaces = 0;
+	}
+
+	function appendTicks(segments: RecoveryCodeMaskSegment[], ticks: string): void {
+		if (pendingTickCount === 0) {
+			pendingAtLineStart = atLineStart;
+		}
+		pendingTickCount += ticks.length;
+		let offset = 0;
+		if (state.kind === "plain" && pendingAtLineStart && plainIndent.length > 0 && pendingDeferredTicks < 3) {
+			const deferred = Math.min(3 - pendingDeferredTicks, ticks.length);
+			pendingDeferredTicks += deferred;
+			offset = deferred;
+			if (pendingDeferredTicks === 3) {
+				flushPlainIndent(segments, false, true);
+				emit(segments, "```", false);
+				pendingDeferredTicks = 0;
+			}
+		}
+		if (offset < ticks.length) {
+			emit(segments, ticks.slice(offset), false, state.kind === "plain" && pendingTickCount === ticks.length);
 		}
 	}
 
@@ -69,43 +122,21 @@ export function createRecoveryCodeMask(): RecoveryCodeMask {
 			leadingSpaces += 1;
 			return;
 		}
-		if (character === "`") {
-			pendingTicks = character;
-			pendingAtLineStart = atLineStart;
-			return;
-		}
 		flushPlainIndent(segments, true);
 		emit(segments, character, true);
 		updateLinePosition(character);
 	}
 
 	function processInlineCharacter(segments: RecoveryCodeMaskSegment[], character: string): void {
-		if (character === "`") {
-			pendingTicks = character;
-			pendingAtLineStart = false;
-			return;
-		}
 		emit(segments, character, false);
-		if (character === "\n") {
+		if (isLineBreak(character)) {
 			state = { kind: "plain" };
-			atLineStart = true;
-			leadingSpaces = 0;
-		} else {
-			atLineStart = false;
 		}
+		updateLinePosition(character);
 	}
 
 	function processFencedCharacter(segments: RecoveryCodeMaskSegment[], character: string): void {
 		if (state.kind !== "fenced") {
-			return;
-		}
-		if (state.closingLine) {
-			emit(segments, character, false);
-			if (character === "\n") {
-				state = { kind: "plain" };
-				atLineStart = true;
-				leadingSpaces = 0;
-			}
 			return;
 		}
 		if (atLineStart && character === " " && leadingSpaces < 3) {
@@ -113,91 +144,73 @@ export function createRecoveryCodeMask(): RecoveryCodeMask {
 			leadingSpaces += 1;
 			return;
 		}
-		if (atLineStart && character === "`") {
-			pendingTicks = character;
-			pendingAtLineStart = true;
-			return;
-		}
 		emit(segments, character, false);
+		if (state.closingLine && isLineBreak(character)) {
+			state = { kind: "plain" };
+		}
 		updateLinePosition(character);
 	}
 
-	function completePendingTicks(segments: RecoveryCodeMaskSegment[]): void {
-		const ticks = pendingTicks;
-		const startedAtLineStart = pendingAtLineStart;
-		pendingTicks = "";
-		pendingAtLineStart = false;
-
-		if (state.kind === "plain") {
-			if (startedAtLineStart && ticks.length >= 3) {
-				flushPlainIndent(segments, false);
-				emit(segments, ticks, false);
-				state = { kind: "fenced", delimiterLength: ticks.length, closingLine: false };
-				atLineStart = false;
-				leadingSpaces = 0;
-				return;
-			}
-			flushPlainIndent(segments, true);
-			emit(segments, ticks, false);
-			state = { kind: "inline", delimiterLength: ticks.length };
-			atLineStart = false;
-			leadingSpaces = 0;
-			return;
-		}
-
-		if (state.kind === "inline") {
-			emit(segments, ticks, false);
-			if (ticks.length === state.delimiterLength) {
-				state = { kind: "plain" };
-			}
-			atLineStart = false;
-			return;
-		}
-
-		emit(segments, ticks, false);
-		if (startedAtLineStart && ticks.length === state.delimiterLength) {
-			state.closingLine = true;
-		}
-		atLineStart = false;
-		leadingSpaces = 0;
-	}
-
-	function processCharacter(segments: RecoveryCodeMaskSegment[], character: string): void {
-		if (pendingTicks.length > 0) {
-			if (character === "`") {
-				pendingTicks += character;
-				return;
+	function processText(segments: RecoveryCodeMaskSegment[], text: string): void {
+		for (let index = 0; index < text.length; ) {
+			if (text[index] === "`") {
+				let end = index + 1;
+				while (text[end] === "`") {
+					end += 1;
+				}
+				appendTicks(segments, text.slice(index, end));
+				index = end;
+				continue;
 			}
 			completePendingTicks(segments);
+			const codePoint = text.codePointAt(index);
+			if (codePoint === undefined) {
+				break;
+			}
+			const character = String.fromCodePoint(codePoint);
+			if (state.kind === "plain") {
+				processPlainCharacter(segments, character);
+			} else if (state.kind === "inline") {
+				processInlineCharacter(segments, character);
+			} else {
+				processFencedCharacter(segments, character);
+			}
+			index += character.length;
 		}
-		if (state.kind === "plain") {
-			processPlainCharacter(segments, character);
-		} else if (state.kind === "inline") {
-			processInlineCharacter(segments, character);
-		} else {
-			processFencedCharacter(segments, character);
+	}
+
+	function trackActiveText(text: string): void {
+		for (const character of text) {
+			updateLinePosition(character);
 		}
 	}
 
 	return {
 		feed(text, options) {
-			if (options?.activeInvoke) {
-				return text.length === 0 ? [] : [{ text, scan: true }];
+			if (finished) {
+				throw new Error("Recovery code mask is finished");
 			}
 			const segments: RecoveryCodeMaskSegment[] = [];
-			for (const character of text) {
-				processCharacter(segments, character);
+			if (options?.activeInvoke) {
+				completePendingTicks(segments);
+				flushPlainIndent(segments, true);
+				emit(segments, text, true);
+				trackActiveText(text);
+			} else {
+				processText(segments, text);
 			}
 			return segments;
 		},
 		finish() {
-			const segments: RecoveryCodeMaskSegment[] = [];
-			if (pendingTicks.length > 0) {
-				completePendingTicks(segments);
+			if (finished) {
+				return [];
 			}
+			const segments: RecoveryCodeMaskSegment[] = [];
+			completePendingTicks(segments);
 			if (state.kind === "plain") {
 				flushPlainIndent(segments, true);
 			}
+			finished = true;
 			return segments;
 		},
 	};

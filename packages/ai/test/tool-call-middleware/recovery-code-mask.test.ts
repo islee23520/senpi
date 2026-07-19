@@ -36,6 +36,9 @@ function runMask(chunks: readonly string[]): MaskRun {
 	for (const chunk of chunks) {
 		for (const segment of mask.feed(chunk)) {
 			text += segment.text;
+			if (segment.recoveryBoundary) {
+				events.push(...parser.interrupt());
+			}
 			if (segment.scan) {
 				events.push(...parser.feed(segment.text));
 			}
@@ -43,6 +46,9 @@ function runMask(chunks: readonly string[]): MaskRun {
 	}
 	for (const segment of mask.finish()) {
 		text += segment.text;
+		if (segment.recoveryBoundary) {
+			events.push(...parser.interrupt());
+		}
 		if (segment.scan) {
 			events.push(...parser.feed(segment.text));
 		}
@@ -109,4 +115,121 @@ describe("recovery code masking", () => {
 
 		expectAcrossEverySplit(input, ["echo executable"]);
 	});
+
+	it("masked spans break partial recovery candidates", () => {
+		const bridgedInvoke = '<inv`masked`oke name="Bash"><parameter name="command">echo bridged</parameter></invoke>';
+		const mask = createRecoveryCodeMask();
+		const parser = createAntmlInvokeRecoveryStreamParser([bashTool]);
+		const events: StreamParserEvent[] = [];
+		const chunks = [
+			"emoji 😀 <inv",
+			"",
+			"`masked`oke",
+			bridgedInvoke.slice("<inv`masked`oke".length),
+			`\n${executableInvoke}`,
+		];
+		let output = "";
+
+		for (const chunk of chunks) {
+			for (const segment of mask.feed(chunk)) {
+				output += segment.text;
+				if (segment.recoveryBoundary) {
+					events.push(...parser.interrupt());
+				}
+				if (segment.scan) {
+					events.push(...parser.feed(segment.text));
+				}
+			}
+		}
+		for (const segment of mask.finish()) {
+			output += segment.text;
+			if (segment.scan) {
+				events.push(...parser.feed(segment.text));
+			}
+		}
+		events.push(...parser.finish());
+
+		expect(output).toBe(chunks.join(""));
+		expect(recoveredCommands(events)).toEqual(["echo executable"]);
+	});
+
+	it("accepts a longer matching fence closer", () => {
+		const input = `\`\`\`xml\n${codeInvoke}\n\`\`\`\`\n${executableInvoke}`;
+
+		expectAcrossEverySplit(input, ["echo executable"]);
+	});
+
+	it("resets an unclosed inline span on CR-only newline", () => {
+		for (const newline of ["\r", "\r\n"]) {
+			expectAcrossEverySplit(`😀 \`${codeInvoke}${newline}${executableInvoke}`, ["echo executable"]);
+		}
+	});
+
+	it("preserves order and line state through active invoke bypass", () => {
+		const mask = createRecoveryCodeMask();
+		const ordered = [
+			...mask.feed("`"),
+			...mask.feed("", { activeInvoke: true }),
+			...mask.feed("ABC😀\r", { activeInvoke: true }),
+			...mask.finish(),
+		];
+		expect(ordered.map((segment) => segment.text).join("")).toBe("`ABC😀\r");
+
+		const lineStateMask = createRecoveryCodeMask();
+		const input = `x\r\`\`\`xml\n${codeInvoke}\n\`\`\`\n${executableInvoke}`;
+		const result = runMaskWithActivePrefix(lineStateMask, input);
+		expect(result.text).toBe(input);
+		expect(recoveredCommands(result.events)).toEqual(["echo executable"]);
+	});
+
+	it("bounds arbitrarily long backtick runs", () => {
+		const ticks = "`".repeat(1_000_000);
+		const mask = createRecoveryCodeMask();
+		const duringFeed = [...mask.feed(ticks.slice(0, 500_000)), ...mask.feed(""), ...mask.feed(ticks.slice(500_000))];
+		const atFinish = mask.finish();
+
+		expect(duringFeed.map((segment) => segment.text).join("")).toBe(ticks);
+		expect(duringFeed.every((segment) => !segment.scan)).toBe(true);
+		expect(atFinish).toEqual([]);
+	});
+
+	it("rejects feed after finish", () => {
+		const mask = createRecoveryCodeMask();
+		mask.finish();
+
+		expect(mask.finish()).toEqual([]);
+		expect(() => mask.feed("later")).toThrow("Recovery code mask is finished");
+	});
 });
+
+function runMaskWithActivePrefix(mask: ReturnType<typeof createRecoveryCodeMask>, input: string): MaskRun {
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool]);
+	const events: StreamParserEvent[] = [];
+	let text = "";
+	for (const segment of mask.feed("x")) {
+		text += segment.text;
+		if (segment.scan) {
+			events.push(...parser.feed(segment.text));
+		}
+	}
+	for (const segment of mask.feed("\r", { activeInvoke: true })) {
+		text += segment.text;
+		if (segment.scan) {
+			events.push(...parser.feed(segment.text));
+		}
+	}
+	for (const segment of mask.feed(input.slice(2))) {
+		text += segment.text;
+		if (segment.scan) {
+			events.push(...parser.feed(segment.text));
+		}
+	}
+	for (const segment of mask.finish()) {
+		text += segment.text;
+		if (segment.scan) {
+			events.push(...parser.feed(segment.text));
+		}
+	}
+	events.push(...parser.finish());
+	return { text, events };
+}
