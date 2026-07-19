@@ -163,11 +163,7 @@ export function createRecoveryCodeMask(): RecoveryCodeMask {
 				continue;
 			}
 			completePendingTicks(segments);
-			const codePoint = text.codePointAt(index);
-			if (codePoint === undefined) {
-				break;
-			}
-			const character = String.fromCodePoint(codePoint);
+			const character = text.charAt(index);
 			if (state.kind === "plain") {
 				processPlainCharacter(segments, character);
 			} else if (state.kind === "inline") {
@@ -175,13 +171,13 @@ export function createRecoveryCodeMask(): RecoveryCodeMask {
 			} else {
 				processFencedCharacter(segments, character);
 			}
-			index += character.length;
+			index += 1;
 		}
 	}
 
 	function trackActiveText(text: string): void {
-		for (const character of text) {
-			updateLinePosition(character);
+		for (let index = 0; index < text.length; index += 1) {
+			updateLinePosition(text.charAt(index));
 		}
 	}
 

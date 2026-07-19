@@ -200,7 +200,39 @@ describe("recovery code masking", () => {
 		expect(mask.finish()).toEqual([]);
 		expect(() => mask.feed("later")).toThrow("Recovery code mask is finished");
 	});
+
+	it("preserves split surrogate pairs across repeated fresh masks", () => {
+		const input = "```xml meta=😀\nX\n```\nY";
+		for (let iteration = 0; iteration < 200; iteration += 1) {
+			expect(maskOutput([input.slice(0, 13), "", input.slice(13)])).toBe(input);
+		}
+	});
+
+	it("preserves emoji across every UTF-16 split around code boundaries", () => {
+		const cases = [
+			{ input: "```xml meta=😀\nX\n```\nY", activeInvoke: false },
+			{ input: "😀`😀`😀", activeInvoke: false },
+			{ input: "```😀\r\n😀\n```\r😀", activeInvoke: false },
+			{ input: "ordinary `😀 ordinary 😀` text", activeInvoke: false },
+			{ input: "😀```😀\r\n😀```\r\n😀", activeInvoke: true },
+		] as const;
+		for (const { input, activeInvoke } of cases) {
+			for (let split = 0; split <= input.length; split += 1) {
+				expect(maskOutput([input.slice(0, split), "", input.slice(split)], activeInvoke)).toBe(input);
+			}
+		}
+	});
 });
+
+function maskOutput(chunks: readonly string[], activeInvoke = false): string {
+	const mask = createRecoveryCodeMask();
+	return [
+		...chunks.flatMap((chunk) => mask.feed(chunk, activeInvoke ? { activeInvoke: true } : undefined)),
+		...mask.finish(),
+	]
+		.map((segment) => segment.text)
+		.join("");
+}
 
 function runMaskWithActivePrefix(mask: ReturnType<typeof createRecoveryCodeMask>, input: string): MaskRun {
 	const parser = createAntmlInvokeRecoveryStreamParser([bashTool]);
