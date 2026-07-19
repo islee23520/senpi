@@ -1,5 +1,40 @@
 # changes
 
+## Codex HEAD app-server catalogs, facade, and terminal envelopes (2026-07-20)
+
+### What changed
+
+- `modes/app-server/protocol/`: aligned method catalogs with the pinned Codex HEAD source, added complete experimental
+  notification metadata, and added handwritten facade types for the catalog, config, account, collaboration-mode,
+  fuzzy-search, thread-parity, terminal-error, and notification-envelope surfaces selected by the parity plan.
+- `modes/app-server/server/connection.ts`, `server/notifications.ts`, `rpc/envelope.ts`, `rpc/ndjson.ts`: gate
+  experimental notifications from the shared catalog and populate one `emittedAtMs` timestamp per notification before
+  fanout, preserving it through final transport serialization while leaving server requests untouched.
+- `modes/app-server/server/server-core.ts`: added post-response deferred actions so later thread handlers can guarantee
+  response-before-notification ordering.
+- `modes/app-server/threads/turns.ts`, `turn-adapter.ts`, `threads/projection.ts`: replaced the fork-only terminal
+  `turn/failed` wire event with Codex HEAD's ordered `error` plus failed `turn/completed` pair, sharing one `TurnError`.
+- `modes/app-server/server/models.ts`: moved model catalog runtime typing onto the handwritten facade while retaining the
+  existing remote-control behavior for its dedicated follow-up task.
+
+### Why
+
+- Codex's generated TypeScript exporter omits experimental request roots and cannot by itself describe the live HEAD
+  catalog. Senpi needs a stable, Node-compatible facade derived from both the pinned source inventory and generated
+  evidence.
+- Current Codex clients expect populated notification timestamps, capability-aware experimental delivery, and terminal
+  failures expressed through the canonical error/completion pair.
+
+### Why extension system couldn't handle this
+
+- Method catalogs, transport envelopes, response-frame ordering, and terminal event projection are app-server protocol
+  infrastructure that runs outside the coding-agent extension surface.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: the fork-only `modes/app-server/` tree. Re-derive catalogs and facade shapes from the new Codex source before
+  resolving conflicts; never hand-edit `protocol/generated/**`.
+
 ## Neo launch handoff and daemon dispatch (2026-07-06)
 
 ### What changed

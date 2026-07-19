@@ -154,7 +154,11 @@ describe("app-server connection initialize gate", () => {
 		// Then: only the non-opted-out notification is delivered after the initialize response.
 		expect(sent).toEqual([
 			{ id: 1, result: expect.any(Object) },
-			{ method: "thread/status/changed", params: { threadId: "thread-1" } },
+			{
+				method: "thread/status/changed",
+				params: { threadId: "thread-1" },
+				emittedAtMs: expect.any(Number),
+			},
 		]);
 	});
 });

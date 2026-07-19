@@ -3,8 +3,7 @@ import { AuthStorage } from "../../../core/auth-storage.ts";
 import { ModelRegistry } from "../../../core/model-registry.ts";
 import { defaultModelPerProvider } from "../../../core/model-resolver.ts";
 import { getSupportedThinkingLevels } from "../../../core/thinking-levels.ts";
-import type { ModelListParams, ModelListResponse } from "../protocol/generated/v2/index.ts";
-import type { Model as WireModel } from "../protocol/generated/v2/Model.ts";
+import type { ModelListParams, ModelListResponse, Model as WireModel } from "../protocol/index.ts";
 import type { MethodRegistry } from "../rpc/registry.ts";
 
 export interface AppServerModelRegistry {

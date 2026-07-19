@@ -64,7 +64,6 @@ try {
 	}
 
 	await fake.stop();
-	scratch.cleanup();
 	pass(transcript, "real-client");
 } catch (error) {
 	fail(transcript, "real-client", error);

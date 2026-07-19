@@ -272,7 +272,11 @@ describe("app-server thread lifecycle handlers", () => {
 
 		// Then: the broadcast and read response expose the new name.
 		expect(connection.received).toEqual([
-			{ method: "thread/name/updated", params: { threadId, threadName: "Todo 12" } },
+			{
+				method: "thread/name/updated",
+				params: { threadId, threadName: "Todo 12" },
+				emittedAtMs: expect.any(Number),
+			},
 		]);
 		expect(objectAt(responseResult(read), "thread").name).toBe("Todo 12");
 	});

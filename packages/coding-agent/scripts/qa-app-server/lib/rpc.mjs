@@ -23,6 +23,10 @@ export class StdioRpcClient {
 		return this.messages.length;
 	}
 
+	assertServerEnvelopes() {
+		return assertServerEnvelopes(this.messages, this.transcript, this.label);
+	}
+
 	notify(method, params = {}) {
 		this.write({ method, params });
 	}
@@ -96,6 +100,10 @@ export class WebSocketRpcClient {
 
 	mark() {
 		return this.messages.length;
+	}
+
+	assertServerEnvelopes() {
+		return assertServerEnvelopes(this.messages, this.transcript, this.label);
 	}
 
 	notify(method, params = {}) {
@@ -219,6 +227,30 @@ export function requiredThreadId(result) {
 		throw new ProbeError(`missing thread id in ${JSON.stringify(result)}`);
 	}
 	return threadId;
+}
+
+function assertServerEnvelopes(messages, transcript, label) {
+	let notificationCount = 0;
+	let serverRequestCount = 0;
+	for (const message of messages) {
+		if (typeof message !== "object" || message === null || typeof message.method !== "string") continue;
+		if ("id" in message) {
+			serverRequestCount += 1;
+			if ("emittedAtMs" in message) {
+				throw new ProbeError(`server request ${message.method} unexpectedly included emittedAtMs`);
+			}
+			continue;
+		}
+		notificationCount += 1;
+		if (!Number.isSafeInteger(message.emittedAtMs) || message.emittedAtMs <= 0) {
+			throw new ProbeError(`notification ${message.method} missing populated emittedAtMs`);
+		}
+	}
+	if (notificationCount === 0) throw new ProbeError("no server notifications were observed");
+	transcript.push(
+		`[${label} assert] notifications=${notificationCount} emittedAtMs=populated serverRequests=${serverRequestCount} emittedAtMs=absent`,
+	);
+	return { notificationCount, serverRequestCount };
 }
 
 export function pass(transcript, name) {

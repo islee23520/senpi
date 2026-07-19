@@ -28,7 +28,7 @@
     ]
   },
   "catalogCounts": {
-    "serverNotifications": 69,
+    "serverNotifications": 72,
     "serverRequests": 11
   },
   "out": {
@@ -42,7 +42,9 @@
       "account/sendAddCreditsNudgeEmail",
       "account/usage/read",
       "account/workspaceMessages/read",
+      "app/installed",
       "app/list",
+      "app/read",
       "command/exec",
       "command/exec/resize",
       "command/exec/terminate",
@@ -112,6 +114,8 @@
     "experimental": [
       "collaborationMode/list",
       "environment/add",
+      "environment/info",
+      "environment/status",
       "fuzzyFileSearch/sessionStart",
       "fuzzyFileSearch/sessionStop",
       "fuzzyFileSearch/sessionUpdate",
@@ -132,6 +136,7 @@
       "thread/backgroundTerminals/terminate",
       "thread/decrement_elicitation",
       "thread/increment_elicitation",
+      "thread/items/list",
       "thread/memoryMode/set",
       "thread/realtime/appendAudio",
       "thread/realtime/appendSpeech",
@@ -140,8 +145,8 @@
       "thread/realtime/start",
       "thread/realtime/stop",
       "thread/search",
+      "thread/searchOccurrences",
       "thread/settings/update",
-      "thread/turns/items/list",
       "thread/turns/list"
     ]
   },

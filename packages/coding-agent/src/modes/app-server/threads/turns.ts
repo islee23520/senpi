@@ -31,6 +31,7 @@ import {
 	toTurnEngineError,
 	wireItemToJson,
 } from "./turn-runtime.ts";
+import { emitTurnTerminalNotifications } from "./turn-terminal.ts";
 
 export {
 	type TurnEngineApi,
@@ -238,7 +239,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		entry.status = "idle";
 		entry.updatedAt = new Date(completedAtMs).toISOString();
 		this.pendingByThreadId.delete(threadId);
-		this.emitToThread(threadId, { method: "turn/completed", params: { threadId, turn } });
+		emitTurnTerminalNotifications(threadId, turn, this.emitToThread);
 		this.broadcast({ method: "thread/status/changed", params: { threadId, status: { type: "idle" } } });
 		pending.resolve();
 	}

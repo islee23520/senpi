@@ -1,6 +1,6 @@
 import type { AgentSession } from "../../core/agent-session.ts";
 import type { TurnInterruptParams, TurnStartParams, TurnSteerParams, UserInput } from "./protocol/index.ts";
-import type { ClassifiedIncoming, RpcEnvelope, RpcResponse } from "./rpc/envelope.ts";
+import type { ClassifiedIncoming, RpcResponse } from "./rpc/envelope.ts";
 import type { MethodRegistry, RpcRequest } from "./rpc/registry.ts";
 import type { ApprovalBridge } from "./server/approvals.ts";
 import type { Connection, ConnectionId, ConnectionInput, TransportKind } from "./server/connection.ts";
@@ -104,7 +104,7 @@ class RoutedServerCore extends ServerCore {
 			get optOutNotificationMethods() {
 				return [...connection.optOutNotificationMethods];
 			},
-			send: (notification) => connection.send(notification as RpcEnvelope),
+			send: (message) => connection.send(message),
 			close: () => {
 				void connection.close("slow-client");
 			},

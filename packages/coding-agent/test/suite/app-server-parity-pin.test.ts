@@ -261,6 +261,7 @@ describe("app-server parity characterization pins", () => {
 		const router = new NotificationRouter({ connections: [connection], threads: [entry] });
 		router.toThread("pin-thread", { method: "turn/completed", params: { turnId: "turn-1" } });
 		router.toThread("pin-thread", { method: "error", params: { turnId: "turn-2" } });
+		router.toThread("pin-thread", { method: "turn/failed", params: { turnId: "retired-turn" } });
 		if (process.env.SENPI_APP_SERVER_PIN_MUTATION === "terminal-queue") {
 			entry.queuedTerminalNotifications.reverse();
 		}

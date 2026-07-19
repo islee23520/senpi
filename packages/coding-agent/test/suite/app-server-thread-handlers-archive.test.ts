@@ -100,7 +100,9 @@ describe("app-server thread archive lifecycle handlers", () => {
 		});
 
 		// Then: archive emits the typed notification, unloads the runtime, and list filters by archive state.
-		expect(connection.received).toEqual([{ method: "thread/archived", params: { threadId: archived } }]);
+		expect(connection.received).toEqual([
+			{ method: "thread/archived", params: { threadId: archived }, emittedAtMs: expect.any(Number) },
+		]);
 		expect(() => threads.getLoadedThread(archived)).toThrow();
 		expect(threadIdsFromList(defaultList)).toContain(active);
 		expect(threadIdsFromList(defaultList)).not.toContain(archived);
@@ -123,7 +125,9 @@ describe("app-server thread archive lifecycle handlers", () => {
 		const listed = await registry.dispatch(connection, { id: 24, method: "thread/list", params: {} });
 
 		// Then: the delete notification is broadcast and the thread no longer appears.
-		expect(connection.received).toEqual([{ method: "thread/deleted", params: { threadId } }]);
+		expect(connection.received).toEqual([
+			{ method: "thread/deleted", params: { threadId }, emittedAtMs: expect.any(Number) },
+		]);
 		expect(dataArray(responseResult(loaded))).not.toContain(threadId);
 		expect(threadIdsFromList(listed)).not.toContain(threadId);
 	});

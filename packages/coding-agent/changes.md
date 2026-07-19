@@ -1,5 +1,25 @@
 # Local fork changes
 
+## 2026-07-20 — Codex HEAD app-server facade and contract fixtures
+
+- Changed:
+  - `src/modes/app-server/protocol/` and related app-server runtime seams: added the handwritten Node-compatible facade,
+    HEAD method/experimental-notification catalogs, populated notification envelopes, deferred post-response actions,
+    and the canonical terminal error/completion pair.
+  - `test/fixtures/app-server-methods-codex-head.json`, app-server facade/error/notification/dispatch/terminal suites, and
+    the QA capability manifest: pin the source-derived catalogs and the intended wire behavior without importing the
+    generated tree at runtime. The source-driven QA probes also assert that notification timestamps survive transport
+    serialization while approval server requests remain unstamped.
+- Why: Codex's generated TypeScript exporter intentionally excludes experimental request roots, while Senpi still needs
+  a complete typed contract for the capability-mapped parity work and evidence that catalog or envelope drift fails
+  loudly.
+- What changed: protocol/runtime/test surface only; the generated Codex fixture remains byte-identical and the existing
+  remote-control response is intentionally left for its later implementation task.
+- Why the extension system could not handle this: app-server method registration, transport envelopes, and JSON-RPC
+  frame ordering happen below the extension API.
+- Merge-conflict risk: low. The app-server tree and HEAD fixture are fork-only; on a future Codex pin, regenerate evidence
+  first and then re-derive the handwritten facade.
+
 ## 2026-07-07 — pi-pty workspace dependency groundwork
 
 - Changed:

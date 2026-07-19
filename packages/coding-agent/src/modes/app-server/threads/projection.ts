@@ -1,6 +1,5 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "../../../core/agent-session.ts";
-import { codexErrorInfo, serializeCodexErrorInfo } from "../rpc/errors.ts";
 import { MessageItemProjector } from "./projection-message-items.ts";
 import {
 	type AssistantMessageEvent,
@@ -113,7 +112,7 @@ export class EventProjector {
 				};
 			case "error":
 				return {
-					notifications: [this.errorNotification(event.error.errorMessage ?? "Agent turn failed")],
+					notifications: [],
 					turnCompletion: {
 						status: event.reason === "aborted" ? "interrupted" : "failed",
 						errorMessage: event.error.errorMessage,
@@ -245,13 +244,6 @@ export class EventProjector {
 			this.options.turnLog?.appendItem(this.options.threadId, this.options.turnId, wireItem);
 		}
 		return this.notification("item/completed", { item: wireItem, completedAtMs: this.nowMs() });
-	}
-
-	private errorNotification(message: string): ProjectedNotification {
-		return this.notification("error", {
-			error: { message, codexErrorInfo: serializeCodexErrorInfo(codexErrorInfo.other()), additionalDetails: null },
-			willRetry: false,
-		});
 	}
 
 	private notification(method: string, params: Record<string, unknown>): ProjectedNotification {
