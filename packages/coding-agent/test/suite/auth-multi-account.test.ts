@@ -22,9 +22,9 @@ describe("current single-account auth storage characterization", () => {
 		expect(storage.get("anthropic")).toEqual({ type: "api_key", key: "second-anthropic-key" });
 		expect(storage.get("openai")).toEqual({ type: "api_key", key: "openai-key" });
 		expect(await storage.list()).toEqual([
-		{ providerId: "anthropic", type: "api_key" },
-		{ providerId: "openai", type: "api_key" },
-	]);
+			{ providerId: "anthropic", type: "api_key" },
+			{ providerId: "openai", type: "api_key" },
+		]);
 	});
 });
 
@@ -287,5 +287,4 @@ describe("multi-account credential contracts", () => {
 		expect(selected?.headers).toEqual({ "x-project": "proj-123" });
 		resetOAuthProviders();
 	});
-
 });
