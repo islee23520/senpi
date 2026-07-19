@@ -36,6 +36,7 @@ export * from "./models.ts";
 export * from "./models-store.ts";
 export * from "./providers/faux.ts";
 export * from "./session-resources.ts";
+export { shouldRecoverTextToolCalls } from "./tool-call-middleware/index.ts";
 export * from "./types.ts";
 export * from "./utils/diagnostics.ts";
 export * from "./utils/event-stream.ts";
