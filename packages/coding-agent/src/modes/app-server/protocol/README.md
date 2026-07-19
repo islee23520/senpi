@@ -1,17 +1,22 @@
 # Codex app-server protocol
 
-This directory vendors the TypeScript protocol generated from `codex-cli 0.142.5`.
+This directory vendors the TypeScript protocol fixture from Codex git commit
+`0fb559f0f6e231a88ac02ea002d3ecd248e2b515` (author date 2026-07-18).
 
 Generated source:
 
 ```bash
-codex app-server generate-ts --experimental --out src/modes/app-server/protocol/generated
+packages/coding-agent/scripts/generate-app-server-protocol.sh \
+  --from-checkout /Users/yeongyu/local-workspaces/codex
 ```
 
-The generated `.ts` payload was copied verbatim from:
+Checkout mode recursively copies this Codex-maintained fixture verbatim, deletes
+files no longer present upstream, preserves only the local `generated/package.json`
+compilation shim, and derives `PROTOCOL_VERSION.txt` from the checkout's HEAD SHA
+and author date:
 
 ```text
-.omo/ulw-research/20260702-114518/raw/schema-ts-experimental
+/Users/yeongyu/local-workspaces/codex/codex-rs/app-server-protocol/schema/typescript
 ```
 
 Do not hand-edit files under `generated/`. Update them with
