@@ -159,6 +159,12 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.render(120)[1])).toContain("$1.234 (sub)");
+		// Fork footer renders one combined stats line; assert against the full render
+		// instead of upstream's two-line layout index.
+		const renderedFooter = footer
+			.render(120)
+			.map((line) => stripAnsi(line))
+			.join("\n");
+		expect(renderedFooter).toContain("$1.234 (sub)");
 	});
 });

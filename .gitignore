@@ -30,7 +30,6 @@ packages/*/dist/*
 !packages/coding-agent/dist/cli.js
 packages/*/dist-chrome/
 packages/*/dist-firefox/
-packages/ai/src/providers/data/
 *.cpuprofile
 
 # Environment

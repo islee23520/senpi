@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DefaultResourceLoader } from "../../../src/core/resource-loader.ts";
+import { SettingsManager } from "../../../src/core/settings-manager.ts";
 import type { ExtensionAPI } from "../../../src/index.ts";
 
 const noop: (pi: ExtensionAPI) => void = () => {};
@@ -80,6 +81,10 @@ describe("inline extension naming", () => {
 		const loader = new DefaultResourceLoader({
 			cwd,
 			agentDir,
+			// DefaultResourceLoader loads the fork's builtin and bundled extensions by default.
+			// Isolate this fixture to only the inline factory via the real settings allowlist so the
+			// length-1 assertion below keeps proving exact loader contents, not a filtered subset.
+			settingsManager: SettingsManager.inMemory({ enabledBuiltinExtensions: [] }),
 			noSkills: true,
 			noPromptTemplates: true,
 			noThemes: true,

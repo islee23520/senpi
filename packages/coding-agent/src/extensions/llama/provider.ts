@@ -61,7 +61,11 @@ export function createLlamaProvider(): LlamaProviderController {
 	let models: readonly Model<"openai-completions">[] = [];
 
 	const setCatalog = (catalog: readonly LlamaModelInfo[], serverUrl: string): void => {
-		models = catalog.filter((model) => model.status.value === "loaded").map((model) => toPiModel(model, serverUrl));
+		// Sleeping runners stay discoverable: the router wakes them on demand, so they
+		// remain usable models even though no runner process is currently loaded.
+		models = catalog
+			.filter((model) => model.status.value === "loaded" || model.status.value === "sleeping")
+			.map((model) => toPiModel(model, serverUrl));
 	};
 
 	const provider: Provider<"openai-completions"> = {

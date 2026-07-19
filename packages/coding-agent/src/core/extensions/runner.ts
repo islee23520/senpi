@@ -13,6 +13,7 @@ import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { SessionManager } from "../session-manager.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
+import { drainPendingProviderRegistrations } from "./loader.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -441,41 +442,31 @@ export class ExtensionRunner {
 		this.getLoadedHookSourcesFn = contextActions.getLoadedHookSources;
 		this.getSystemPromptOptionsFn = contextActions.getSystemPromptOptions ?? (() => ({ cwd: this.cwd }));
 
-		// Flush provider registrations queued during extension loading
-		for (const { name, config, extensionPath } of this.runtime.pendingProviderRegistrations) {
+		// Flush provider registrations queued during extension loading, replaying the
+		// original call order so last-registration-wins holds across mixed
+		// legacy (name/config) and native registrations.
+		for (const registration of drainPendingProviderRegistrations(this.runtime)) {
 			try {
-				if (providerActions?.registerProvider) {
-					providerActions.registerProvider(name, config);
+				if (registration.kind === "config") {
+					if (providerActions?.registerProvider) {
+						providerActions.registerProvider(registration.name, registration.config);
+					} else {
+						this.modelRegistry.registerProvider(registration.name, registration.config);
+					}
+				} else if (providerActions?.registerNativeProvider) {
+					providerActions.registerNativeProvider(registration.provider);
 				} else {
-					this.modelRegistry.registerProvider(name, config);
+					this.modelRegistry.registerProvider(registration.provider);
 				}
 			} catch (err) {
 				this.emitError({
-					extensionPath,
+					extensionPath: registration.extensionPath,
 					event: "register_provider",
 					error: err instanceof Error ? err.message : String(err),
 					stack: err instanceof Error ? err.stack : undefined,
 				});
 			}
 		}
-		this.runtime.pendingProviderRegistrations = [];
-		for (const { provider, extensionPath } of this.runtime.pendingNativeProviderRegistrations) {
-			try {
-				if (providerActions?.registerNativeProvider) {
-					providerActions.registerNativeProvider(provider);
-				} else {
-					this.modelRegistry.registerProvider(provider);
-				}
-			} catch (err) {
-				this.emitError({
-					extensionPath,
-					event: "register_provider",
-					error: err instanceof Error ? err.message : String(err),
-					stack: err instanceof Error ? err.stack : undefined,
-				});
-			}
-		}
-		this.runtime.pendingNativeProviderRegistrations = [];
 
 		// From this point on, provider registration/unregistration takes effect immediately
 		// without requiring a /reload.

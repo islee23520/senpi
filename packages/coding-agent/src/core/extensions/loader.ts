@@ -41,6 +41,7 @@ import type {
 	ExtensionRuntime,
 	LoadExtensionsResult,
 	MessageRenderer,
+	PendingProviderRegistration,
 	ProviderConfig,
 	RegisteredCommand,
 	RegisteredMcpServerDeclaration,
@@ -238,6 +239,9 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		throw new Error("Extension runtime not initialized. Action methods cannot be called during extension loading.");
 	};
 	const state: { staleMessage?: string } = {};
+	// Shared sequence across the legacy and native pre-bind queues so flushers
+	// can replay registrations in original call order (last-registration-wins).
+	let nextProviderRegistrationOrder = 0;
 	const assertActive = () => {
 		if (state.staleMessage) {
 			throw new Error(state.staleMessage);
@@ -273,10 +277,19 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		// Pre-bind: queue registrations so bindCore() can flush them once the
 		// model registry is available. bindCore() replaces both with direct calls.
 		registerProvider: (name, config, extensionPath = "<unknown>") => {
-			runtime.pendingProviderRegistrations.push({ name, config, extensionPath });
+			runtime.pendingProviderRegistrations.push({
+				name,
+				config,
+				extensionPath,
+				order: nextProviderRegistrationOrder++,
+			});
 		},
 		registerNativeProvider: (provider, extensionPath = "<unknown>") => {
-			runtime.pendingNativeProviderRegistrations.push({ provider, extensionPath });
+			runtime.pendingNativeProviderRegistrations.push({
+				provider,
+				extensionPath,
+				order: nextProviderRegistrationOrder++,
+			});
 		},
 		unregisterProvider: (name) => {
 			runtime.pendingProviderRegistrations = runtime.pendingProviderRegistrations.filter((r) => r.name !== name);
@@ -287,6 +300,25 @@ export function createExtensionRuntime(): ExtensionRuntime {
 	};
 
 	return runtime;
+}
+
+/**
+ * Drain queued pre-bind provider registrations in original call order.
+ *
+ * Legacy (name/config) and native registrations queue in separate arrays during
+ * extension loading, each stamped with a shared sequence number. Flushers replay
+ * entries ordered by that sequence so mixed registerProvider(name, config) /
+ * registerProvider(provider) calls keep last-registration-wins. Clears both queues.
+ */
+export function drainPendingProviderRegistrations(runtime: ExtensionRuntime): PendingProviderRegistration[] {
+	const drained: PendingProviderRegistration[] = [
+		...runtime.pendingProviderRegistrations.map((entry) => ({ kind: "config" as const, ...entry })),
+		...runtime.pendingNativeProviderRegistrations.map((entry) => ({ kind: "native" as const, ...entry })),
+	];
+	drained.sort((a, b) => a.order - b.order);
+	runtime.pendingProviderRegistrations = [];
+	runtime.pendingNativeProviderRegistrations = [];
+	return drained;
 }
 
 /**
