@@ -27,13 +27,16 @@ vi.mock("../../src/tool-call-middleware/protocols/anthropic-xml/recovery-wrapper
 			typeof import("../../src/tool-call-middleware/protocols/anthropic-xml/recovery-wrapper-state.ts")
 		>();
 	class InstrumentedRecoveryWrapperState extends actual.RecoveryWrapperState {
+		private observed = "";
+
 		override feed(character: string) {
+			this.observed += character;
 			const actions = super.feed(character);
-			const state = this as unknown as { opening: string; beforeKnown: string; recovered: boolean; tag: string };
+			const state = this as unknown as { opening: string; recovered: boolean; tag: string };
 			wrapperWork.calls += 1;
 			wrapperWork.maxRetained = Math.max(
 				wrapperWork.maxRetained,
-				state.recovered ? state.tag.length : state.opening.length + state.beforeKnown.length + state.tag.length,
+				state.recovered ? state.tag.length : state.opening.length + this.observed.length,
 			);
 			return actions;
 		}
@@ -119,6 +122,53 @@ it("bounds a partial opening tag before toolcall_start and recovers", () => {
 		protocol: "antml",
 		retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
 	});
+	expect(toolCallEnds(recoveryEvents)).toEqual([
+		expect.objectContaining({ id: "recovered-antml-0", arguments: { command: "echo recovered" } }),
+	]);
+});
+
+it("does not double count an unknown-only wrapper fragment", () => {
+	// Given
+	const onError = vi.fn();
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
+	const wrapper = "<function_calls>";
+	const fragment = `<${"x".repeat(32_759)}<`;
+	const input = `${wrapper}${fragment}`;
+
+	// When
+	const events = [...feedUnits(parser, input), ...parser.finish()];
+
+	// Then
+	expect(input.length).toBe(32_777);
+	expect(textOutput(events)).toBe(input);
+	expect(onError).not.toHaveBeenCalled();
+	expect(wrapperWork.maxRetained, `wrapper work: ${JSON.stringify(wrapperWork)}`).toBeLessThanOrEqual(input.length);
+});
+
+it("preserves unknown-only wrapper text across fragment overflow", () => {
+	// Given
+	const onError = vi.fn();
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
+	const wrapper = "<function_calls>";
+	const fragment = `<${"x".repeat(32_759)}<`;
+	const trailing = `${"y".repeat(ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - wrapper.length - fragment.length)}😀</function_calls>`;
+	const input = `${wrapper}${fragment}${trailing}`;
+
+	// When
+	const events = feedUnits(parser, input);
+	const recoveryEvents = [...parser.feed(validCall), ...parser.finish()];
+
+	// Then
+	expect(textOutput(events)).toBe(input);
+	expect(onError).toHaveBeenCalledTimes(1);
+	expect(onError).toHaveBeenCalledWith("ANTML recovery fragment exceeded the retained-input limit.", {
+		protocol: "antml",
+		retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
+	});
+	expect(JSON.stringify(onError.mock.calls)).not.toContain(fragment);
+	expect(wrapperWork.maxRetained, `wrapper work: ${JSON.stringify(wrapperWork)}`).toBe(
+		ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
+	);
 	expect(toolCallEnds(recoveryEvents)).toEqual([
 		expect.objectContaining({ id: "recovered-antml-0", arguments: { command: "echo recovered" } }),
 	]);

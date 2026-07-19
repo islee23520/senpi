@@ -39,9 +39,9 @@ export class RecoveryWrapperState {
 			return this.literal(character);
 		}
 		if (character === "<") {
-			const actions = this.literal(this.tag);
+			const tag = this.tag;
 			this.tag = "<";
-			return actions;
+			return this.literal(tag);
 		}
 		const overflow = this.preAppendOverflow(character);
 		if (overflow) {
