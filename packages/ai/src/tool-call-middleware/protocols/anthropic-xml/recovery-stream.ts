@@ -32,6 +32,10 @@ function emitText(events: StreamParserEvent[], text: string): void {
 	}
 }
 
+function exceedsRetainedLimit(retainedLength: number, incoming: string): boolean {
+	return retainedLength + incoming.length > ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH;
+}
+
 /** Recovery-only eager ANTML parser; existing text-protocol parser semantics remain unchanged. */
 export function createInvokeRecoveryStreamParser(
 	tools: readonly Tool[],
@@ -152,6 +156,13 @@ export function createInvokeRecoveryStreamParser(
 			idle.tag = "<";
 			return;
 		}
+		if (exceedsRetainedLimit(idle.tag.length, character)) {
+			reportOverflow(idle.tag.length);
+			emitText(events, idle.tag);
+			state = { kind: "idle", tag: "" };
+			feedIdleCharacter(events, character, state);
+			return;
+		}
 		idle.tag += character;
 		if (character === ">") {
 			handleIdleTag(events, idle);
@@ -178,14 +189,28 @@ export function createInvokeRecoveryStreamParser(
 			} else {
 				reportOverflow(action.retainedLength);
 				emitText(events, action.text);
-				if (!action.retainsWrapper) {
+				if (action.retainsWrapper && action.nextCharacter) {
+					feedWrapperCharacter(events, scanner, action.nextCharacter);
+				} else if (!action.retainsWrapper) {
 					state = { kind: "idle", tag: "" };
+					if (action.nextCharacter) {
+						feedIdleCharacter(events, action.nextCharacter, state);
+					}
 				}
 			}
 		}
 	}
 
 	function feedActiveCharacter(events: StreamParserEvent[], active: ActiveState, character: string): void {
+		if (exceedsRetainedLimit(active.source.length, character)) {
+			overflowActive(events, active);
+			if (state.kind === "wrapper") {
+				feedWrapperCharacter(events, state.scanner, character);
+			} else if (state.kind === "idle") {
+				feedIdleCharacter(events, character, state);
+			}
+			return;
+		}
 		active.source += character;
 		if (active.closeMatcher.feed(character)) {
 			finishActive(events, active);

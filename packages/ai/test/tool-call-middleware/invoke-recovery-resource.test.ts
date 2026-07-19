@@ -62,6 +62,17 @@ function toolCallEnds(events: readonly StreamParserEvent[]): Extract<StreamParse
 	);
 }
 
+function feedUnits(
+	parser: ReturnType<typeof createAntmlInvokeRecoveryStreamParser>,
+	input: string,
+): StreamParserEvent[] {
+	const events: StreamParserEvent[] = [];
+	for (const unit of input) {
+		events.push(...parser.feed(unit));
+	}
+	return events;
+}
+
 beforeEach(() => {
 	scanWork.calls = 0;
 	scanWork.codeUnits = 0;
@@ -111,6 +122,85 @@ it("bounds a partial opening tag before toolcall_start and recovers", () => {
 	expect(toolCallEnds(recoveryEvents)).toEqual([
 		expect.objectContaining({ id: "recovered-antml-0", arguments: { command: "echo recovered" } }),
 	]);
+});
+
+it("bounds UTF-16 surrogate crossings before recovery start", () => {
+	// Given
+	const onError = vi.fn();
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
+	const openingPrefix = '<invoke name="';
+	const prefix = `${openingPrefix}${"x".repeat(ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - 1 - openingPrefix.length)}`;
+
+	// When
+	const events = [...feedUnits(parser, prefix), ...feedUnits(parser, "😀")];
+	const recoveryEvents = [...parser.feed(validCall), ...parser.finish()];
+
+	// Then
+	expect(textOutput(events)).toBe(`${prefix}😀`);
+	expect(onError).toHaveBeenCalledWith("ANTML recovery fragment exceeded the retained-input limit.", {
+		protocol: "antml",
+		retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - 1,
+	});
+	expect(JSON.stringify(onError.mock.calls)).not.toContain(prefix);
+	expect(toolCallEnds(recoveryEvents)).toEqual([
+		expect.objectContaining({ id: "recovered-antml-0", arguments: { command: "echo recovered" } }),
+	]);
+});
+
+it("bounds UTF-16 surrogate crossings during an active recovery", () => {
+	// Given
+	const onError = vi.fn();
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
+	const opening = '<invoke name="Bash">';
+	const activePrefix = "x".repeat(ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - opening.length - 1);
+
+	// When
+	parser.feed(opening);
+	feedUnits(parser, activePrefix);
+	const crossingEvents = feedUnits(parser, "😀");
+	const recoveryEvents = [...parser.feed(validCall), ...parser.finish()];
+
+	// Then
+	expect(textOutput(crossingEvents)).toBe("😀");
+	expect(toolCallEnds(crossingEvents)).toEqual([
+		expect.objectContaining({ incomplete: true, errorMessage: "Tool call stream ended before completion" }),
+	]);
+	expect(onError).toHaveBeenCalledWith("ANTML recovery fragment exceeded the retained-input limit.", {
+		protocol: "antml",
+		retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - 1,
+	});
+	expect(toolCallEnds(recoveryEvents)).toEqual([
+		expect.objectContaining({ id: "recovered-antml-1", arguments: { command: "echo recovered" } }),
+	]);
+});
+
+it("bounds UTF-16 surrogate crossings after a recovered wrapper call", () => {
+	// Given
+	const onError = vi.fn();
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
+	const knownWrapperCall = '<function_calls><invoke name="Bash"><parameter name="command">one</parameter></invoke>';
+	const prefix = `<${"x".repeat(ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - 2)}`;
+
+	// When
+	parser.feed(knownWrapperCall);
+	const crossingEvents = [...feedUnits(parser, prefix), ...feedUnits(parser, "😀")];
+	const closeEvents = parser.feed("</function_calls>");
+	const recoveryEvents = [...parser.feed(validCall), ...parser.finish()];
+
+	// Then
+	expect(textOutput(crossingEvents)).toBe(`${prefix}😀`);
+	expect(onError).toHaveBeenCalledWith("ANTML recovery fragment exceeded the retained-input limit.", {
+		protocol: "antml",
+		retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - 1,
+	});
+	expect(JSON.stringify(onError.mock.calls)).not.toContain(prefix);
+	expect(textOutput(closeEvents)).toBe("");
+	expect(toolCallEnds(recoveryEvents)).toEqual([
+		expect.objectContaining({ id: "recovered-antml-1", arguments: { command: "echo recovered" } }),
+	]);
+	expect(wrapperWork.maxRetained, `wrapper work: ${JSON.stringify(wrapperWork)}`).toBeLessThanOrEqual(
+		ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
+	);
 });
 
 it("bounds partial tags after a recovered wrapper call", () => {

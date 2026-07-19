@@ -3,16 +3,19 @@ import { findFunctionCallsCloseTag } from "./invoke-stream-helpers.ts";
 import { findInvokeOpenTag } from "./invoke-tag-scanner.ts";
 import { ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH } from "./stream-boundary.ts";
 
+type RecoveryWrapperOverflowAction = {
+	readonly type: "overflow";
+	readonly text: string;
+	readonly retainedLength: number;
+	readonly retainsWrapper: boolean;
+	readonly nextCharacter?: string;
+};
+
 export type RecoveryWrapperAction =
 	| { readonly type: "text"; readonly text: string }
 	| { readonly type: "known"; readonly textBefore: string; readonly opening: string; readonly tool: Tool }
 	| { readonly type: "closed"; readonly text: string }
-	| {
-			readonly type: "overflow";
-			readonly text: string;
-			readonly retainedLength: number;
-			readonly retainsWrapper: boolean;
-	  };
+	| RecoveryWrapperOverflowAction;
 
 /** Owns a function_calls wrapper until its matching close, preserving interior literal text. */
 export class RecoveryWrapperState {
@@ -39,6 +42,10 @@ export class RecoveryWrapperState {
 			const actions = this.literal(this.tag);
 			this.tag = "<";
 			return actions;
+		}
+		const overflow = this.preAppendOverflow(character);
+		if (overflow) {
+			return [overflow];
 		}
 		this.tag += character;
 		if (character !== ">") {
@@ -77,14 +84,27 @@ export class RecoveryWrapperState {
 	}
 
 	private checkOverflow(): RecoveryWrapperAction[] {
-		const retainedLength = this.recovered
-			? this.tag.length
-			: this.opening.length + this.beforeKnown.length + this.tag.length;
+		const retainedLength = this.retainedLength();
 		if (retainedLength !== ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH) {
 			return [];
 		}
+		return [this.flushOverflow(retainedLength)];
+	}
+
+	private preAppendOverflow(character: string): RecoveryWrapperOverflowAction | undefined {
+		const retainedLength = this.retainedLength();
+		return retainedLength + character.length > ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH
+			? { ...this.flushOverflow(retainedLength), nextCharacter: character }
+			: undefined;
+	}
+
+	private retainedLength(): number {
+		return this.recovered ? this.tag.length : this.opening.length + this.beforeKnown.length + this.tag.length;
+	}
+
+	private flushOverflow(retainedLength: number): RecoveryWrapperOverflowAction {
 		const text = this.recovered ? this.tag : this.opening + this.beforeKnown + this.tag;
 		this.tag = "";
-		return [{ type: "overflow", text, retainedLength, retainsWrapper: this.recovered }];
+		return { type: "overflow", text, retainedLength, retainsWrapper: this.recovered };
 	}
 }
