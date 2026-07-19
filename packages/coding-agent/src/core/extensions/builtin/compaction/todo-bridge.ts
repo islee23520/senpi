@@ -10,7 +10,7 @@ export interface TodoEntry {
 	id?: string;
 	content?: string;
 	text?: string;
-	status?: "pending" | "in_progress" | "completed" | "abandoned" | "cancelled";
+	status?: string;
 }
 
 export type TodoSnapshotItems = TodoEntry[] | TodoPhase[];
@@ -42,14 +42,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isTodoStatus(value: unknown): value is TodoEntry["status"] {
-	return (
-		value === undefined ||
-		value === "pending" ||
-		value === "in_progress" ||
-		value === "completed" ||
-		value === "abandoned" ||
-		value === "cancelled"
-	);
+	// Legacy todowrite entries carried arbitrary status strings (e.g. "blocked").
+	// The bridge is a pass-through snapshot carrier, not a validator: preserve
+	// every string-status entry so restore never silently drops legacy todos.
+	return value === undefined || typeof value === "string";
 }
 
 function isTodoEntry(value: unknown): value is TodoEntry {

@@ -251,4 +251,29 @@ describe("compaction todo preservation", () => {
 			});
 		});
 	});
+
+	describe("Given a legacy id-keyed todo entry with a status outside the canonical set", () => {
+		describe("When findTodoEntries reads it for a compaction snapshot", () => {
+			it("Then the entry is preserved instead of silently dropped", () => {
+				const legacyEntry: CustomEntry = {
+					type: "custom",
+					id: "legacy-blocked-todos",
+					parentId: "legacy-root",
+					timestamp: "2025-01-15T17:04:00.000Z",
+					customType: "todo-list",
+					data: {
+						todos: [
+							{ id: "todo-legacy", content: "Formerly blocked work", status: "blocked" },
+							{ id: "todo-open", content: "Open work", status: "pending" },
+						],
+					},
+				};
+
+				const restored = findTodoEntries([legacyEntry], { branchId: "legacy-root" });
+
+				expect(restored.map((todo) => todo.id)).toEqual(["todo-legacy", "todo-open"]);
+				expect(restored[0]?.status).toBe("blocked");
+			});
+		});
+	});
 });
