@@ -8,6 +8,8 @@
     live FPS refreshes.
   - `test/suite/regressions/4167-thinking-toggle-pending-tool-render.test.ts`: extends the prototype harness with the
     tool-argument reveal flush seam used when pending components are rebuilt.
+  - `test/interactive-mode-status.test.ts`: extends the active-tool lifecycle fixture with the tool-argument reveal
+    flush/finish seams and direct exact-argument update surface.
 - Why: streamed tool arguments need the same stable cadence as assistant text without exposing malformed Unicode or
   allowing a stale timer to overwrite exact execution arguments.
 - What changed: focused package test coverage; runtime changes are tracked in the nearest `src/**/changes.md` files.
