@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
+import { registerTodoCommand } from "./commands.ts";
 import { TASK_MANAGEMENT_SECTION } from "./prompt.ts";
 import { clonePhases, getLatestPhasesFromBranchEntries, getTodoWidgetLines, type TodoPhase } from "./state.ts";
 import { registerTodoTool } from "./tools/todo.ts";
@@ -40,8 +41,11 @@ export default function todotoolsExtension(pi: ExtensionAPI): void {
 	});
 
 	registerTodoTool(pi, { getCurrentPhases, setCurrentPhases, syncWidget });
+	registerTodoCommand(pi, { getCurrentPhases, setCurrentPhases, syncWidget });
 }
 
+export { findPhaseFuzzy, findTaskFuzzy, registerTodoCommand, tokenizeTodoArgs } from "./commands.ts";
+export { markdownToPhases, phasesToMarkdown, resolveTodoMarkdownPath } from "./markdown.ts";
 export { TASK_MANAGEMENT_SECTION } from "./prompt.ts";
 export {
 	appendItems,
