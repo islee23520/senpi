@@ -20,13 +20,17 @@
     ],
     "experimental": [
       "remoteControl/status/read",
-      "thread/search"
+      "thread/search",
+      "thread/turns/list",
+      "thread/items/list"
     ]
   },
   "gates": {
     "experimentalApi": [
       "remoteControl/status/read",
-      "thread/search"
+      "thread/search",
+      "thread/turns/list",
+      "thread/items/list"
     ]
   },
   "catalogCounts": {
@@ -138,7 +142,6 @@
       "thread/backgroundTerminals/terminate",
       "thread/decrement_elicitation",
       "thread/increment_elicitation",
-      "thread/items/list",
       "thread/memoryMode/set",
       "thread/realtime/appendAudio",
       "thread/realtime/appendSpeech",
@@ -147,8 +150,7 @@
       "thread/realtime/start",
       "thread/realtime/stop",
       "thread/searchOccurrences",
-      "thread/settings/update",
-      "thread/turns/list"
+      "thread/settings/update"
     ]
   },
   "documentation": {
@@ -169,7 +171,9 @@
       "thread/archive",
       "thread/delete",
       "thread/unsubscribe",
-      "thread/search"
+      "thread/search",
+      "thread/turns/list",
+      "thread/items/list"
     ]
   }
 }

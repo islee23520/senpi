@@ -9,6 +9,7 @@ import type { MethodHandler, MethodRegistry, RegistryConnection, RpcRequest } fr
 import type { NotificationRouter } from "../server/notifications.ts";
 import { ThreadArchiveState } from "./archive-state.ts";
 import { connectionId, objectValue, optionalString, requiredString } from "./handler-params.ts";
+import { threadItemsListResponse, threadTurnsListResponse } from "./history.ts";
 import { listThreadsResponse, loadedThreadsResponse } from "./list-handlers.ts";
 import { type ThreadEntry, ThreadNotFoundError, type ThreadRegistry } from "./registry.ts";
 import { threadSearchResponse } from "./search.ts";
@@ -124,6 +125,24 @@ class ThreadLifecycleHandlers {
 						turnLog: this.turnLog,
 						archiveState: this.archiveState,
 						cache: this.searchCache,
+					}),
+			},
+			{
+				method: "thread/turns/list",
+				experimental: true,
+				handler: (context) =>
+					threadTurnsListResponse(context.request.params, {
+						threads: this.threads,
+						turnLog: this.turnLog,
+					}),
+			},
+			{
+				method: "thread/items/list",
+				experimental: true,
+				handler: (context) =>
+					threadItemsListResponse(context.request.params, {
+						threads: this.threads,
+						turnLog: this.turnLog,
 					}),
 			},
 		];

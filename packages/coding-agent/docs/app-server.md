@@ -369,3 +369,5 @@ Command approval decisions are `accept`, `acceptForSession`, `decline`, and `can
 ## Multi-Session Semantics
 
 Each app-server process can keep multiple loaded threads. `thread/start`, `thread/resume`, and `thread/fork` load a thread and subscribe the current connection. `thread/unsubscribe` detaches only that connection; the thread may unload after the idle timeout when it has no subscribers and no active turn. A websocket listener can serve multiple initialized clients concurrently. Stdio mode serves one process-owned connection.
+
+The app-server `TurnLog` is retained for the lifetime of the process. Idle unload disposes the session but does not release its turn log, so unloading and then resuming a thread in the same process preserves full `thread/turns/list` and `thread/items/list` history. A process restart loses that in-memory log and falls back to the documented user-message-only reconstruction.
