@@ -1,5 +1,79 @@
 # AI Source Changes
 
+## 2026-07-17 - Video input modality for Kimi K3 (kimi-coding)
+
+### What changed and why
+
+- `types.ts`: `Model.input` union gains `"video"`. No new message content type: video payloads ride the
+  existing `ImageContent` block with a `video/*` mimeType (helper `isVideoMimeType()` exported) to keep the
+  message contract and the upstream merge surface unchanged.
+- `api/transform-messages.ts`: `downgradeUnsupportedImages` now first replaces video-mime blocks with a
+  placeholder for models without the `"video"` modality (user and toolResult content), then applies the
+  existing image downgrade. Prevents cross-model replay from sending video blocks to providers that reject
+  them.
+- `api/anthropic-messages.ts`: `convertContentBlocks` and the user-message block mapping serialize
+  video-mime blocks as `{type:"video", source:{type:"base64", media_type, data}}` — the wire shape the
+  Kimi Anthropic-compatible endpoint accepts (verified against MoonshotAI/kimi-code kosong anthropic
+  provider). The block is not in the official SDK union, so it is cast like the existing `tool_reference`
+  escape hatch.
+- `scripts/generate-models.ts` + regenerated `providers/kimi-coding.models.ts`: kimi-coding `k3` declares
+  `input: ["text", "image", "video"]`.
+
+### Files modified
+
+- `types.ts`
+- `api/transform-messages.ts`
+- `api/anthropic-messages.ts`
+- `../scripts/generate-models.ts`
+- `providers/kimi-coding.models.ts` (generated)
+- `../test/transform-messages-video.test.ts`
+
+### Expected merge conflict zones
+
+- LOW: `types.ts` `Model.input` union and `ImageContent` comment.
+- MEDIUM: `api/anthropic-messages.ts` `convertContentBlocks` / `convertToolResult` if upstream reworks
+  content serialization.
+- LOW: `api/transform-messages.ts` `downgradeUnsupportedImages`.
+
+## 2026-07-17 - Truncation-recovery contract for ToolCall and toolcall_end
+
+### What changed and why
+
+- Truncated text-protocol tool calls were silently dropped, leaked as raw markup, or executed from a
+  stale argument snapshot, with no public signal distinguishing a finalized (executable) call from
+  one the parser could only partially recover. Consumers had no contract for "this tool call is
+  incomplete; do not execute it; ask the model to retry."
+- `ToolCall` gains optional `incomplete?: true` and `errorMessage?: string`, set by the text tool-call
+  middleware when a truncated call could not be recovered. Carriers of `incomplete` MUST NOT be
+  executed; they are surfaced as a failed tool result so the model re-issues the call next turn.
+- The `toolcall_end` member of `AssistantMessageEvent` is redefined from an implicit "complete" to
+  "finalized": a `toolcall_end` is executable iff `incomplete !== true`. Flagged ends still terminate
+  the call (so the wrapper never holds a dangling partial) but are not executable. This is the
+  release-note surface for the redefinition.
+- `ToolCallFormat` gains `"morph-xml"` as the canonical id; `"xml"` is retained as a deprecated alias
+  resolving to the same protocol, so existing `models.json` configs and compiled consumers of
+  `getProtocol("xml")` keep working without a runtime normalization that rewrites stored config
+  values.
+- Flagged dangling-call diagnostics always append `Re-issue the tool call with complete arguments.` to parser-provided error messages without duplicating a final period.
+- `compat.ts` now publicly re-exports `getToolCallFormat`, `getProtocol`, `transformContext`, and `wrapStreamWithToolCallMiddleware` for composed providers that need the text tool-call middleware.
+
+### Files modified
+
+- `types.ts` (`ToolCall`, `AssistantMessageEvent.toolcall_end`, `OpenAICompletionsCompat.toolCallFormat` doc)
+- `tool-call-middleware/types.ts`, `tool-call-middleware/index.ts`, `tool-call-middleware/context-transformer.ts`
+- `../test/tool-call-middleware/context-transformer.test.ts`, `../test/tool-call-middleware/stream-integration.test.ts`
+
+### Why the higher-level extension system couldn't handle this alone
+
+- The canonical `ToolCall` shape, the `toolcall_end` event contract, and the `ToolCallFormat` union
+  are all exported from `pi-ai` and consumed by standalone `pi-ai` clients before any coding-agent
+  extension runs.
+
+### Expected merge conflict zones
+
+- LOW: `types.ts` around the `ToolCall` and `AssistantMessageEvent` declarations.
+- LOW: `tool-call-middleware/types.ts` `ToolCallFormat` union and `toolcall_end` variant.
+
 ## 2026-07-14 - Provider and OAuth parity
 
 ### What changed and why
@@ -10,16 +84,20 @@
 - Legacy OAuth providers can expose request-scoped tokens and headers so compatibility consumers preserve GitLab Duo's
   direct-access contract.
 - Search-only integrations are not exposed as chat providers.
+- Dropped duplicate xAI browser OAuth in favor of main's device-code flow.
+- Cursor uses Connect transport; GitLab PAT exchange applies to API keys; GitLab GPT-5.1 uses chat completions;
+  Perplexity session OAuth is not advertised as API auth; Google CCA providers are OAuth-only in /login.
 
 ### Files modified
 
 - api/google-gemini-cli.ts
+- api/cursor-connect.ts
 - auth/helpers.ts
+- auth/oauth/*
 - providers/all.ts
 - types.ts
-- utils/oauth/index.ts
-- utils/oauth/load.ts
-- provider-specific files under providers/ and utils/oauth/
+- bun-oauth.ts
+- provider-specific files under providers/ and auth/oauth/
 
 ### Why the higher-level extension system couldn't handle this alone
 

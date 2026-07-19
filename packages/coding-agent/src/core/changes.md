@@ -1,5 +1,39 @@
 # changes
 
+## "video" input modality plumbed through provider composition (2026-07-17)
+
+### What changed
+
+- `provider-composer.ts`: model `input` arrays (config input, models.json override, custom model definition)
+  widened to `("text" | "image" | "video")[]`, tracking the pi-ai `Model.input` union. Enables the
+  kimi-coding `k3` video input capability and models.json overrides declaring video.
+- `remote-catalog-provider.ts`: `mergeModels` now unions `input` modalities (canonical text/image/video
+  order) when a pi.dev overlay entry replaces a builtin model. The overlay refreshes costs/limits but a
+  stale remote entry must not silently drop a fork-declared capability — the cached kimi-coding `k3`
+  entry in `models-store.json` otherwise strips `"video"` and deactivates the `read_video` tool.
+
+### Why extension system couldn't handle this alone
+
+- The modality union is a core type shared with pi-ai; extensions consume it but cannot widen it.
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `provider-composer.ts` model field lists.
+
+## Composed providers engage text tool-call compatibility middleware (2026-07-17)
+
+### What changed
+
+- `provider-composer.ts`: composed provider `stream()` and `streamSimple()` now apply the text tool-call middleware when a model has `compat.toolCallFormat` and active tools. Custom `models.json` providers previously dispatched directly to their base or API provider, silently bypassing this compatibility behavior.
+
+### Why extension system couldn't handle this alone
+
+- Provider composition owns the final base-provider/API-provider stream dispatch before extensions receive model output, so extensions cannot insert the required context transformation and streaming parser on both paths.
+
+### Expected merge conflict zones
+
+- LOW: `provider-composer.ts` shared `streamWith()` dispatch and its `@earendil-works/pi-ai/compat` imports.
+
 ## Provider login and model-resolution parity (2026-07-14)
 
 ### What changed
@@ -8,6 +42,7 @@
   for consistent /login, display, and default-model behavior.
 - AuthStorage and ModelRegistry apply provider-specific OAuth request tokens and headers instead of reducing every
   legacy credential to one raw string.
+- OAuth-only Google CCA providers and openai-codex-device are excluded from API-key login eligibility.
 
 ### Why extension system couldn't handle this
 
