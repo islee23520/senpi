@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { wrapStreamWithInvokeRecovery } from "../../src/index.ts";
 import type { AssistantMessageEvent, Tool } from "../../src/types.ts";
 import { registerInvokeRecoveryNativeCases } from "./invoke-recovery-native-cases.ts";
+import { registerInvokeRecoveryNativeLifecycleCases } from "./invoke-recovery-native-lifecycle-cases.ts";
 import {
 	collectEvents,
 	collectIterator,
@@ -38,6 +39,7 @@ async function runText(chunks: readonly string[], reason: "stop" | "length" = "s
 
 describe("wrapStreamWithInvokeRecovery", () => {
 	registerInvokeRecoveryNativeCases(bashTool);
+	registerInvokeRecoveryNativeLifecycleCases(bashTool);
 
 	it("reconstructs text toolCall text and starts before the closing invoke", { timeout: 1000 }, async () => {
 		// Given

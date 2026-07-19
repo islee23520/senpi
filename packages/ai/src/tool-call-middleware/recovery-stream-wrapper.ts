@@ -4,6 +4,7 @@ import { AssistantMessageEventStream as AssistantMessageEventStreamImpl } from "
 import { createAntmlInvokeRecoveryStreamParser } from "./protocols/antml/recovery-stream.ts";
 import { createRecoveryCodeMask, type RecoveryCodeMaskSegment } from "./recovery-code-mask.ts";
 import { RecoveryNativeProjection } from "./recovery-native-projection.ts";
+import { type RecoveryStreamFailure, terminateRecoveryStreamForFailure } from "./recovery-stream-failure.ts";
 import { StreamMessageProjection } from "./stream-wrapper-shared.ts";
 import type { StreamParserEvent } from "./types.ts";
 
@@ -99,23 +100,10 @@ export function wrapStreamWithInvokeRecovery(
 			return message;
 		};
 
-		const terminateForCollision = (source: AssistantMessage): void => {
+		const terminateForFailure = (source: AssistantMessage, failure: RecoveryStreamFailure): void => {
 			if (!projection) return;
 			finishText();
-			projection.sync(source);
-			const message = projection.finalize(source, false);
-			message.content = message.content.filter((block) => block.type !== "toolCall");
-			message.stopReason = "error";
-			message.errorMessage = "Tool call ID collision in provider stream";
-			message.diagnostics = [
-				{
-					type: "text_tool_call_recovery_collision",
-					timestamp: Date.now(),
-					details: { protocol: "antml", status: "collision" },
-				},
-			];
-			outerStream.push({ type: "error", reason: "error", error: message });
-			outerStream.end(message);
+			terminateRecoveryStreamForFailure(outerStream, projection, source, failure);
 		};
 
 		const prepareContentEvent = (source: AssistantMessage, contentIndex: number): boolean => {
@@ -136,7 +124,7 @@ export function wrapStreamWithInvokeRecovery(
 						break;
 					case "text_start":
 						if (!prepareContentEvent(event.partial, event.contentIndex) || !projection || !nativeProjection) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
 						currentInnerTextIndex = event.contentIndex;
@@ -146,14 +134,14 @@ export function wrapStreamWithInvokeRecovery(
 						break;
 					case "text_delta":
 						if (!prepareContentEvent(event.partial, event.contentIndex)) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
 						feedText(event.delta);
 						break;
 					case "text_end":
 						if (!prepareContentEvent(event.partial, event.contentIndex)) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
 						finishText();
@@ -190,37 +178,46 @@ export function wrapStreamWithInvokeRecovery(
 					}
 					case "toolcall_start": {
 						if (!prepareContentEvent(event.partial, event.contentIndex) || !nativeProjection) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
 						const status = nativeProjection.projectNativeStart(event.partial, event.contentIndex);
-						if (status === "collision") {
-							terminateForCollision(event.partial);
+						if (status !== "projected") {
+							terminateForFailure(
+								event.partial,
+								status === "collision" ? "collision" : "invalid_native_event_order",
+							);
 							return;
 						}
-						sawToolCall = sawToolCall || status === "projected";
+						sawToolCall = true;
 						break;
 					}
 					case "toolcall_delta":
 						if (!prepareContentEvent(event.partial, event.contentIndex) || !nativeProjection) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
-						nativeProjection.projectNativeDelta(event.partial, event.contentIndex, event.delta);
+						if (!nativeProjection.projectNativeDelta(event.partial, event.contentIndex, event.delta)) {
+							terminateForFailure(event.partial, "invalid_native_event_order");
+							return;
+						}
 						break;
 					case "toolcall_end":
 						if (!prepareContentEvent(event.partial, event.contentIndex) || !nativeProjection) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
-						nativeProjection.projectNativeEnd(event.contentIndex, event.toolCall);
+						if (!nativeProjection.projectNativeEnd(event.contentIndex, event.toolCall)) {
+							terminateForFailure(event.partial, "invalid_native_event_order");
+							return;
+						}
 						sawToolCall = true;
 						break;
 					case "thinking_start":
 					case "thinking_delta":
 					case "thinking_end":
 						if (!prepareContentEvent(event.partial, event.contentIndex)) {
-							terminateForCollision(event.partial);
+							terminateForFailure(event.partial, "collision");
 							return;
 						}
 						break;

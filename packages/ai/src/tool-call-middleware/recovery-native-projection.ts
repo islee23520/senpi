@@ -3,6 +3,7 @@ import type { StreamParserEvent } from "./types.ts";
 
 type ContentBlock = AssistantMessage["content"][number];
 type ContentRange = { start: number; end: number };
+type NativeLifecycle = "started" | "ended";
 
 function cloneContentBlock(block: ContentBlock): ContentBlock {
 	if (block.type === "toolCall") {
@@ -20,6 +21,7 @@ export class RecoveryNativeProjection {
 	private readonly stream: AssistantMessageEventStream;
 	private readonly message: AssistantMessage;
 	private readonly rangesByInnerIndex = new Map<number, ContentRange>();
+	private readonly nativeLifecycleByInnerIndex = new Map<number, NativeLifecycle>();
 	private readonly reservedIds = new Set<string>();
 	private readonly recoveredIds = new Set<string>();
 	private readonly recoveredIdByParserIndex = new Map<number, string>();
@@ -60,37 +62,44 @@ export class RecoveryNativeProjection {
 		if (range) range.end = this.message.content.length;
 	}
 
-	projectNativeStart(source: AssistantMessage, innerIndex: number): "projected" | "collision" | "missing" {
+	projectNativeStart(source: AssistantMessage, innerIndex: number): "projected" | "collision" | "invalid" {
+		if (this.nativeLifecycleByInnerIndex.has(innerIndex) || this.rangesByInnerIndex.has(innerIndex)) return "invalid";
 		const block = source.content[innerIndex];
-		if (block?.type !== "toolCall") return "missing";
+		if (block?.type !== "toolCall") return "invalid";
 		if (this.recoveredIds.has(block.id)) return "collision";
 		this.reservedIds.add(block.id);
 		const outerIndex = this.message.content.length;
 		this.message.content.push(cloneContentBlock(block));
 		this.rangesByInnerIndex.set(innerIndex, { start: outerIndex, end: outerIndex + 1 });
+		this.nativeLifecycleByInnerIndex.set(innerIndex, "started");
 		this.stream.push({ type: "toolcall_start", contentIndex: outerIndex, partial: this.message });
 		return "projected";
 	}
 
-	projectNativeDelta(source: AssistantMessage, innerIndex: number, delta: string): void {
+	projectNativeDelta(source: AssistantMessage, innerIndex: number, delta: string): boolean {
+		if (this.nativeLifecycleByInnerIndex.get(innerIndex) !== "started") return false;
 		const outerIndex = this.rangesByInnerIndex.get(innerIndex)?.start;
 		const block = source.content[innerIndex];
-		if (outerIndex == null || block?.type !== "toolCall") return;
+		if (outerIndex == null || block?.type !== "toolCall") return false;
 		this.message.content[outerIndex] = cloneContentBlock(block);
 		this.stream.push({ type: "toolcall_delta", contentIndex: outerIndex, delta, partial: this.message });
+		return true;
 	}
 
-	projectNativeEnd(innerIndex: number, toolCall: ToolCall): void {
+	projectNativeEnd(innerIndex: number, toolCall: ToolCall): boolean {
+		if (this.nativeLifecycleByInnerIndex.get(innerIndex) !== "started") return false;
 		const outerIndex = this.rangesByInnerIndex.get(innerIndex)?.start;
-		if (outerIndex == null) return;
+		if (outerIndex == null) return false;
 		const finalToolCall = cloneToolCall(toolCall);
 		this.message.content[outerIndex] = finalToolCall;
+		this.nativeLifecycleByInnerIndex.set(innerIndex, "ended");
 		this.stream.push({
 			type: "toolcall_end",
 			contentIndex: outerIndex,
 			toolCall: finalToolCall,
 			partial: this.message,
 		});
+		return true;
 	}
 
 	assignRecoveredIds(events: readonly StreamParserEvent[]): StreamParserEvent[] {
