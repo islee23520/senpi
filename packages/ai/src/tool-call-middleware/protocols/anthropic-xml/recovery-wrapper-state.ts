@@ -7,7 +7,12 @@ export type RecoveryWrapperAction =
 	| { readonly type: "text"; readonly text: string }
 	| { readonly type: "known"; readonly textBefore: string; readonly opening: string; readonly tool: Tool }
 	| { readonly type: "closed"; readonly text: string }
-	| { readonly type: "overflow"; readonly text: string; readonly retainedLength: number };
+	| {
+			readonly type: "overflow";
+			readonly text: string;
+			readonly retainedLength: number;
+			readonly retainsWrapper: boolean;
+	  };
 
 /** Owns a function_calls wrapper until its matching close, preserving interior literal text. */
 export class RecoveryWrapperState {
@@ -72,10 +77,14 @@ export class RecoveryWrapperState {
 	}
 
 	private checkOverflow(): RecoveryWrapperAction[] {
-		const retainedLength = this.opening.length + this.beforeKnown.length + this.tag.length;
-		if (!this.recovered && retainedLength === ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH) {
-			return [{ type: "overflow", text: this.opening + this.beforeKnown + this.tag, retainedLength }];
+		const retainedLength = this.recovered
+			? this.tag.length
+			: this.opening.length + this.beforeKnown.length + this.tag.length;
+		if (retainedLength !== ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH) {
+			return [];
 		}
-		return [];
+		const text = this.recovered ? this.tag : this.opening + this.beforeKnown + this.tag;
+		this.tag = "";
+		return [{ type: "overflow", text, retainedLength, retainsWrapper: this.recovered }];
 	}
 }

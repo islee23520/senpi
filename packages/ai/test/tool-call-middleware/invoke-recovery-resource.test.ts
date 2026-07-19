@@ -6,6 +6,7 @@ import type { StreamParserEvent } from "../../src/tool-call-middleware/types.ts"
 import type { Tool } from "../../src/types.ts";
 
 const scanWork = vi.hoisted(() => ({ calls: 0, codeUnits: 0 }));
+const wrapperWork = vi.hoisted(() => ({ calls: 0, maxRetained: 0 }));
 
 vi.mock("../../src/tool-call-middleware/protocols/anthropic-xml/invoke-tag-scanner.ts", async (importOriginal) => {
 	const actual =
@@ -18,6 +19,26 @@ vi.mock("../../src/tool-call-middleware/protocols/anthropic-xml/invoke-tag-scann
 		return actual.scanInvokeBlock(...parameters);
 	};
 	return { ...actual, scanInvokeBlock };
+});
+
+vi.mock("../../src/tool-call-middleware/protocols/anthropic-xml/recovery-wrapper-state.ts", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("../../src/tool-call-middleware/protocols/anthropic-xml/recovery-wrapper-state.ts")
+		>();
+	class InstrumentedRecoveryWrapperState extends actual.RecoveryWrapperState {
+		override feed(character: string) {
+			const actions = super.feed(character);
+			const state = this as unknown as { opening: string; beforeKnown: string; recovered: boolean; tag: string };
+			wrapperWork.calls += 1;
+			wrapperWork.maxRetained = Math.max(
+				wrapperWork.maxRetained,
+				state.recovered ? state.tag.length : state.opening.length + state.beforeKnown.length + state.tag.length,
+			);
+			return actions;
+		}
+	}
+	return { ...actual, RecoveryWrapperState: InstrumentedRecoveryWrapperState };
 });
 
 const bashTool = {
@@ -44,6 +65,8 @@ function toolCallEnds(events: readonly StreamParserEvent[]): Extract<StreamParse
 beforeEach(() => {
 	scanWork.calls = 0;
 	scanWork.codeUnits = 0;
+	wrapperWork.calls = 0;
+	wrapperWork.maxRetained = 0;
 });
 
 it("keeps recovery scan work linear for one-character deltas", () => {
@@ -88,6 +111,39 @@ it("bounds a partial opening tag before toolcall_start and recovers", () => {
 	expect(toolCallEnds(recoveryEvents)).toEqual([
 		expect.objectContaining({ id: "recovered-antml-0", arguments: { command: "echo recovered" } }),
 	]);
+});
+
+it("bounds partial tags after a recovered wrapper call", () => {
+	// Given
+	const onError = vi.fn();
+	const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
+	const knownWrapperCall = '<function_calls><invoke name="Bash"><parameter name="command">one</parameter></invoke>';
+	const partialTag = `<${"x".repeat(66_560)}`;
+	const partialEvents: StreamParserEvent[] = [];
+
+	// When
+	parser.feed(knownWrapperCall);
+	for (const character of partialTag) {
+		partialEvents.push(...parser.feed(character));
+	}
+	const closeEvents = parser.feed("</function_calls>");
+	const recoveryEvents = [...parser.feed(validCall), ...parser.finish()];
+
+	// Then
+	expect(textOutput(partialEvents)).toBe(partialTag);
+	expect(onError).toHaveBeenCalledWith("ANTML recovery fragment exceeded the retained-input limit.", {
+		protocol: "antml",
+		retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
+	});
+	expect(JSON.stringify(onError.mock.calls)).not.toContain(partialTag);
+	expect(textOutput(closeEvents)).toBe("");
+	expect(toolCallEnds(recoveryEvents)).toEqual([
+		expect.objectContaining({ id: "recovered-antml-1", arguments: { command: "echo recovered" } }),
+	]);
+	expect(wrapperWork.maxRetained, `wrapper work: ${JSON.stringify(wrapperWork)}`).toBeLessThanOrEqual(
+		ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
+	);
+	expect(wrapperWork.calls).toBeLessThanOrEqual(partialTag.length + knownWrapperCall.length + validCall.length + 32);
 });
 
 it("finalizes an active call incomplete on retained-buffer overflow and recovers", () => {

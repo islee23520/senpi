@@ -178,7 +178,9 @@ export function createInvokeRecoveryStreamParser(
 			} else {
 				reportOverflow(action.retainedLength);
 				emitText(events, action.text);
-				state = { kind: "idle", tag: "" };
+				if (!action.retainsWrapper) {
+					state = { kind: "idle", tag: "" };
+				}
 			}
 		}
 	}
