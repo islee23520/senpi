@@ -6,6 +6,8 @@
   - `test/streaming-reveal.test.ts`: deterministic coverage for incremental grapheme counting and slicing, display
     message construction, fps-invariant reveal timing, and controller lifecycle behavior.
   - `test/settings-manager.test.ts`: defaults, clamping, and persistence coverage for smooth-streaming settings.
+  - `test/interactive-mode-compaction-queue-session-rebind.test.ts`: session-rebind test doubles now include the reveal
+    controller `stop` seam so the full CI suite exercises the updated `InteractiveMode` shape.
 - Why: the interactive reveal must remain Unicode-safe and time-based across 30–120fps, including live setting and
   visibility changes.
 - What changed: test-only package surface; runtime changes are tracked in the nearest `src/**/changes.md` files.
