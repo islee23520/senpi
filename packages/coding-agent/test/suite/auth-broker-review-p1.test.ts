@@ -129,9 +129,9 @@ describe("auth broker review P1 regressions", () => {
 			const prunedBefore = admin.pruneExpiredLeases(new Date(Date.now() + 20 * 60_000));
 			expect(prunedBefore).toBeGreaterThanOrEqual(1);
 			admin.close();
-			expect(() =>
-				vault.consumeSelectionLease({ authentication: "auth", leaseId: pending.leaseId }),
-			).toThrow(/no longer available/i);
+			expect(() => vault.consumeSelectionLease({ authentication: "auth", leaseId: pending.leaseId })).toThrow(
+				/no longer available/i,
+			);
 			vault.close();
 		} finally {
 			fixture.cleanup();

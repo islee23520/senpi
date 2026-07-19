@@ -254,8 +254,10 @@ export class SqliteCredentialVault implements CredentialVault {
 			.all()
 			.map((row) => (row as { name?: unknown }).name)
 			.filter((name): name is string => typeof name === "string");
-		if (!columns.includes("issued_at")) this.db.exec("ALTER TABLE leases ADD COLUMN issued_at TEXT NOT NULL DEFAULT ''");
-		if (!columns.includes("expires_at")) this.db.exec("ALTER TABLE leases ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
+		if (!columns.includes("issued_at"))
+			this.db.exec("ALTER TABLE leases ADD COLUMN issued_at TEXT NOT NULL DEFAULT ''");
+		if (!columns.includes("expires_at"))
+			this.db.exec("ALTER TABLE leases ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
 		this.db.exec("CREATE INDEX IF NOT EXISTS leases_expires_at_idx ON leases(expires_at)");
 	}
 
@@ -270,9 +272,8 @@ export class SqliteCredentialVault implements CredentialVault {
 					.run(nowIso).changes,
 			);
 			const consumed = Number(
-				this.db
-					.prepare("DELETE FROM leases WHERE consumed_at IS NOT NULL AND consumed_at < ?")
-					.run(retainBefore).changes,
+				this.db.prepare("DELETE FROM leases WHERE consumed_at IS NOT NULL AND consumed_at < ?").run(retainBefore)
+					.changes,
 			);
 			return unconsumed + consumed;
 		};
@@ -504,7 +505,13 @@ export class AuthBrokerService {
 				if (isDefinitiveOAuthFailure(error instanceof Error ? error.message : String(error))) {
 					// CAS: only disable if the row is still the same snapshot we tried to refresh.
 					// A re-login that rotates material keeps credential_id but bumps updatedAt.
-					if (this.vault.disableCredentialIfUnchanged(record.credentialId, snapshotUpdatedAt, "oauth refresh failed definitively")) {
+					if (
+						this.vault.disableCredentialIfUnchanged(
+							record.credentialId,
+							snapshotUpdatedAt,
+							"oauth refresh failed definitively",
+						)
+					) {
 						disabled += 1;
 					}
 				}
