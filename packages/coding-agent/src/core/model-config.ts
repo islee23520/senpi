@@ -164,6 +164,7 @@ const ModelDefinitionSchema = Type.Object({
 	upstreamModelId: Type.Optional(Type.String({ minLength: 1 })),
 	serviceTier: Type.Optional(Type.Union([Type.Literal("auto"), Type.Literal("flex"), Type.Literal("priority")])),
 	promptPreset: Type.Optional(Type.String({ minLength: 1 })),
+	recoverTextToolCalls: Type.Optional(Type.Boolean()),
 	api: Type.Optional(Type.String({ minLength: 1 })),
 	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
@@ -181,6 +182,7 @@ const ModelDefinitionSchema = Type.Object({
 const ModelOverrideSchema = Type.Object({
 	name: Type.Optional(Type.String({ minLength: 1 })),
 	promptPreset: Type.Optional(Type.String({ minLength: 1 })),
+	recoverTextToolCalls: Type.Optional(Type.Boolean()),
 	reasoning: Type.Optional(Type.Boolean()),
 	thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
 	thinkingLevelMapMode: Type.Optional(Type.Union([Type.Literal("merge"), Type.Literal("replace")])),

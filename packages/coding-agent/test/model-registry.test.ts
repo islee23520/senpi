@@ -635,6 +635,75 @@ describe("ModelRegistry", () => {
 			).toBe(true);
 		});
 
+		test("preserves recoverTextToolCalls across custom models and overrides", async () => {
+			writeRawModelsJson({
+				custom: {
+					api: "openai-completions",
+					baseUrl: "https://custom.example.com/v1",
+					models: [{ id: "custom-recovery", recoverTextToolCalls: true }],
+				},
+				openrouter: {
+					modelOverrides: {
+						"anthropic/claude-sonnet-4": { recoverTextToolCalls: false },
+						"anthropic/claude-opus-4": { recoverTextToolCalls: true },
+					},
+				},
+			});
+
+			const registry = await createModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("custom", "custom-recovery")?.recoverTextToolCalls).toBe(true);
+			expect(registry.find("openrouter", "anthropic/claude-sonnet-4")?.recoverTextToolCalls).toBe(false);
+			expect(registry.find("openrouter", "anthropic/claude-opus-4")?.recoverTextToolCalls).toBe(true);
+
+			registry.registerProvider("extension-provider", {
+				baseUrl: "https://extension.example.com/v1",
+				apiKey: "test-key",
+				api: "openai-completions",
+				models: [
+					{
+						id: "extension-recovery",
+						name: "Extension Recovery",
+						reasoning: false,
+						input: ["text"],
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						contextWindow: 128000,
+						maxTokens: 4096,
+						recoverTextToolCalls: true,
+					},
+				],
+			});
+			expect(registry.find("extension-provider", "extension-recovery")?.recoverTextToolCalls).toBe(true);
+		});
+
+		test("preserves unset and explicit false recoverTextToolCalls values", async () => {
+			writeRawModelsJson({
+				custom: {
+					api: "openai-completions",
+					baseUrl: "https://custom.example.com/v1",
+					models: [{ id: "recovery-unset" }, { id: "recovery-disabled", recoverTextToolCalls: false }],
+				},
+			});
+
+			const registry = await createModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.find("custom", "recovery-unset")?.recoverTextToolCalls).toBeUndefined();
+			expect(registry.find("custom", "recovery-disabled")?.recoverTextToolCalls).toBe(false);
+		});
+
+		test("rejects non-boolean recoverTextToolCalls values", async () => {
+			writeRawModelsJson({
+				custom: {
+					api: "openai-completions",
+					baseUrl: "https://custom.example.com/v1",
+					models: [{ id: "invalid-recovery", recoverTextToolCalls: "true" }],
+				},
+			});
+
+			const registry = await createModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.getError()).toContain("providers.custom.models.0.recoverTextToolCalls");
+			expect(registry.getError()).toContain("boolean");
+			expect(registry.find("custom", "invalid-recovery")).toBeUndefined();
+		});
+
 		test("refresh() reloads merged custom models from disk", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://first-proxy.example.com/v1", [{ id: "claude-custom" }]),
