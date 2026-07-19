@@ -35,6 +35,85 @@
   content serialization.
 - LOW: `api/transform-messages.ts` `downgradeUnsupportedImages`.
 
+## 2026-07-17 - Truncation-recovery contract for ToolCall and toolcall_end
+
+### What changed and why
+
+- Truncated text-protocol tool calls were silently dropped, leaked as raw markup, or executed from a
+  stale argument snapshot, with no public signal distinguishing a finalized (executable) call from
+  one the parser could only partially recover. Consumers had no contract for "this tool call is
+  incomplete; do not execute it; ask the model to retry."
+- `ToolCall` gains optional `incomplete?: true` and `errorMessage?: string`, set by the text tool-call
+  middleware when a truncated call could not be recovered. Carriers of `incomplete` MUST NOT be
+  executed; they are surfaced as a failed tool result so the model re-issues the call next turn.
+- The `toolcall_end` member of `AssistantMessageEvent` is redefined from an implicit "complete" to
+  "finalized": a `toolcall_end` is executable iff `incomplete !== true`. Flagged ends still terminate
+  the call (so the wrapper never holds a dangling partial) but are not executable. This is the
+  release-note surface for the redefinition.
+- `ToolCallFormat` gains `"morph-xml"` as the canonical id; `"xml"` is retained as a deprecated alias
+  resolving to the same protocol, so existing `models.json` configs and compiled consumers of
+  `getProtocol("xml")` keep working without a runtime normalization that rewrites stored config
+  values.
+- Flagged dangling-call diagnostics always append `Re-issue the tool call with complete arguments.` to parser-provided error messages without duplicating a final period.
+- `compat.ts` now publicly re-exports `getToolCallFormat`, `getProtocol`, `transformContext`, and `wrapStreamWithToolCallMiddleware` for composed providers that need the text tool-call middleware.
+
+### Files modified
+
+- `types.ts` (`ToolCall`, `AssistantMessageEvent.toolcall_end`, `OpenAICompletionsCompat.toolCallFormat` doc)
+- `tool-call-middleware/types.ts`, `tool-call-middleware/index.ts`, `tool-call-middleware/context-transformer.ts`
+- `../test/tool-call-middleware/context-transformer.test.ts`, `../test/tool-call-middleware/stream-integration.test.ts`
+
+### Why the higher-level extension system couldn't handle this alone
+
+- The canonical `ToolCall` shape, the `toolcall_end` event contract, and the `ToolCallFormat` union
+  are all exported from `pi-ai` and consumed by standalone `pi-ai` clients before any coding-agent
+  extension runs.
+
+### Expected merge conflict zones
+
+- LOW: `types.ts` around the `ToolCall` and `AssistantMessageEvent` declarations.
+- LOW: `tool-call-middleware/types.ts` `ToolCallFormat` union and `toolcall_end` variant.
+
+## 2026-07-17 - Moonshot root object-union compatibility
+
+### What changed and why
+
+- `utils/tool-schema-compat.ts`: Moonshot normalization now flattens a root `anyOf`/`oneOf` of object parameter
+  shapes into one `type: "object"` schema. Properties are merged and only branch-common required fields remain.
+  Kimi rejects a root combiner without `type`, but also rejects a sibling root `type` beside that combiner, so the
+  union must be represented as a permissive object at the function-parameter boundary.
+- `../test/openai-completions-tool-schema-compat.test.ts`: covers the real `click`-style coordinate/index union and
+  the final post-hook request payload.
+
+### Why the higher-level extension system couldn't handle this alone
+
+- The provider adapter owns the final wire schema after payload hooks and is the only layer shared by direct
+  Moonshot requests and custom Moonshot-compatible gateways.
+
+### Expected merge conflict zones
+
+- LOW: `utils/tool-schema-compat.ts` if upstream expands its provider-specific schema normalizers.
+
+## 2026-07-17 - Final-boundary Moonshot tool schema normalization
+
+### What changed and why
+
+- `api/openai-completions.ts`: re-normalizes function tool parameter schemas after `onPayload` and immediately before
+  the OpenAI SDK request. Payload hooks can replace or inject tools after the ordinary `convertTools` pass; those tools
+  previously bypassed the Moonshot/MFJS compatibility transform and could retain a parent `type` beside `anyOf`, which
+  Moonshot rejects with HTTP 400.
+- `../test/openai-completions-tool-schema-compat.test.ts`: captures the real HTTP request and locks the post-hook wire
+  shape.
+
+### Why the higher-level extension system couldn't handle this alone
+
+- `before_provider_request` is exposed through `onPayload`, so the provider adapter is the only layer that can validate
+  the complete tool list after every hook has run.
+
+### Expected merge conflict zones
+
+- LOW: `api/openai-completions.ts` around the `onPayload` callback and final request submission.
+
 ## 2026-07-16 - Anthropic native web_search endpoint guard and server_tool_use input streaming
 
 ### What changed and why

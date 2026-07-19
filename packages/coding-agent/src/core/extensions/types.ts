@@ -25,6 +25,7 @@ import type {
 	Model,
 	OAuthCredentials,
 	OAuthLoginCallbacks,
+	Provider,
 	ProviderHeaders,
 	RefreshModelsContext,
 	SimpleStreamOptions,
@@ -80,6 +81,7 @@ import type {
 	ReadToolInput,
 	WriteToolInput,
 } from "../tools/index.ts";
+import type { McpServerDeclaration } from "./builtin/mcp/config-schema.ts";
 
 export type { ExecOptions, ExecResult } from "../exec.ts";
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.ts";
@@ -379,6 +381,8 @@ export interface ExtensionContext {
 	getSystemPrompt(): string;
 	/** Get hook source paths currently visible to the builtin hooks extension. */
 	getLoadedHookSources?(): LoadedHookSources;
+	/** Get extension-declared MCP servers aggregated across all extensions (first-wins). */
+	getRegisteredMcpServers?(): readonly RegisteredMcpServerDeclaration[];
 	/**
 	 * Report what the currently running tool_call/tool_result handler is doing.
 	 * Updates the live "Running PreToolUse/PostToolUse hook" status row in the TUI.
@@ -1321,6 +1325,9 @@ export interface ExtensionAPI {
 		tool: ToolDefinition<TParams, TDetails, TState>,
 	): void;
 
+	/** Register an MCP server that the agent can use. Factory-time only. */
+	registerMcpServer(name: string, config: McpServerDeclaration): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -1489,6 +1496,7 @@ export interface ExtensionAPI {
 	 *   }
 	 * });
 	 */
+	registerProvider(provider: Provider): void;
 	registerProvider(name: string, config: ProviderConfig): void;
 
 	/**
@@ -1597,6 +1605,8 @@ export type InlineExtension =
 			/** Display name shown as `<inline:name>` in the startup Extensions list. */
 			name: string;
 			factory: ExtensionFactory;
+			/** Omit this extension from the startup Extensions list. */
+			hidden?: boolean;
 	  };
 
 // ============================================================================
@@ -1696,13 +1706,41 @@ export type SetThinkingLevelHandler = (level: ThinkingLevel) => void;
 export type SetLabelHandler = (entryId: string, label: string | undefined) => void;
 
 /**
+ * Legacy provider-config registration queued during extension loading.
+ *
+ * `order` is a shared monotonic sequence across the legacy and native queues,
+ * assigned when queued. Flushers replay entries in this order so mixed
+ * legacy/native registrations keep last-registration-wins.
+ */
+export interface PendingProviderConfigRegistration {
+	name: string;
+	config: ProviderConfig;
+	extensionPath: string;
+	order: number;
+}
+
+/** Native pi-ai provider registration queued during extension loading. See PendingProviderConfigRegistration.order. */
+export interface PendingNativeProviderRegistration {
+	provider: Provider;
+	extensionPath: string;
+	order: number;
+}
+
+/** A queued pre-bind provider registration, tagged by kind, in original call order. */
+export type PendingProviderRegistration =
+	| ({ kind: "config" } & PendingProviderConfigRegistration)
+	| ({ kind: "native" } & PendingNativeProviderRegistration);
+
+/**
  * Shared state created by loader, used during registration and runtime.
  * Contains flag values (defaults set during registration, CLI values set after).
  */
 export interface ExtensionRuntimeState {
 	flagValues: Map<string, boolean | string>;
-	/** Provider registrations queued during extension loading, processed when runner binds */
-	pendingProviderRegistrations: Array<{ name: string; config: ProviderConfig; extensionPath: string }>;
+	/** Legacy provider-config registrations queued during extension loading, processed when runner binds. */
+	pendingProviderRegistrations: PendingProviderConfigRegistration[];
+	/** Native pi-ai provider registrations queued during extension loading, processed when runner binds. */
+	pendingNativeProviderRegistrations: PendingNativeProviderRegistration[];
 	/** Throws when this extension instance is stale after runtime replacement. */
 	assertActive: () => void;
 	/** Marks this extension instance as stale after runtime replacement or reload. */
@@ -1714,6 +1752,7 @@ export interface ExtensionRuntimeState {
 	 * After bindCore(): calls ModelRegistry directly for immediate effect.
 	 */
 	registerProvider: (name: string, config: ProviderConfig, extensionPath?: string) => void;
+	registerNativeProvider: (provider: Provider, extensionPath?: string) => void;
 	unregisterProvider: (name: string, extensionPath?: string) => void;
 }
 
@@ -1811,9 +1850,17 @@ export interface ExtensionCommandContextActions {
 export interface ExtensionRuntime extends ExtensionRuntimeState, ExtensionActions {}
 
 /** Loaded extension with all registered items. */
+export interface RegisteredMcpServerDeclaration {
+	name: string;
+	config: McpServerDeclaration;
+	extensionPath: string;
+	registrationCwd: string;
+}
+
 export interface Extension {
 	path: string;
 	resolvedPath: string;
+	hidden?: boolean;
 	sourceInfo: SourceInfo;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
@@ -1822,6 +1869,8 @@ export interface Extension {
 	commands: Map<string, RegisteredCommand>;
 	flags: Map<string, ExtensionFlag>;
 	shortcuts: Map<KeyId, ExtensionShortcut>;
+	mcpServers: Map<string, RegisteredMcpServerDeclaration>;
+	registrationCwd: string;
 }
 
 /** Result of loading extensions. */

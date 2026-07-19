@@ -6,11 +6,77 @@
 
 ### Added
 
+- Added `antml` as a valid `compat.toolCallFormat` in custom `models.json` provider and model definitions: ANTML `<function_calls>`/`<invoke>` text-tool protocol with Claude-Code-style failure tolerance.
+- Added built-in llama.cpp router support with `/login` connection setup and `/llama` Hugging Face model search and downloads, explicit loading, unloading, and live progress. See [llama.cpp](docs/llama-cpp.md).
+- Added extension registration for complete pi-ai providers, including native authentication, model refresh, filtering, and streaming behavior.
+
+### Changed
+
+### Fixed
+
+- Fixed prompt-template defaults for all arguments (`${@:-default}` and `${ARGUMENTS:-default}`).
+- Fixed obsolete custom UI, custom tool, and custom editor examples in the extension documentation.
+- Fixed Kimi Coding sessions to show API-equivalent implied costs with the subscription indicator.
+- Fixed OpenAI Responses early stream endings to trigger automatic retry instead of ending the agent run.
+
+### Removed
+
+## [2026.7.17-5] - 2026-07-17
+
+### Breaking Changes
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2026.7.17-4] - 2026-07-17
+
+### Breaking Changes
+
+### Added
+
+### Changed
+
+### Fixed
+
+- Fixed Kimi/Moonshot function parameters with root object unions by flattening them into a compatible object schema.
+
+### Removed
+
+## [2026.7.17-3] - 2026-07-17
+
+### Breaking Changes
+
+### Added
+
+### Changed
+
+- Renamed the MCP discovery tool from `mcp_search` to `tool_search` so its public name matches its behavior ([#227](https://github.com/code-yeongyu/senpi/pull/227)).
+
+### Fixed
+
+- Fixed payload hooks reintroducing Moonshot-incompatible function schemas by normalizing the final tool list after `onPayload` and immediately before request submission.
+
+### Removed
+
+## [2026.7.17-2] - 2026-07-17
+
+### Breaking Changes
+
+### Added
+
 - Added a `<workstation>` block (OS/kernel, arch, CPU, GPU, terminal) to the dynamic system prompt, followed by a dialect-tuned execution-context instruction telling the model that `bash`/`eval` run on this workstation while written code may target other machines. Presets pass their model-family dialect (Claude/GLM, GPT, Kimi); the fallback prompt uses a maximum-emphasis default.
 
 ### Changed
 
 ### Fixed
+
+- Fixed Kimi K3 prompt preset tuning to discourage overthinking and keep concise tool use ([#225](https://github.com/code-yeongyu/senpi/pull/225)).
+- Fixed Moonshot-flavored OpenAI backends by normalizing tool parameters through a dedicated compatibility layer so function schemas and result images are accepted by Moonshot's API ([#225](https://github.com/code-yeongyu/senpi/pull/225)).
 
 ### Removed
 
