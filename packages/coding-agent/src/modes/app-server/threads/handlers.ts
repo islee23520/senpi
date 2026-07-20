@@ -10,6 +10,7 @@ import type {
 import type { MethodHandler, MethodRegistry, RegistryConnection, RpcRequest } from "../rpc/registry.ts";
 import type { NotificationRouter } from "../server/notifications.ts";
 import { ThreadArchiveState } from "./archive-state.ts";
+import { registerThreadGoalHandlers } from "./goal-handlers.ts";
 import { connectionId, objectValue, optionalString, requiredString } from "./handler-params.ts";
 import { threadItemsListResponse, threadTurnsListResponse } from "./history.ts";
 import { listThreadsResponse, loadedThreadsResponse } from "./list-handlers.ts";
@@ -50,6 +51,7 @@ export function registerThreadLifecycleHandlers(
 	registry: MethodRegistry,
 	options: ThreadLifecycleHandlersOptions,
 ): ThreadLifecycleController {
+	registerThreadGoalHandlers(registry, options);
 	const handlers = new ThreadLifecycleHandlers(options);
 	for (const registration of handlers.registrations()) {
 		registry.register(registration.method, {

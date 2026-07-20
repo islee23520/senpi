@@ -1,6 +1,3 @@
-import { createHash } from "node:crypto";
-import { join } from "node:path";
-import { getAgentDir } from "../../../../config.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../types.ts";
 import { registerGoalCommand } from "./command-registration.ts";
 import { shouldQueueGoalContinuationAfterAgentEnd, shouldQueueGoalContinuationWhenIdle } from "./continuation.ts";
@@ -8,6 +5,7 @@ import { GoalElapsedTicker } from "./elapsed-ticker.ts";
 import { formatGoalForTool, goalStatusLabel } from "./format.ts";
 import { buildContinuationPrompt } from "./prompt.ts";
 import { accountGoalUsage, readGoal, updateGoal } from "./store.ts";
+import { goalStoreRef as buildGoalStoreRef } from "./store-ref.ts";
 import { registerGoalTools } from "./tool-registration.ts";
 import type { Goal, GoalAccountingMode, GoalStoreRef, TokenUsageSnapshot } from "./types.ts";
 import { isRecord } from "./types.ts";
@@ -45,14 +43,14 @@ export default function goalExtension(pi: ExtensionAPI): void {
 	});
 
 	registerGoalTools(pi, {
-		goalStoreRef,
+		goalStoreRef: (ctx) => buildGoalStoreRef(ctx.sessionManager, ctx.cwd),
 		accountCurrentAgentTurn,
 		beginAgentGoalAccounting,
 		markGoalCompletedThisTurn,
 		refreshGoalUi,
 	});
 	registerGoalCommand(pi, {
-		goalStoreRef,
+		goalStoreRef: (ctx) => buildGoalStoreRef(ctx.sessionManager, ctx.cwd),
 		accountCurrentAgentTurn,
 		beginAgentGoalAccounting,
 		stopAgentGoalAccounting,
@@ -232,20 +230,7 @@ function queueHiddenGoalPrompt(pi: ExtensionAPI, content: string): void {
 }
 
 function goalStoreRef(ctx: ExtensionContext): GoalStoreRef {
-	const sessionFile = ctx.sessionManager.getSessionFile();
-	const baseDir =
-		sessionFile === undefined
-			? join(getAgentDir(), "extensions", "goal", "no-session", cwdStoreKey(ctx.cwd))
-			: join(ctx.sessionManager.getSessionDir(), "extensions", "goal");
-
-	return {
-		baseDir,
-		threadId: ctx.sessionManager.getSessionId(),
-	};
-}
-
-function cwdStoreKey(cwd: string): string {
-	return createHash("sha256").update(cwd).digest("hex").slice(0, 24);
+	return buildGoalStoreRef(ctx.sessionManager, ctx.cwd);
 }
 
 function collectAssistantUsage(messages: unknown[]): TokenUsageSnapshot {

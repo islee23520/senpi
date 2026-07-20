@@ -41,6 +41,7 @@ export type TokenUsageSnapshot = {
 export type GoalUpdate = {
 	objective?: string;
 	status?: GoalStatus;
+	tokenBudget?: number | null;
 };
 
 export type GoalToolSnapshot = {

@@ -51,6 +51,8 @@ const BROADCAST_NOTIFICATION_METHODS = new Set([
 	"thread/archived",
 	"thread/unarchived",
 	"thread/name/updated",
+	"thread/goal/updated",
+	"thread/goal/cleared",
 	"thread/tokenUsage/updated",
 ]);
 const TERMINAL_NOTIFICATION_METHODS = new Set(["turn/completed", "error"]);
