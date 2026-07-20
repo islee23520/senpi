@@ -1,5 +1,49 @@
 # Builtin compaction extension changes
 
+## Structured rejection reasons on session_before_compact (2026-07-20)
+
+- `index.ts` cancel paths now attach a structured `rejectionCause` plus a
+  human-readable `reason` on the `SessionBeforeCompactResult`:
+  - per-turn cap → `{ rejectionCause: "per-turn-cap", reason: "per-turn compaction cap reached for this turn" }`.
+  - tripped circuit breaker → `{ rejectionCause: "circuit-breaker", reason: "compaction circuit breaker cooling down (Ns left)" }` with the real remaining cooldown.
+  - summarization threw → `{ reason: "compaction generator failed: <message>" }` (no `rejectionCause`; core defaults to `cancelled-by-extension`).
+  - summarization returned no summary → `{ reason: "compaction generator returned no summary" }`.
+  Core threads these into `compaction_end.errorMessage` so `/compact` produces a
+  specific line instead of the bare "Compaction cancelled" the plan flagged.
+- `ctx.ui.notify("Compaction rejected: ...", "warning")` was removed from the
+  `session_compact` `!accepted` branch and `ctx.ui.notify("Compaction failed: ...", "error")`
+  was removed from the provider-throw cancel path. Both facts now travel through
+  the canonical `compaction_end` event; duplicating them as toasts produced
+  double surfaces while the compaction status indicator was still animating
+  (plan §1 Q3). `breaker.recordFailure` in the `!accepted` branch stays live now
+  that core actually emits the rejection event.
+
+## Native-form summarization requests and honest compaction errors (2026-07-20)
+
+- `speculative.ts` no longer serializes the conversation into one `<conversation>` text dump for the
+  summarization request. Anthropic's anti-distillation classifier deterministically refuses large
+  serialized transcripts ("reverse engineering or duplicating model outputs"), which made `/compact`
+  fail with a bare "Compaction cancelled" on big sessions (reproduced at ~340k tokens; the same
+  content passes as native blocks). `generateSummaryMessage` now sends the conversation as native
+  LLM messages (via `convertToLlm` + `repairOrphanedToolResults`) with the merged compaction prompt
+  as a trailing user message, plus the agent's system prompt and tool definitions on the request so
+  it matches normal agent traffic.
+- `runExtensionCompaction` stops swallowing provider failures: an `error` stop reason now throws
+  with the provider's message, an `aborted` stream returns undefined (a partial summary is never
+  applied), and the post-generation `COMPACTION_BUDGET_RATIO` rejection is gone — it measured the
+  size of the *discarded* input, deterministically rejecting successful summaries of large sessions;
+  the core `_wouldCompactionOverflow` check still guards the applied result.
+- `index.ts` surfaces generation failures on the manual/blocking `session_before_compact` route via
+  `ctx.ui.notify(..., "error")` before cancelling, and the fire-and-forget `turn_end` recovery
+  compaction now catches rejections so a thrown summarization error cannot become an unhandled
+  rejection.
+- This stays in the builtin extension because the summarization request shape and failure policy are
+  extension-owned; core compaction (`core/compaction/compaction.ts`) is untouched.
+
+Expected upstream conflict zones: `builtin/compaction/speculative.ts` around
+`generateSummaryMessage`/`runExtensionCompaction`, and `builtin/compaction/index.ts` around the
+`session_before_compact` handler and snapshot construction.
+
 ## Truncation-recovery error placeholders for incomplete tool calls (2026-07-17)
 
 - A truncated text-protocol tool call that the middleware could only partially recover now reaches

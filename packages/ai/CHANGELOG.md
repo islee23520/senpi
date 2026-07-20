@@ -7,6 +7,19 @@
 ### Added
 
 - Added Claude text tool-call recovery for leaked bare or `antml:` invokes, with code/thinking exclusions, eager streaming projection, native-call ordering, fail-closed collision and abort handling, bounded parsing, and native history replay support.
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2026.7.20] - 2026-07-20
+
+### Breaking Changes
+
+### Added
+
 - Added the `antml` tool-call protocol: ANTML `<function_calls>`/`<invoke>` format with Claude-Code-style failure tolerance (parameter aliases, unknown-key filtering, unicode escape repair), validation-gated so repaired calls must still pass the tool schema.
 
 ### Changed

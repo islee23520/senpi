@@ -6,7 +6,7 @@ import { createInMemoryModelRegistry, getModelRuntime } from "../model-runtime-t
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentMessage, AgentOptions, AgentTool } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type {
 	FauxModelDefinition,
@@ -74,7 +74,9 @@ export interface HarnessOptions {
 	extensionFactories?: Array<InlineExtension | CreateTestExtensionsResultInput>;
 	withConfiguredAuth?: boolean;
 	upstreamModelId?: string;
+	serviceTier?: "auto" | "flex" | "priority";
 	onPayload?: (payload: unknown) => void;
+	prepareNextTurnWithContext?: AgentOptions["prepareNextTurnWithContext"];
 	persistSession?: boolean;
 	autoTitleSessions?: boolean;
 }
@@ -145,6 +147,8 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 					registeredModel.id === model.id && options.upstreamModelId !== undefined
 						? options.upstreamModelId
 						: undefined,
+				serviceTier:
+					registeredModel.id === model.id && options.serviceTier !== undefined ? options.serviceTier : undefined,
 			})),
 		});
 	}
@@ -181,6 +185,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 			if (!runner) return messages;
 			return runner.emitContext(messages);
 		},
+		prepareNextTurnWithContext: options.prepareNextTurnWithContext,
 	});
 	const extensionsResult = options.extensionFactories
 		? await createTestExtensionsResult(options.extensionFactories, tempDir)

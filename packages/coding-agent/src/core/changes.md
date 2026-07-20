@@ -1,5 +1,20 @@
 # changes
 
+## Smooth streaming settings (2026-07-20)
+
+### What changed
+
+- `settings-manager.ts`: added persisted `smoothStreaming` and `smoothStreamingFps` settings. Smoothing defaults on,
+  FPS defaults to 60, and reads clamp the configured value to 30–120.
+
+### Why extension system couldn't handle this alone
+
+- The built-in interactive renderer must read the setting before extensions load and while it owns an active stream.
+
+### Expected merge conflict zones
+
+- LOW: `Settings` fields and accessors near the existing thinking-visibility setting.
+
 ## "video" input modality plumbed through provider composition (2026-07-17)
 
 ### What changed
@@ -19,6 +34,23 @@
 ### Expected merge conflict zones on next upstream sync
 
 - LOW: `provider-composer.ts` model field lists.
+
+## Model-switch atomicity: live prompt options and api-change gate (2026-07-19)
+
+### What changed
+
+- `src/core/agent-session.ts`: `_modelSelectionChangesContext` now also fires on `api`
+  changes with identical provider, id, and context window, so wire-protocol-only model
+  changes trigger full toolset/prompt synchronization.
+- `src/core/extensions/runner.ts`: `emitModelSelect` re-reads live `systemPromptOptions`
+  per handler so an earlier handler that swaps the active toolset (gpt-apply-patch) lets
+  later handlers (prompt-preset) rebuild the system prompt from the post-swap tools in
+  the same emission.
+
+### Why extension system couldn't handle this alone
+
+- The stale-snapshot defect lives in the core emission path; extensions only consume the
+  combined `model_select` result.
 
 ## Composed providers engage text tool-call compatibility middleware (2026-07-17)
 

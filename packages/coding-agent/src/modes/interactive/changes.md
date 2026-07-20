@@ -1,5 +1,93 @@
 # changes
 
+## exhaustive compaction_end rendering (2026-07-20)
+
+### What changed
+
+- `interactive-mode.ts`: the `compaction_end` handler no longer silently falls
+  through when a rejection carries no `errorMessage` (e.g. legacy shape). It
+  prefers the extension-provided `errorMessage` inside the `aborted` branch so
+  per-turn-cap / circuit-breaker / provider-error cancels render the real cause
+  instead of the generic "Compaction cancelled", and adds a fallback
+  `showError("Compaction failed (no result); cause: <rejectionCause>")` so no
+  future `compaction_end` shape can be ignored.
+
+### Why
+
+- Manual `/compact` used to render nothing when core rejected the summary as
+  overflow-would-still-happen. The handler only branched on `aborted / result /
+  errorMessage` and `_rejectCompaction` used to emit none of those fields for
+  `would-overflow`. Combined with core now populating `errorMessage`, the
+  interactive fallback closes plan §1.
+
+## abbreviated footer token notation (2026-07-20)
+
+### What changed
+
+- `components/footer.ts`: `formatTokens` now renders oh-my-pi-style K/M/B abbreviations (e.g. `546K`, `1M`, `1.5M`)
+  instead of comma-grouped `toLocaleString` output. The footer context-usage display now reads
+  `546K/1M (54.6%)` instead of `545,661/1,000,000 (54.6%)`; the same notation applies to the ↑/↓/cache counters and
+  the `interactive-mode.ts` token readouts that reuse `formatTokens`.
+
+### Why
+
+- Comma-grouped raw counts are wide and hard to scan in the status line; abbreviated notation matches oh-my-pi's
+  status-line style and keeps the footer compact at narrow widths.
+
+### Why extension system couldn't handle this
+
+- Footer token formatting is a core display primitive, not an extension-registered status segment.
+## paced streaming tool argument previews (2026-07-20)
+
+### What changed
+
+- `tool-args-reveal.ts`: adds per-tool-call pacing for streaming partial JSON. The first usable prefix appears
+  immediately, later append-only growth follows the smooth-streaming cadence, parsing is batched in at least 64
+  UTF-16-unit increments, and reveal boundaries never split surrogate pairs.
+- `interactive-mode.ts`: routes in-flight tool arguments through the controller, flushes exact arguments at message and
+  execution boundaries, cancels stale state on direct-update paths, publishes buffered arguments before teardown, and
+  refreshes timers after live smooth streaming setting changes.
+
+### Why
+
+- Large tool arguments can arrive in provider bursts. Parsing and rendering every burst makes previews jump abruptly
+  and repeatedly reparses nearly identical JSON prefixes.
+
+### Why extension system couldn't handle this
+
+- Extensions cannot own the built-in pending-tool component map or coordinate its private argument updates with
+  assistant-message, tool-execution, settings, and teardown lifecycles.
+
+### Expected merge conflict zones
+
+- MEDIUM: `interactive-mode.ts` around streamed tool-call handling and lifecycle flushes.
+- LOW: the fork-only argument reveal controller.
+
+## smooth streaming reveal (2026-07-20)
+
+### What changed
+
+- `streaming-reveal.ts`: adds append-aware grapheme counting/slicing and a real-time reveal controller with 90
+  units/second minimum velocity, a 267ms catchup horizon, 1–100ms delta clamping, and configurable 30–120fps ticks.
+- `interactive-mode.ts`: routes assistant start/update events through one controller, flushes final content directly,
+  stops pacing on abort/session teardown, resyncs live thinking visibility, and applies the TUI FPS cap.
+- `components/settings-selector.ts`: adds “Smooth streaming” and “Streaming fps” controls.
+
+### Why
+
+- Bursty provider deltas should appear as a readable, steady reveal without splitting Korean, emoji ZWJ, combining, or
+  other grapheme clusters.
+
+### Why extension system couldn't handle this
+
+- Extensions cannot replace the built-in in-flight assistant component or coordinate its render timer with session
+  teardown and TUI scheduling.
+
+### Expected merge conflict zones
+
+- MEDIUM: `interactive-mode.ts` assistant event handling and settings callbacks.
+- LOW: the fork-only controller and new selector items.
+
 ## incremental assistant message re-render (2026-07-19)
 
 ### What changed
