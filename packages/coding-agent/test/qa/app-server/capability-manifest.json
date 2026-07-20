@@ -4,6 +4,8 @@
     "stable": [
       "initialize",
       "model/list",
+      "experimentalFeature/list",
+      "permissionProfile/list",
       "thread/archive",
       "thread/compact/start",
       "thread/delete",
@@ -28,6 +30,7 @@
     "experimental": [
       "remoteControl/client/list",
       "remoteControl/status/read",
+      "collaborationMode/list",
       "thread/search",
       "thread/searchOccurrences",
       "thread/turns/list",
@@ -39,6 +42,7 @@
     "experimentalApi": [
       "remoteControl/client/list",
       "remoteControl/status/read",
+      "collaborationMode/list",
       "thread/search",
       "thread/searchOccurrences",
       "thread/turns/list",
@@ -73,7 +77,6 @@
       "config/value/write",
       "configRequirements/read",
       "experimentalFeature/enablement/set",
-      "experimentalFeature/list",
       "externalAgentConfig/detect",
       "externalAgentConfig/import",
       "externalAgentConfig/import/readHistories",
@@ -100,7 +103,6 @@
       "mcpServer/tool/call",
       "mcpServerStatus/list",
       "modelProvider/capabilities/read",
-      "permissionProfile/list",
       "plugin/install",
       "plugin/installed",
       "plugin/list",
@@ -123,7 +125,6 @@
       "windowsSandbox/setupStart"
     ],
     "experimental": [
-      "collaborationMode/list",
       "environment/add",
       "environment/info",
       "environment/status",

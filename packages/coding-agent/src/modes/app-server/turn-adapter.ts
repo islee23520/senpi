@@ -5,6 +5,7 @@ import type { MethodRegistry, RpcRequest } from "./rpc/registry.ts";
 import type { ApprovalBridge } from "./server/approvals.ts";
 import type { Connection, ConnectionId, ConnectionInput, TransportKind } from "./server/connection.ts";
 import type { ConnectionTransport, NotificationRouter } from "./server/notifications.ts";
+import type { ServerCoreOptions } from "./server/server-core.ts";
 import { ServerCore } from "./server/server-core.ts";
 import { decodeCursor, encodeCursor, objectValue, optionalNumber, optionalString } from "./threads/handler-params.ts";
 import type { ThreadEntry, ThreadRegistry } from "./threads/registry.ts";
@@ -49,8 +50,9 @@ export function createRoutedServerCore(
 	notifications: NotificationRouter,
 	approvals: ApprovalBridge,
 	onThreadSubscribersEmpty?: (threadId: string) => void,
+	options: Omit<ServerCoreOptions, "registry"> = {},
 ): ServerCore {
-	return new RoutedServerCore(registry, notifications, approvals, onThreadSubscribersEmpty);
+	return new RoutedServerCore(registry, notifications, approvals, onThreadSubscribersEmpty, options);
 }
 
 export function registerLoadedThreadObjectListHandler(registry: MethodRegistry, threads: ThreadRegistry): void {
@@ -81,8 +83,9 @@ class RoutedServerCore extends ServerCore {
 		notifications: NotificationRouter,
 		approvals: ApprovalBridge,
 		onThreadSubscribersEmpty?: (threadId: string) => void,
+		options: Omit<ServerCoreOptions, "registry"> = {},
 	) {
-		super({ registry });
+		super({ ...options, registry });
 		this.notifications = notifications;
 		this.approvals = approvals;
 		this.onThreadSubscribersEmpty = onThreadSubscribersEmpty;

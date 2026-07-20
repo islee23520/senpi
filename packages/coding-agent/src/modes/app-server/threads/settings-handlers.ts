@@ -2,7 +2,6 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { getSupportedThinkingLevels } from "../../../core/thinking-levels.ts";
 import { SENPI_COLLABORATION_MODE } from "../protocol/collaboration-mode.ts";
-import type { ThreadSettings as GeneratedThreadSettings } from "../protocol/generated/v2/ThreadSettings.ts";
 import type { ThreadSettings, ThreadSettingsUpdateResponse } from "../protocol/index.ts";
 import type { MethodHandler, MethodRegistry, RegistryConnection, RpcRequest } from "../rpc/registry.ts";
 import type { NotificationRouter } from "../server/notifications.ts";
@@ -146,6 +145,6 @@ function buildThreadSettings(entry: ThreadEntry): ThreadSettings {
 		summary: null,
 		collaborationMode: SENPI_COLLABORATION_MODE,
 		personality: null,
-	} satisfies GeneratedThreadSettings;
+	} satisfies ThreadSettings;
 	return settings;
 }

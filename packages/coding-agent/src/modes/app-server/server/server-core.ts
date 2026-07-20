@@ -9,6 +9,8 @@ import {
 } from "../rpc/envelope.ts";
 import { alreadyInitializedError, invalidParamsError, invalidRequestError } from "../rpc/errors.ts";
 import { createRegistry, type MethodRegistration, type MethodRegistry } from "../rpc/registry.ts";
+import type { ThreadRegistry } from "../threads/registry.ts";
+import { registerAppServerCatalogMethods } from "./catalogs.ts";
 import {
 	buildInitializeResponse,
 	type Connection,
@@ -26,6 +28,7 @@ export interface ServerCoreOptions {
 	readonly modelRegistry?: AppServerModelRegistry;
 	readonly codexHome?: string;
 	readonly serverCwd?: string;
+	readonly threads?: Pick<ThreadRegistry, "getLoadedThread" | "listLoaded">;
 	readonly version?: string;
 	readonly now?: () => number;
 }
@@ -55,9 +58,16 @@ export class ServerCore {
 			modelRegistry: options.modelRegistry,
 			agentDir: this.codexHome,
 		});
+		registerAppServerCatalogMethods(this.registry, {
+			modelRegistry: options.modelRegistry,
+			agentDir: this.codexHome,
+			serverCwd: options.serverCwd,
+			threads: options.threads,
+		});
 		registerAppServerSkillMethods(this.registry, {
 			agentDir: this.codexHome,
 			serverCwd: options.serverCwd,
+			threads: options.threads,
 		});
 	}
 

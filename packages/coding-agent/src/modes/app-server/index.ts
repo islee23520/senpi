@@ -151,14 +151,24 @@ function createAppServerRuntime(requestShutdown: (reason: string) => void): AppS
 		return subscriberCount;
 	});
 	let lifecycle: ThreadLifecycleController | undefined;
-	const core = createRoutedServerCore(registry, notifications, approvals, (threadId) => {
-		lifecycle?.scheduleIdleUnloadForThread(threadId);
-	});
 	threads = new ThreadRegistry({
 		agentDir: getAgentDir(),
 		sessionDir: process.env[ENV_SESSION_DIR],
 		createSession: (options) => createBoundAppServerSession(options, approvals, notifications, requestShutdown),
 	});
+	const core = createRoutedServerCore(
+		registry,
+		notifications,
+		approvals,
+		(threadId) => {
+			lifecycle?.scheduleIdleUnloadForThread(threadId);
+		},
+		{
+			codexHome: getAgentDir(),
+			serverCwd: process.cwd(),
+			threads,
+		},
+	);
 	registerAppServerSkillMethods(registry, {
 		agentDir: getAgentDir(),
 		serverCwd: process.cwd(),
