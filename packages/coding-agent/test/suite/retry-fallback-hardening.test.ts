@@ -75,6 +75,25 @@ describe("retry fallback hardening", () => {
 		expect(harness.faux.getCallLog()[1]?.modelId).toBe("faux-2");
 	});
 
+
+	it("submits a clean full request for a responses-API fallback candidate", async () => {
+		const harness = await createHarness({
+			models: [{ id: "faux-1" }, { id: "faux-2" }],
+			api: "openai-responses",
+			settings: { retry: { enabled: true, baseDelayMs: 1, fallbackChains: { [primary]: [fallback] } } },
+		});
+		harnesses.push(harness);
+		harness.setResponses([overloaded(), fauxAssistantMessage("fallback answer")]);
+
+		await harness.session.prompt("responses api fallback");
+
+		const fallbackRequest = harness.faux.getCallLog()[1];
+		if (!fallbackRequest) throw new Error("missing fallback request");
+		expect(fallbackRequest.modelId).toBe("faux-2");
+		expect(fallbackRequest.options).not.toHaveProperty("previous_response_id");
+		expect(JSON.stringify(fallbackRequest.context.messages)).toContain("responses api fallback");
+	});
+
 	it("logs the no-chain decision for an unconfigured model", async () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1" }, { id: "faux-2" }],
