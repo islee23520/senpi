@@ -14,6 +14,7 @@ import { registerThreadGoalHandlers } from "./goal-handlers.ts";
 import { connectionId, objectValue, optionalString, requiredString } from "./handler-params.ts";
 import { threadItemsListResponse, threadTurnsListResponse } from "./history.ts";
 import { listThreadsResponse, loadedThreadsResponse } from "./list-handlers.ts";
+import { registerThreadMetadataHandlers } from "./metadata-handlers.ts";
 import { type ThreadEntry, ThreadNotFoundError, type ThreadRegistry } from "./registry.ts";
 import { threadSearchResponse } from "./search.ts";
 import { ThreadSearchCache } from "./search-cache.ts";
@@ -54,7 +55,13 @@ export function registerThreadLifecycleHandlers(
 ): ThreadLifecycleController {
 	registerThreadGoalHandlers(registry, options);
 	registerThreadSettingsHandlers(registry, options);
-	const handlers = new ThreadLifecycleHandlers(options);
+	const archiveState = new ThreadArchiveState(options.threads.getSessionDir());
+	registerThreadMetadataHandlers(registry, {
+		threads: options.threads,
+		turnLog: options.turnLog,
+		archiveState,
+	});
+	const handlers = new ThreadLifecycleHandlers(options, archiveState);
 	for (const registration of handlers.registrations()) {
 		registry.register(registration.method, {
 			handler: registration.handler,
@@ -84,13 +91,13 @@ class ThreadLifecycleHandlers {
 	private readonly idleUnloadMs: number;
 	private readonly idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-	constructor(options: ThreadLifecycleHandlersOptions) {
+	constructor(options: ThreadLifecycleHandlersOptions, archiveState: ThreadArchiveState) {
 		this.threads = options.threads;
 		this.turnLog = options.turnLog;
 		this.notifications = options.notifications;
 		this.replayPendingApprovals = options.replayPendingApprovals;
 		this.deferUntilResponded = options.deferUntilResponded;
-		this.archiveState = new ThreadArchiveState(options.threads.getSessionDir());
+		this.archiveState = archiveState;
 		this.idleUnloadMs = Math.max(0, options.idleUnloadMinutes ?? DEFAULT_IDLE_UNLOAD_MINUTES) * 60 * 1000;
 	}
 
