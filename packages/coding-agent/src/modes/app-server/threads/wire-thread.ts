@@ -1,5 +1,5 @@
 import { VERSION } from "../../../config.ts";
-import type { Thread, ThreadItem, ThreadStatus, Turn, TurnItemsView } from "../protocol/generated/v2/index.ts";
+import type { Thread, ThreadItem, ThreadStatus, Turn, TurnItemsView } from "../protocol/index.ts";
 import { ThreadMetadataState } from "./metadata-state.ts";
 import type { ThreadEntry, WireThread } from "./registry.ts";
 import type { LoggedTurn, TurnLog, WireItem } from "./turn-log.ts";
@@ -11,6 +11,7 @@ const metadataState = new ThreadMetadataState();
 
 export interface BuildWireThreadOptions {
 	readonly forkedFromId?: string | null;
+	readonly recencyAt?: string | null;
 }
 
 export async function buildWireThread(
@@ -33,7 +34,7 @@ export async function buildWireThread(
 		modelProvider: model?.provider ?? "unknown",
 		createdAt,
 		updatedAt,
-		recencyAt: updatedAt,
+		recencyAt: options.recencyAt === null ? null : isoSeconds(options.recencyAt ?? wire.updatedAt),
 		status: toGeneratedStatus(wire.status.type),
 		path: "session" in entry ? (entry.session.sessionFile ?? null) : wire.sessionPath,
 		cwd: wire.cwd,

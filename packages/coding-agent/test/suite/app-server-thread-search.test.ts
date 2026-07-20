@@ -125,6 +125,47 @@ describe("app-server thread/search", () => {
 		});
 	});
 
+	it("rejects unknown source kinds and keeps recency ordering distinct from updated activity", async () => {
+		// Given: one thread with newer assistant activity and another with the newer user turn.
+		const { connection, registry, root } = await createHarness();
+		const assistantRecentId = "25000000-0000-4000-8000-000000000001";
+		const userRecentId = "25000000-0000-4000-8000-000000000002";
+		await writeSearchSession(root, assistantRecentId, "recency needle first", {
+			userTimestamp: "2026-07-02T00:00:01.000Z",
+			assistantTimestamp: "2026-07-02T00:00:10.000Z",
+		});
+		await writeSearchSession(root, userRecentId, "recency needle second", {
+			userTimestamp: "2026-07-02T00:00:05.000Z",
+			assistantTimestamp: "2026-07-02T00:00:06.000Z",
+		});
+
+		// When: malformed source filtering and both activity orderings are requested.
+		const invalidSource = await registry.dispatch(connection, {
+			id: 14,
+			method: "thread/search",
+			params: { searchTerm: "recency needle", sourceKinds: ["not-a-source-kind"] },
+		});
+		const updated = await registry.dispatch(connection, {
+			id: 15,
+			method: "thread/search",
+			params: { searchTerm: "recency needle", sortKey: "updated_at" },
+		});
+		const recency = await registry.dispatch(connection, {
+			id: 16,
+			method: "thread/search",
+			params: { searchTerm: "recency needle", sortKey: "recency_at" },
+		});
+
+		// Then: the enum boundary is strict and recency follows user turns, not later assistant activity.
+		expect(invalidSource).toMatchObject({ id: 14, error: { code: -32600 } });
+		const updatedThreads = dataArray(responseResult(updated)).map((item) => objectAt(item, "thread"));
+		const recencyThreads = dataArray(responseResult(recency)).map((item) => objectAt(item, "thread"));
+		expect(updatedThreads.map((thread) => stringAt(thread, "id"))).toEqual([assistantRecentId, userRecentId]);
+		expect(recencyThreads.map((thread) => stringAt(thread, "id"))).toEqual([userRecentId, assistantRecentId]);
+		expect(recencyThreads[1]?.recencyAt).toBe(Date.parse("2026-07-02T00:00:01.000Z") / 1000);
+		expect(recencyThreads[1]?.updatedAt).toBe(Date.parse("2026-07-02T00:00:10.000Z") / 1000);
+	});
+
 	it("keeps a bounded searchable-text cache across a 200-session volume", async () => {
 		// Given: a large fixture set and a spy that detects the full SessionInfo scan path.
 		const { connection, registry, root } = await createHarness();
@@ -161,10 +202,40 @@ describe("app-server thread/search", () => {
 	});
 });
 
-async function writeSearchSession(root: string, threadId: string, text: string): Promise<string> {
+type SearchSessionOptions = {
+	readonly userTimestamp?: string;
+	readonly assistantTimestamp?: string;
+};
+
+async function writeSearchSession(
+	root: string,
+	threadId: string,
+	text: string,
+	options: SearchSessionOptions = {},
+): Promise<string> {
 	const sessionDir = join(root, "sessions");
 	await mkdir(sessionDir, { recursive: true });
 	const sessionFile = join(sessionDir, `2026-07-02T00-00-00-000Z_${threadId}.jsonl`);
+	const messages = [
+		JSON.stringify({
+			type: "message",
+			id: `message-${threadId}`,
+			parentId: threadId,
+			timestamp: options.userTimestamp ?? "2026-07-02T00:00:01.000Z",
+			message: { role: "user", content: [{ type: "text", text }] },
+		}),
+	];
+	if (options.assistantTimestamp) {
+		messages.push(
+			JSON.stringify({
+				type: "message",
+				id: `assistant-${threadId}`,
+				parentId: `message-${threadId}`,
+				timestamp: options.assistantTimestamp,
+				message: { role: "assistant", content: [{ type: "text", text: "assistant activity" }] },
+			}),
+		);
+	}
 	await writeFile(
 		sessionFile,
 		[
@@ -175,13 +246,7 @@ async function writeSearchSession(root: string, threadId: string, text: string):
 				timestamp: "2026-07-02T00:00:00.000Z",
 				cwd: root,
 			}),
-			JSON.stringify({
-				type: "message",
-				id: `message-${threadId}`,
-				parentId: threadId,
-				timestamp: "2026-07-02T00:00:01.000Z",
-				message: { role: "user", content: [{ type: "text", text }] },
-			}),
+			...messages,
 			"",
 		].join("\n"),
 	);

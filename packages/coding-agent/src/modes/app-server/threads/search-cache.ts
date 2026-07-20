@@ -5,6 +5,7 @@ import type { WireThread } from "./registry.ts";
 
 export type SearchSessionRecord = {
 	readonly thread: WireThread;
+	readonly recencyAt: string;
 	readonly searchableText: string;
 };
 
@@ -109,6 +110,7 @@ function parseSearchSession(path: string, mtimeMs: number, content: string): Sea
 	let name: string | null = null;
 	let firstUserMessage: string | null = null;
 	let lastActivityMs = mtimeMs;
+	let lastRecencyMs = mtimeMs;
 	const messages: string[] = [];
 
 	for (const line of content.split("\n")) {
@@ -117,7 +119,9 @@ function parseSearchSession(path: string, mtimeMs: number, content: string): Sea
 		if (!header) {
 			header = parseHeader(entry);
 			if (!header) return null;
-			lastActivityMs = timestampMs(header.timestamp, mtimeMs);
+			const createdAtMs = timestampMs(header.timestamp, mtimeMs);
+			lastActivityMs = createdAtMs;
+			lastRecencyMs = createdAtMs;
 			continue;
 		}
 
@@ -130,13 +134,17 @@ function parseSearchSession(path: string, mtimeMs: number, content: string): Sea
 		if (!message) continue;
 		const role = message.role;
 		if (role !== "user" && role !== "assistant") continue;
+		const activityMs = timestampMs(entry.timestamp, mtimeMs);
+		lastActivityMs = Math.max(lastActivityMs, activityMs);
+		if (role === "user") {
+			lastRecencyMs = Math.max(lastRecencyMs, activityMs);
+		}
 		const text = messageText(message.content);
 		if (!text) continue;
 		messages.push(text);
 		if (role === "user" && firstUserMessage === null) {
 			firstUserMessage = text;
 		}
-		lastActivityMs = Math.max(lastActivityMs, timestampMs(entry.timestamp, mtimeMs));
 	}
 
 	if (!header) return null;
@@ -153,6 +161,7 @@ function parseSearchSession(path: string, mtimeMs: number, content: string): Sea
 			preview: firstUserMessage,
 			name,
 		},
+		recencyAt: isoTimestamp(lastRecencyMs),
 		searchableText: messages.join(" "),
 	};
 }

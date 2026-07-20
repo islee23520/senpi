@@ -1,4 +1,9 @@
-import type { ThreadSearchParams, ThreadSearchResponse, ThreadSearchResult } from "../protocol/index.ts";
+import type {
+	ThreadSearchParams,
+	ThreadSearchResponse,
+	ThreadSearchResult,
+	ThreadSourceKind,
+} from "../protocol/index.ts";
 import { RpcHandlerError } from "../rpc/errors.ts";
 import type { ThreadArchiveState } from "./archive-state.ts";
 import { objectValue } from "./handler-params.ts";
@@ -11,6 +16,18 @@ import { buildWireThread } from "./wire-thread.ts";
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 const APP_SERVER_SOURCE = "appServer";
+const THREAD_SOURCE_KINDS = new Set<ThreadSourceKind>([
+	"cli",
+	"vscode",
+	"exec",
+	"appServer",
+	"subAgent",
+	"subAgentReview",
+	"subAgentCompact",
+	"subAgentThreadSpawn",
+	"subAgentOther",
+	"unknown",
+]);
 type SearchSortKey = NonNullable<ThreadSearchParams["sortKey"]>;
 
 export type ThreadSearchDependencies = {
@@ -26,7 +43,7 @@ type ParsedSearchParams = {
 	readonly limit: number;
 	readonly sortKey: SearchSortKey;
 	readonly sortDirection: "asc" | "desc";
-	readonly sourceKinds: readonly string[];
+	readonly sourceKinds: readonly ThreadSourceKind[];
 	readonly archived: boolean;
 };
 
@@ -84,6 +101,7 @@ function loadedThreadRecord(threads: ThreadRegistry, wireThread: WireThread): Se
 		const entry = threads.getLoadedThread(wireThread.id);
 		return {
 			thread: wireThread,
+			recencyAt: wireThread.updatedAt,
 			searchableText: entry.session
 				.getUserMessagesForForking()
 				.map((message) => message.text)
@@ -100,10 +118,10 @@ async function toSearchResult(
 	searchTerm: string,
 	dependencies: ThreadSearchDependencies,
 ): Promise<ThreadSearchResult> {
-	let thread = await buildWireThread(record.thread, dependencies.turnLog, false);
+	let thread = await buildWireThread(record.thread, dependencies.turnLog, false, { recencyAt: record.recencyAt });
 	try {
 		const loaded = dependencies.threads.getLoadedThread(record.thread.id);
-		thread = await buildWireThread(loaded, dependencies.turnLog, false);
+		thread = await buildWireThread(loaded, dependencies.turnLog, false, { recencyAt: record.recencyAt });
 	} catch (error: unknown) {
 		if (!(error instanceof ThreadNotFoundError)) throw error;
 	}
@@ -142,12 +160,16 @@ function readSortDirection(value: unknown): "asc" | "desc" {
 	throw invalidSearch("thread/search received an invalid sortDirection");
 }
 
-function readSourceKinds(value: unknown): readonly string[] {
+function readSourceKinds(value: unknown): readonly ThreadSourceKind[] {
 	if (value === undefined || value === null) return [];
-	if (!Array.isArray(value) || value.some((source) => typeof source !== "string")) {
+	if (!Array.isArray(value) || value.some((source) => !isThreadSourceKind(source))) {
 		throw invalidSearch("thread/search received an invalid sourceKinds");
 	}
 	return [...new Set(value)].sort();
+}
+
+function isThreadSourceKind(value: unknown): value is ThreadSourceKind {
+	return typeof value === "string" && THREAD_SOURCE_KINDS.has(value as ThreadSourceKind);
 }
 
 function readCursor(value: unknown): string | null {
@@ -170,8 +192,8 @@ function compareRecords(
 	sortKey: SearchSortKey,
 	direction: "asc" | "desc",
 ): number {
-	const leftValue = sortValue(left.thread, sortKey);
-	const rightValue = sortValue(right.thread, sortKey);
+	const leftValue = sortValue(left, sortKey);
+	const rightValue = sortValue(right, sortKey);
 	if (leftValue !== rightValue) {
 		return direction === "asc" ? leftValue - rightValue : rightValue - leftValue;
 	}
@@ -180,8 +202,13 @@ function compareRecords(
 		: right.thread.id.localeCompare(left.thread.id);
 }
 
-function sortValue(thread: WireThread, sortKey: SearchSortKey): number {
-	const field = sortKey === "created_at" ? thread.createdAt : thread.updatedAt;
+function sortValue(record: SearchSessionRecord, sortKey: SearchSortKey): number {
+	const field =
+		sortKey === "created_at"
+			? record.thread.createdAt
+			: sortKey === "updated_at"
+				? record.thread.updatedAt
+				: record.recencyAt;
 	const parsed = Date.parse(field);
 	return Number.isFinite(parsed) ? parsed : 0;
 }

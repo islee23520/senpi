@@ -112,8 +112,18 @@ async function main(): Promise<void> {
 	await Promise.all([mkdir(agentDir, { recursive: true }), mkdir(sessionDir, { recursive: true }), mkdir(cwd)]);
 	const activeId = "40000000-0000-4000-8000-000000000001";
 	const archivedId = "40000000-0000-4000-8000-000000000002";
+	const assistantRecentId = "40000000-0000-4000-8000-000000000003";
+	const userRecentId = "40000000-0000-4000-8000-000000000004";
 	await writeSession(sessionDir, activeId, "Wire NEEDLE hit");
 	await writeSession(sessionDir, archivedId, "Archived needle hit");
+	await writeSession(sessionDir, assistantRecentId, "recency probe first", {
+		userTimestamp: "2026-07-02T00:00:01.000Z",
+		assistantTimestamp: "2026-07-02T00:00:10.000Z",
+	});
+	await writeSession(sessionDir, userRecentId, "recency probe second", {
+		userTimestamp: "2026-07-02T00:00:05.000Z",
+		assistantTimestamp: "2026-07-02T00:00:06.000Z",
+	});
 
 	const enabled = new StdioClient(spawnServer(root, agentDir, sessionDir, true));
 	const disabled = new StdioClient(spawnServer(root, agentDir, sessionDir, false));
@@ -130,17 +140,42 @@ async function main(): Promise<void> {
 		const snippet = typeof first?.snippet === "string" ? first.snippet : "";
 		const empty = await enabled.request("thread/search", { searchTerm: "   " });
 		const gated = await disabled.request("thread/search", { searchTerm: "needle" });
+		const invalidSource = await enabled.request("thread/search", {
+			searchTerm: "needle",
+			sourceKinds: ["not-a-source-kind"],
+		});
+		const updated = resultRecord(
+			await enabled.request("thread/search", { searchTerm: "recency probe", sortKey: "updated_at" }),
+			"thread/search updated_at",
+		);
+		const recency = resultRecord(
+			await enabled.request("thread/search", { searchTerm: "recency probe", sortKey: "recency_at" }),
+			"thread/search recency_at",
+		);
 
 		const emptyCode = errorCode(empty);
 		const gateMessage = errorMessage(gated);
+		const invalidSourceCode = errorCode(invalidSource);
 		const searchHits = data.length;
 		const snippetMatch = snippet.toLowerCase().includes("needle");
 		const gateEnforced = gateMessage.includes("experimentalApi");
+		const updatedFirst = firstThreadId(updated);
+		const recencyFirst = firstThreadId(recency);
+		const recencyDistinct = updatedFirst === assistantRecentId && recencyFirst === userRecentId;
 		console.log(`SEARCH_HITS=${searchHits}`);
 		console.log(`SNIPPET_MATCH=${snippetMatch ? 1 : 0}`);
 		console.log(`EMPTY_TERM_CODE=${emptyCode ?? "INVALID"}`);
 		console.log(`GATE_ENFORCED=${gateEnforced ? 1 : 0}`);
-		if (searchHits < 1 || !snippetMatch || (emptyCode !== -32600 && emptyCode !== -32602) || !gateEnforced) {
+		console.log(`SOURCE_KIND_INVALID=${invalidSourceCode === -32600 ? 1 : 0}`);
+		console.log(`RECENCY_DISTINCT=${recencyDistinct ? 1 : 0}`);
+		if (
+			searchHits < 1 ||
+			!snippetMatch ||
+			(emptyCode !== -32600 && emptyCode !== -32602) ||
+			!gateEnforced ||
+			invalidSourceCode !== -32600 ||
+			!recencyDistinct
+		) {
 			throw new Error("task8 search assertions failed");
 		}
 	} finally {
@@ -185,7 +220,37 @@ async function initialize(client: StdioClient, name: string): Promise<void> {
 	assertResult(response, "initialize");
 }
 
-async function writeSession(sessionDir: string, threadId: string, text: string): Promise<void> {
+type SessionOptions = {
+	readonly userTimestamp?: string;
+	readonly assistantTimestamp?: string;
+};
+
+async function writeSession(
+	sessionDir: string,
+	threadId: string,
+	text: string,
+	options: SessionOptions = {},
+): Promise<void> {
+	const messages = [
+		JSON.stringify({
+			type: "message",
+			id: `message-${threadId}`,
+			parentId: threadId,
+			timestamp: options.userTimestamp ?? "2026-07-02T00:00:01.000Z",
+			message: { role: "user", content: [{ type: "text", text }] },
+		}),
+	];
+	if (options.assistantTimestamp) {
+		messages.push(
+			JSON.stringify({
+				type: "message",
+				id: `assistant-${threadId}`,
+				parentId: `message-${threadId}`,
+				timestamp: options.assistantTimestamp,
+				message: { role: "assistant", content: [{ type: "text", text: "assistant activity" }] },
+			}),
+		);
+	}
 	await writeFile(
 		join(sessionDir, `2026-07-02T00-00-00-000Z_${threadId}.jsonl`),
 		[
@@ -196,13 +261,7 @@ async function writeSession(sessionDir: string, threadId: string, text: string):
 				timestamp: "2026-07-02T00:00:00.000Z",
 				cwd: sessionDir,
 			}),
-			JSON.stringify({
-				type: "message",
-				id: `message-${threadId}`,
-				parentId: threadId,
-				timestamp: "2026-07-02T00:00:01.000Z",
-				message: { role: "user", content: [{ type: "text", text }] },
-			}),
+			...messages,
 			"",
 		].join("\n"),
 	);
@@ -225,6 +284,12 @@ function errorCode(response: WireRecord): number | null {
 function errorMessage(response: WireRecord): string {
 	const error = recordValue(response.error);
 	return typeof error?.message === "string" ? error.message : "";
+}
+
+function firstThreadId(result: WireRecord): string | null {
+	const first = recordValue(arrayValue(result.data)[0]);
+	const thread = recordValue(first?.thread);
+	return typeof thread?.id === "string" ? thread.id : null;
 }
 
 function arrayValue(value: unknown): readonly unknown[] {
