@@ -94,12 +94,35 @@ async function main(): Promise<void> {
 			params: { threadId: entry.id, cursor: "not-json", limit: 2 },
 		});
 		const invalidCursorError = "error" in invalidCursor && invalidCursor.error.code === -32600 ? 1 : 0;
+		const invalidLimits = await Promise.all(
+			(["thread/turns/list", "thread/items/list"] as const).flatMap((method, methodIndex) =>
+				[-1, 1.5, 0x1_0000_0000].map((limit, limitIndex) =>
+					registry.dispatch(connection, {
+						id: 20 + methodIndex * 3 + limitIndex,
+						method,
+						params: { threadId: entry.id, limit },
+					}),
+				),
+			),
+		);
+		const invalidLimitsRejected = invalidLimits.every(
+			(response) => "error" in response && response.error.code === -32600,
+		)
+			? 1
+			: 0;
 
 		console.log(`PAGES_FWD=${forwardPages.length}`);
 		console.log(`PAGES_REV=${reversePages.length}`);
 		console.log(`ANCHOR_REPLAYED=${anchorReplayed}`);
 		console.log(`INVALID_CURSOR_ERROR=${invalidCursorError}`);
-		if (forwardPages.length !== 3 || reversePages.length !== 3 || anchorReplayed !== 1 || invalidCursorError !== 1) {
+		console.log(`INVALID_LIMITS_REJECTED=${invalidLimitsRejected}`);
+		if (
+			forwardPages.length !== 3 ||
+			reversePages.length !== 3 ||
+			anchorReplayed !== 1 ||
+			invalidCursorError !== 1 ||
+			invalidLimitsRejected !== 1
+		) {
 			throw new Error("task10 history pagination assertions failed");
 		}
 	} finally {

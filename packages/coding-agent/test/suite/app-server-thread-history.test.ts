@@ -159,6 +159,33 @@ describe("app-server thread history", () => {
 		});
 		expect(itemIds(filteredItems)).toEqual(["user-1", "agent-draft", "agent-final"]);
 	});
+
+	it("rejects fractional, negative, and overflowing history limits before pagination", async () => {
+		const { connection, registry, root, threads } = await createHarness();
+		const entry = await threads.createThread({ cwd: root });
+		const invalidLimits = [-1, 1.5, 0x1_0000_0000] as const;
+		let id = 20;
+
+		for (const method of ["thread/turns/list", "thread/items/list"] as const) {
+			for (const limit of invalidLimits) {
+				const response = await registry.dispatch(connection, {
+					id,
+					method,
+					params: { threadId: entry.id, limit },
+				});
+				expect(response).toMatchObject({ id, error: { code: -32600, message: expect.stringContaining("limit") } });
+				id += 1;
+			}
+		}
+
+		await expect(
+			registry.dispatch(connection, {
+				id,
+				method: "thread/turns/list",
+				params: { threadId: entry.id, limit: 0xffff_ffff },
+			}),
+		).resolves.toMatchObject({ id, result: { data: [] } });
+	});
 });
 
 function recordTurn(

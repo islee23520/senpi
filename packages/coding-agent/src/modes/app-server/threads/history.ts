@@ -1,5 +1,9 @@
-import type { ThreadItemEntry, TurnItemsView } from "../protocol/generated/v2/index.ts";
-import type { ThreadItemsListResponse, ThreadTurnsListResponse } from "../protocol/index.ts";
+import type {
+	ThreadItemEntry,
+	ThreadItemsListResponse,
+	ThreadTurnsListResponse,
+	TurnItemsView,
+} from "../protocol/index.ts";
 import { objectValue } from "./handler-params.ts";
 import { type HistoryValue, invalidHistory, paginateHistory } from "./history-pagination.ts";
 import type { ThreadEntry, ThreadRegistry } from "./registry.ts";
@@ -11,6 +15,7 @@ const DEFAULT_TURNS_LIMIT = 25;
 const MAX_TURNS_LIMIT = 100;
 const DEFAULT_ITEMS_LIMIT = 25;
 const MAX_ITEMS_LIMIT = 100;
+const MAX_U32 = 0xffff_ffff;
 
 export type ThreadHistoryDependencies = {
 	readonly threads: ThreadRegistry;
@@ -134,10 +139,10 @@ function parseItemsView(value: unknown): TurnItemsView {
 
 function clampLimit(value: unknown, fallback: number, maximum: number, method: string): number {
 	if (value === undefined || value === null) return fallback;
-	if (typeof value !== "number" || !Number.isFinite(value)) {
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_U32) {
 		throw invalidHistory(`${method} received an invalid limit`);
 	}
-	return Math.min(maximum, Math.max(1, Math.trunc(value)));
+	return Math.min(maximum, Math.max(1, value));
 }
 
 function requiredHistoryString(value: unknown, name: string): string {
