@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 		const threadCompactedFrames = client.messages
 			.slice(compactMark)
 			.filter((message) => message.method === "thread/compacted").length;
-		const ackImmediate = response.index < completedItem.index ? 1 : 0;
+		const responseBeforeStarted = response.index < startedItem.index ? 1 : 0;
 
 		await client.request("thread/archive", { threadId });
 		const unloaded = await client.rawRequest("thread/compact/start", { threadId });
@@ -90,11 +90,19 @@ async function main(): Promise<void> {
 				? 1
 				: 0;
 
-		console.log(`ACK_IMMEDIATE=${ackImmediate}`);
+		console.log(`ACK_IMMEDIATE=${responseBeforeStarted}`);
+		console.log(`RESPONSE_INDEX=${response.index}`);
+		console.log(`ITEM_STARTED_INDEX=${startedItem.index}`);
+		console.log(`WIRE_ORDER=${responseBeforeStarted === 1 ? "response-before-started" : "started-before-response"}`);
 		console.log(`COMPACTION_ITEM_SEEN=${compactionItemSeen}`);
 		console.log(`THREAD_COMPACTED_FRAMES=${threadCompactedFrames}`);
 		console.log(`UNLOADED_ERROR=${unloadedError}`);
-		if (ackImmediate !== 1 || compactionItemSeen !== 1 || threadCompactedFrames !== 0 || unloadedError !== 1) {
+		if (
+			responseBeforeStarted !== 1 ||
+			compactionItemSeen !== 1 ||
+			threadCompactedFrames !== 0 ||
+			unloadedError !== 1
+		) {
 			throw new Error("task11 compact assertions failed");
 		}
 	} finally {

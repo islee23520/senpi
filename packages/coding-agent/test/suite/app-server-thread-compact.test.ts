@@ -13,9 +13,15 @@ afterEach(async () => {
 });
 
 describe("app-server thread/compact/start", () => {
-	it("acknowledges before compaction completes and emits context-compaction items only", async () => {
-		// Given: a loaded thread whose compaction is held open by the scripted session.
-		const { connection, registry, root, threads } = await createHarness();
+	it("starts compaction only after acknowledgement and emits context-compaction items only", async () => {
+		// Given: a loaded thread whose post-response work and compaction are both held open.
+		const deferredActions: Array<() => Promise<void> | void> = [];
+		const { connection, registry, root, threads } = await createHarness({
+			deferUntilResponded: (_connectionId, action) => {
+				deferredActions.push(action);
+				return true;
+			},
+		});
 		const started = await registry.dispatch(connection, { id: 1, method: "thread/start", params: { cwd: root } });
 		const threadId = stringAt(responseResult(started).thread, "id");
 		const entry = threads.getLoadedThread(threadId);
@@ -30,8 +36,17 @@ describe("app-server thread/compact/start", () => {
 			params: { threadId },
 		});
 
-		// Then: the request is acknowledged immediately and the started item is visible first.
+		// Then: the response exists before any compaction work or started notification.
 		expect(response).toEqual({ id: 2, result: {} });
+		expect(compact).not.toHaveBeenCalled();
+		expect(connection.received).toEqual([]);
+		const deferredStart = deferredActions[0];
+		if (!deferredStart) throw new Error("compact start was not deferred until after acknowledgement");
+
+		// When: the server releases post-response work after writing the acknowledgement.
+		await deferredStart();
+
+		// Then: compaction starts and publishes the context-compaction item.
 		expect(compact).toHaveBeenCalledOnce();
 		expect(connection.received).toHaveLength(1);
 		expect(connection.received[0]).toMatchObject({

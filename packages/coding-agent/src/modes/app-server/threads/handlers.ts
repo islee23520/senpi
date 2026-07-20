@@ -159,7 +159,7 @@ class ThreadLifecycleHandlers {
 			},
 			{
 				method: "thread/compact/start",
-				handler: (context) => this.compact(context.request),
+				handler: (context) => this.compact(context.connection, context.request),
 			},
 		];
 	}
@@ -223,7 +223,7 @@ class ThreadLifecycleHandlers {
 		return {};
 	}
 
-	private compact(request: RpcRequest): Record<string, never> {
+	private compact(connection: RegistryConnection, request: RpcRequest): Record<string, never> {
 		const params = objectValue(request.params);
 		const threadId = requiredString(params.threadId, "threadId");
 		let entry: ThreadEntry;
@@ -236,28 +236,33 @@ class ThreadLifecycleHandlers {
 			throw error;
 		}
 
-		const turnId = randomUUID();
-		const item = { type: "contextCompaction", id: randomUUID() } as const;
-		const startedAtMs = Date.now();
-		this.turnLog.recordTurn(threadId, {
-			turnId,
-			startedAt: new Date(startedAtMs).toISOString(),
-			status: "running",
-		});
-		this.notifications.toThread(threadId, {
-			method: "item/started",
-			params: { threadId, turnId, item, startedAtMs },
-		});
+		const startCompaction = (): void => {
+			const turnId = randomUUID();
+			const item = { type: "contextCompaction", id: randomUUID() } as const;
+			const startedAtMs = Date.now();
+			this.turnLog.recordTurn(threadId, {
+				turnId,
+				startedAt: new Date(startedAtMs).toISOString(),
+				status: "running",
+			});
+			this.notifications.toThread(threadId, {
+				method: "item/started",
+				params: { threadId, turnId, item, startedAtMs },
+			});
 
-		void entry.session.compact().then(
-			() => this.completeCompaction(threadId, turnId, item),
-			(error: unknown) =>
-				this.turnLog.completeTurn(threadId, turnId, {
-					status: "failed",
-					completedAt: new Date().toISOString(),
-					error: error instanceof Error ? error.message : String(error),
-				}),
-		);
+			void entry.session.compact().then(
+				() => this.completeCompaction(threadId, turnId, item),
+				(error: unknown) =>
+					this.turnLog.completeTurn(threadId, turnId, {
+						status: "failed",
+						completedAt: new Date().toISOString(),
+						error: error instanceof Error ? error.message : String(error),
+					}),
+			);
+		};
+		if (this.deferUntilResponded?.(connectionId(connection), startCompaction) !== true) {
+			startCompaction();
+		}
 		return {};
 	}
 
