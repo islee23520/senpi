@@ -18,6 +18,7 @@ import { type ThreadEntry, ThreadNotFoundError, type ThreadRegistry } from "./re
 import { threadSearchResponse } from "./search.ts";
 import { ThreadSearchCache } from "./search-cache.ts";
 import { threadSearchOccurrencesResponse } from "./search-occurrences.ts";
+import { registerThreadSettingsHandlers } from "./settings-handlers.ts";
 import { requestedApprovalPolicy, requestedStartModel } from "./start-options.ts";
 import type { TurnLog } from "./turn-log.ts";
 import { invalidRequest } from "./turn-runtime.ts";
@@ -52,6 +53,7 @@ export function registerThreadLifecycleHandlers(
 	options: ThreadLifecycleHandlersOptions,
 ): ThreadLifecycleController {
 	registerThreadGoalHandlers(registry, options);
+	registerThreadSettingsHandlers(registry, options);
 	const handlers = new ThreadLifecycleHandlers(options);
 	for (const registration of handlers.registrations()) {
 		registry.register(registration.method, {
