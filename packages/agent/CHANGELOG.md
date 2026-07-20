@@ -104,6 +104,8 @@
 
 ### Fixed
 
+- Skipped next-turn preparation when every tool result terminates the current batch and no queued message requires another provider turn, retained queued input when next-turn preparation fails, and stopped before provider continuation when next-turn preparation aborts.
+
 ### Removed
 
 ## [2026.7.13] - 2026-07-13

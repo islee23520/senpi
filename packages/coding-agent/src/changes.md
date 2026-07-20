@@ -1,5 +1,20 @@
 # changes
 
+## Accepted compaction resumes the waiting prompt (2026-07-20)
+
+### What changed
+
+- `agent-session.ts`: the pre-prompt fail-closed check now recognizes an assistant response retained behind the latest accepted compaction boundary as historical usage. A prompt waiting on compaction therefore dispatches with compacted history, while cancelled or would-overflow compaction remains blocked before any provider request.
+- `agent-session-compaction.test.ts`: added a provider-dispatch regression for irreducibly oversized pre-prompt compaction results.
+
+### Why extension system couldn't handle this
+
+- `AgentSession` owns the compaction boundary, stale usage classification, prompt settlement barrier, and the provider-dispatch decision. Extensions can propose or reject summaries but cannot serialize this state transition.
+
+### Expected merge conflict zones on next upstream sync
+
+- MEDIUM: `agent-session.ts` around `prompt()`, `_checkCompaction()`, and compaction-boundary stale-message checks.
+
 ## Model-runtime upstream model id and model-config service tier (2026-07-19)
 
 ### What changed
@@ -28,6 +43,21 @@
 
 - LOW: `model-runtime.ts` `prepareRequest()` body; `agent-session.ts` service-tier assignment sites.
 
+## Accepted compaction resumes the waiting prompt (2026-07-20)
+
+### What changed
+
+- `agent-session.ts`: the pre-prompt fail-closed check now recognizes an assistant response retained behind the latest accepted compaction boundary as historical usage. A prompt waiting on compaction therefore dispatches with compacted history, while cancelled or would-overflow compaction remains blocked before any provider request.
+- `agent-session-compaction.test.ts`: added a provider-dispatch regression for irreducibly oversized pre-prompt compaction results.
+
+### Why extension system couldn't handle this
+
+- `AgentSession` owns the compaction boundary, stale usage classification, prompt settlement barrier, and the provider-dispatch decision. Extensions can propose or reject summaries but cannot serialize this state transition.
+
+### Expected merge conflict zones on next upstream sync
+
+- MEDIUM: `agent-session.ts` around `prompt()`, `_checkCompaction()`, and compaction-boundary stale-message checks.
+
 ## Paced streaming tool argument previews (2026-07-20)
 
 ### What changed
@@ -46,6 +76,9 @@
 - Pending tool components and their streaming/execution transition state are private to the built-in interactive mode.
 
 ### Expected merge conflict zones on next upstream sync
+
+- MEDIUM: interactive tool-call event handling and smooth-streaming settings callbacks.
+- LOW: the fork-only reveal controller.
 
 - MEDIUM: interactive tool-call event handling and smooth-streaming settings callbacks.
 - LOW: the fork-only reveal controller.
