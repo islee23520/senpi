@@ -85,7 +85,7 @@ export class RetryFallbackController {
 		const candidate = this.nextCandidate();
 		if (!current || !candidate) return false;
 		const currentBase = formatSelector(current.model);
-		if (reason === "transient") {
+		if (reason === "transient" || reason === "hard-error") {
 			this.deps.cooldowns.note(currentBase, failure);
 			this.deps.logger.info("cooldown_noted", { selector: currentBase, errorMessage: failure.errorMessage });
 		}
@@ -106,7 +106,9 @@ export class RetryFallbackController {
 		return true;
 	}
 
-	private nextCandidate(reserve = true): { chainKey: string; selector: FallbackSelector; model: Model<Api> } | undefined {
+	private nextCandidate(
+		reserve = true,
+	): { chainKey: string; selector: FallbackSelector; model: Model<Api> } | undefined {
 		const settings = this.deps.getSettings();
 		const current = this.deps.getCurrentSelector();
 		if (!settings.modelFallback || !current) return undefined;

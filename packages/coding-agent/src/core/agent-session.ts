@@ -853,7 +853,10 @@ export class AgentSession {
 		}
 
 		const lastAssistant = this._findLastAssistantInMessages(event.messages);
-		if (!lastAssistant || !this._isRetryableError(lastAssistant)) {
+		if (
+			!lastAssistant ||
+			(!this._isRetryableError(lastAssistant) && !this._isHardErrorFallbackEligible(lastAssistant))
+		) {
 			return;
 		}
 
@@ -913,7 +916,16 @@ export class AgentSession {
 		}
 
 		const lastAssistant = this._lastAssistantMessage ?? this._findLastAssistantInMessages(messages);
-		if (!lastAssistant || !this._isRetryableError(lastAssistant)) {
+		if (!lastAssistant) {
+			return false;
+		}
+
+		const retryableError = this._isRetryableError(lastAssistant);
+		if (!retryableError && this._isHardErrorFallbackEligible(lastAssistant)) {
+			return true;
+		}
+
+		if (!retryableError) {
 			return false;
 		}
 
@@ -1027,11 +1039,15 @@ export class AgentSession {
 			const msg = this._lastAssistantMessage;
 			this._lastAssistantMessage = undefined;
 
-			// Check for retryable errors first (overloaded, rate limit, server errors)
-			if (this._isRetryableError(msg)) {
-				const didRetry = await this._handleRetryableError(msg);
-				if (didRetry) return; // Retry was initiated, don't proceed to compaction
+			// Retry transient failures normally and eligible hard errors only through a fallback.
+			const retryableError = this._isRetryableError(msg);
+			let didRetry = false;
+			if (retryableError) {
+				didRetry = await this._handleRetryableError(msg);
+			} else if (this._isHardErrorFallbackEligible(msg)) {
+				didRetry = await this._handleRetryableError(msg, { hardErrorFallback: true });
 			}
+			if (didRetry) return; // Retry was initiated, don't proceed to compaction
 
 			this._resolveRetry();
 			launchedContinuation = await this._checkCompaction(msg);
@@ -3611,6 +3627,16 @@ export class AgentSession {
 		return isRetryableAssistantError(message);
 	}
 
+	private _isHardErrorFallbackEligible(message: AssistantMessage): boolean {
+		return (
+			message.stopReason === "error" &&
+			!isContextOverflow(message, this.model?.contextWindow ?? 0) &&
+			!isClassifierRefusal(message) &&
+			!message.content.some((content) => content.type === "toolCall") &&
+			this._retryFallback.canTryFallback()
+		);
+	}
+
 	private _getProviderRetryDelayMs(errorMessage: string): number | undefined {
 		const retryAfterMsMatch = errorMessage.match(/\bretry[-_ ]?after[-_ ]?ms\s*[:=]\s*(\d+(?:\.\d+)?)/i);
 		if (retryAfterMsMatch) {
@@ -3650,7 +3676,10 @@ export class AgentSession {
 	 * Handle retryable errors with exponential backoff.
 	 * @returns true if retry was initiated, false if max retries exceeded or disabled
 	 */
-	private async _handleRetryableError(message: AssistantMessage): Promise<boolean> {
+	private async _handleRetryableError(
+		message: AssistantMessage,
+		options: { hardErrorFallback?: boolean } = {},
+	): Promise<boolean> {
 		const settings = this.settingsManager.getRetrySettings();
 		if (!settings.enabled) {
 			this._resolveRetry();
@@ -3667,8 +3696,18 @@ export class AgentSession {
 
 		const errorMessage = message.errorMessage || "Unknown error";
 		const isRefusal = isClassifierRefusal(message);
+		const hardErrorFallback = options.hardErrorFallback === true;
 		let switchedFallback = false;
-		if (isRefusal) {
+		if (hardErrorFallback) {
+			// A non-retryable provider failure must never replay on the same model.
+			switchedFallback = await this._retryFallback.tryFallback("hard-error", { errorMessage });
+			if (!switchedFallback) {
+				this._resolveRetry();
+				return false;
+			}
+			// The fallback starts fresh; the failed model's transient attempts do not carry over.
+			this._retryAttempt = 1;
+		} else if (isRefusal) {
 			// Refusals are only retried through a new chain candidate. They never use
 			// same-model retries or the transient over-budget fallback escape hatch.
 			if (this._retryAttempt + 1 > settings.maxRetries) {
@@ -3698,7 +3737,11 @@ export class AgentSession {
 				} else {
 					const exhaustedChainKey = this._retryFallback.exhaustedChainKey;
 					if (exhaustedChainKey) {
-						this._emit({ type: "retry_fallback_exhausted", chainKey: exhaustedChainKey, lastError: errorMessage });
+						this._emit({
+							type: "retry_fallback_exhausted",
+							chainKey: exhaustedChainKey,
+							lastError: errorMessage,
+						});
 					}
 					this._emit({
 						type: "auto_retry_end",
@@ -3713,7 +3756,7 @@ export class AgentSession {
 			}
 		}
 
-		const providerDelayMs = isRefusal ? undefined : this._getProviderRetryDelayMs(errorMessage);
+		const providerDelayMs = isRefusal || hardErrorFallback ? undefined : this._getProviderRetryDelayMs(errorMessage);
 		const maxRetryDelayMs = this.settingsManager.getProviderRetrySettings().maxRetryDelayMs;
 		if (providerDelayMs !== undefined && providerDelayMs > maxRetryDelayMs) {
 			this._emit({
