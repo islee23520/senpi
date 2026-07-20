@@ -1,5 +1,13 @@
 # Core Extensions Changes
 
+## 2026-07-19 - model_select handlers observe live systemPromptOptions
+
+### What changed
+- `src/core/extensions/runner.ts`: `emitModelSelect` spreads a fresh
+  `systemPromptOptions` from `getSystemPromptOptionsFn()` into each handler's event, so
+  toolset-swapping handlers (gpt-apply-patch) and prompt-rebuilding handlers
+  (prompt-preset) stay consistent within one model switch.
+
 ## 2026-07-17 - Factory-time `pi.registerMcpServer()` API
 
 ### What changed

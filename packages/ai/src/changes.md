@@ -1,5 +1,18 @@
 # AI Source Changes
 
+## 2026-07-19 - Name-preserving apply_patch replay characterization and policy coverage
+
+### What changed and why
+
+- Added characterization + policy-table coverage for replaying mixed edit/apply_patch
+  history across every KnownApi: Responses targets serialize a historical apply_patch call
+  as `custom_tool_call` when a freeform apply_patch is declared and as `function_call`
+  (name preserved, JSON `{input}` args) otherwise; Completions/Anthropic/Google/Bedrock/
+  Mistral/pi-messages keep the stored name with native JSON-typed call entries.
+- No production change was required: existing converters already implement the
+  name-preserving truth table. Tests pin both branches plus per-API shape assertions so a
+  future regression cannot silently rename or drop historical patch calls.
+
 ## 2026-07-17 - Truncation-recovery contract for ToolCall and toolcall_end
 
 ### What changed and why
