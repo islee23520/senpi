@@ -9,6 +9,7 @@ import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
+import { registerAgentSessionRecoveryRetryBoundaryCase } from "./agent-session-recovery-retry-boundary.ts";
 import { createModelRegistry, getModelRuntime } from "./model-runtime-test-utils.ts";
 import { createTestResourceLoader } from "./utilities.ts";
 
@@ -231,6 +232,13 @@ describe("AgentSession retry", () => {
 		expect(callCount).toBe(2);
 		expect(events).toEqual(["start:1", "end:success=true"]);
 	});
+
+	registerAgentSessionRecoveryRetryBoundaryCase(
+		() => tempDir,
+		(created) => {
+			session = created;
+		},
+	);
 
 	it("prompt waits for full agent loop when retry produces tool calls", async () => {
 		// Regression: when auto-retry fires and the retry response includes tool_use,

@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { probeModelRuntimeImport } from "./helpers/esm-import-graph-probe.ts";
+import { registerModelRuntimeRecoveryRetryBoundaryCase } from "./model-runtime-recovery-retry-boundaries.ts";
 import { registerModelRuntimeRecoveryBoundaryCases } from "./model-runtime-text-toolcall-recovery-boundaries.ts";
 
 const leak = '<invoke name="Echo"><parameter name="value">hello</parameter></invoke>';
@@ -156,6 +157,43 @@ describe("ModelRuntime text tool-call recovery", () => {
 		expect(enabled.calls).toHaveLength(1);
 	});
 
+	it("rejects exclaude and claudius and honors explicit false and text protocol precedence", async () => {
+		const inactive = [
+			model("exclaude"),
+			model("claudius"),
+			model("claude-disabled", { recoverTextToolCalls: false }),
+			model("claude-text", { api: "openai-completions", compat: { toolCallFormat: "antml" } }),
+		];
+		for (const selectedModel of inactive) {
+			const configured = await setup(selectedModel);
+			const result = await configured.runtime.streamSimple(configured.selected, { messages: [], tools }).result();
+			expect(result.content).toEqual([{ type: "text", text: leak }]);
+			expect(configured.calls).toHaveLength(1);
+		}
+
+		const apiCases: Api[] = [
+			"anthropic-messages",
+			"openai-completions",
+			"bedrock-converse-stream",
+			"google-vertex",
+			"openai-responses",
+		];
+		for (const api of apiCases) {
+			const configured = await setup(model("selected-claude-alias", { api }));
+			const result = await configured.runtime.streamSimple(configured.selected, { messages: [], tools }).result();
+			expect(result.content).toContainEqual(
+				expect.objectContaining({ type: "toolCall", id: "recovered-antml-0", name: "Echo" }),
+			);
+			expect(configured.calls).toHaveLength(1);
+		}
+
+		const forced = await setup(model("custom-near-miss", { recoverTextToolCalls: true }));
+		const forcedResult = await forced.runtime.streamSimple(forced.selected, { messages: [], tools }).result();
+		expect(forcedResult.content).toContainEqual(
+			expect.objectContaining({ type: "toolCall", id: "recovered-antml-0" }),
+		);
+	});
+
 	it("does not import the AI compat entrypoint", () => {
 		const repoRoot = new URL("../../..", import.meta.url).pathname;
 		for (const target of ["source", "built"] as const) {
@@ -173,4 +211,5 @@ describe("ModelRuntime text tool-call recovery", () => {
 	});
 
 	registerModelRuntimeRecoveryBoundaryCases();
+	registerModelRuntimeRecoveryRetryBoundaryCase(tools);
 });
