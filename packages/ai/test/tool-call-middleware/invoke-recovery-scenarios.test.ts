@@ -1,81 +1,20 @@
-import { Type } from "typebox";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { wrapStreamWithInvokeRecovery } from "../../src/index.ts";
-import { ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH } from "../../src/tool-call-middleware/protocols/anthropic-xml/stream-boundary.ts";
-import { createAntmlInvokeRecoveryStreamParser } from "../../src/tool-call-middleware/protocols/antml/recovery-stream.ts";
-import type { AssistantMessage, AssistantMessageEvent, Tool, ToolCall } from "../../src/types.ts";
+import type { AssistantMessage, AssistantMessageEvent } from "../../src/types.ts";
 import { AssistantMessageEventStream } from "../../src/utils/event-stream.ts";
 import { runAllMetadataScenario } from "./invoke-recovery-content-exclusion-cases.ts";
 import { collectEventSnapshots, MetadataStreamHarness } from "./invoke-recovery-metadata-fixtures.ts";
 import {
-	collectEvents,
-	createAssistantMessage,
-	NativeStreamHarness,
-	TextStreamHarness,
-	textFrom,
-} from "./invoke-recovery-stream-fixtures.ts";
-
-const bashTool = {
-	name: "Bash",
-	description: "Run a command",
-	parameters: Type.Object({ command: Type.String({ minLength: 3 }) }),
-} satisfies Tool;
-const ambiguousTools = [bashTool, { ...bashTool, name: "bash" }] satisfies Tool[];
-const invoke = '<invoke name="Bash"><parameter name="command">echo recovered</parameter></invoke>';
-const namespacedInvoke =
-	'<antml:invoke name="Bash"><antml:parameter name="command">echo recovered</antml:parameter></antml:invoke>';
-
-function terminal(events: readonly AssistantMessageEvent[]): AssistantMessageEvent[] {
-	return events.filter((event) => event.type === "done" || event.type === "error");
-}
-
-function toolEvents(events: readonly AssistantMessageEvent[]): AssistantMessageEvent[] {
-	return events.filter((event) => event.type.startsWith("toolcall_"));
-}
-
-function nativeCall(id: string, name = "Native"): ToolCall {
-	return { type: "toolCall", id, name, arguments: { value: name } };
-}
-
-async function runChunks(chunks: readonly string[], tools: Tool[] = [bashTool]) {
-	const producer = new TextStreamHarness();
-	const wrapped = wrapStreamWithInvokeRecovery(producer.inner, tools);
-	producer.start();
-	for (const chunk of chunks) producer.delta(chunk);
-	producer.finish();
-	const events = await collectEvents(wrapped);
-	return { events, result: await wrapped.result() };
-}
-
-async function runText(input: string, tools: Tool[] = [bashTool]) {
-	return runChunks([input], tools);
-}
-
-async function runCollision(order: "native-first" | "recovered-first") {
-	const producer = new NativeStreamHarness();
-	const wrapped = wrapStreamWithInvokeRecovery(producer.inner, [bashTool]);
-	producer.start();
-	if (order === "native-first") {
-		const index = producer.startNative(nativeCall("recovered-antml-0"));
-		producer.endNative(index, nativeCall("recovered-antml-0"));
-	}
-	const textIndex = producer.startText();
-	producer.textDelta(textIndex, invoke);
-	producer.endText(textIndex);
-	if (order === "recovered-first") {
-		const index = producer.startNative(nativeCall("recovered-antml-0", "LateNative"));
-		producer.endNative(index, nativeCall("recovered-antml-0", "LateNative"));
-	}
-	producer.finish();
-	const events = await collectEvents(wrapped);
-	return { events, result: await wrapped.result() };
-}
-
-function eventMessage(event: AssistantMessageEvent): AssistantMessage {
-	if (event.type === "done") return event.message;
-	if (event.type === "error") return event.error;
-	return event.partial;
-}
+	ambiguousTools,
+	bashTool,
+	eventMessage,
+	invoke,
+	runCollision,
+	runText,
+	terminal,
+	toolEvents,
+} from "./invoke-recovery-scenario-fixtures.ts";
+import { collectEvents, createAssistantMessage, textFrom } from "./invoke-recovery-stream-fixtures.ts";
 
 describe("invoke recovery Metis and Momus scenarios", () => {
 	it("preserves mixed native recovered order and all metadata across every partial", async () => {
@@ -265,66 +204,5 @@ describe("invoke recovery Metis and Momus scenarios", () => {
 		expect(result.content).toContainEqual(
 			expect.objectContaining({ type: "toolCall", arguments: { command: "echo recovered" } }),
 		);
-	});
-
-	it("keeps bare and namespaced recovery stable across exhaustive split points", async () => {
-		for (const input of [invoke, namespacedInvoke]) {
-			for (let split = 0; split <= input.length; split += 1) {
-				const { events, result } = await runChunks([input.slice(0, split), input.slice(split)]);
-				expect(
-					toolEvents(events).map((event) => event.type),
-					`split ${split}`,
-				).toEqual(["toolcall_start", "toolcall_delta", "toolcall_end"]);
-				expect(result.content, `split ${split}`).toEqual([
-					{ type: "toolCall", id: "recovered-antml-0", name: "Bash", arguments: { command: "echo recovered" } },
-				]);
-			}
-		}
-	});
-
-	it.each([
-		["bare", invoke, true],
-		["namespaced", namespacedInvoke, true],
-		[
-			"unsupported namespace",
-			'<foo:invoke name="Bash"><foo:parameter name="command">echo nope</foo:parameter></foo:invoke>',
-			false,
-		],
-		["arbitrary tag", '<tool name="Bash"><parameter name="command">echo nope</parameter></tool>', false],
-	] as const)("handles %s forms without generic tag inference", async (_label, input, recovered) => {
-		const { events, result } = await runText(input);
-		expect(toolEvents(events).length > 0).toBe(recovered);
-		expect(result.content.some((block) => block.type === "toolCall")).toBe(recovered);
-		if (!recovered) expect(textFrom(result)).toBe(input);
-	});
-
-	it("preserves byte-identical full usage on every event and terminal", async () => {
-		const producer = new MetadataStreamHarness();
-		const wrapped = wrapStreamWithInvokeRecovery(producer.inner, [bashTool]);
-		producer.start();
-		const index = producer.startText({ type: "text", text: "", textSignature: "signed" });
-		producer.textDelta(index, invoke);
-		producer.endText(index);
-		producer.finish();
-		const events = await collectEventSnapshots(wrapped);
-		const result = await wrapped.result();
-		const expected = JSON.stringify(result.usage);
-		for (const event of events) expect(JSON.stringify(eventMessage(event).usage)).toBe(expected);
-	});
-
-	it("bounds recovery buffers and scan work", () => {
-		const onError = vi.fn();
-		const parser = createAntmlInvokeRecoveryStreamParser([bashTool], { onError });
-		const opening = '<invoke name="';
-		const overflow = opening + "x".repeat(ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH - opening.length);
-		const events = [...parser.feed(overflow), ...parser.feed(invoke), ...parser.finish()];
-		expect(onError).toHaveBeenCalledWith("ANTML recovery fragment exceeded the retained-input limit.", {
-			protocol: "antml",
-			retainedLength: ANTHROPIC_XML_MAX_RETAINED_FRAGMENT_LENGTH,
-		});
-		expect(events.filter((event) => event.type === "toolcall_start")).toHaveLength(1);
-		expect(events.filter((event) => event.type === "toolcall_end")).toEqual([
-			expect.objectContaining({ arguments: { command: "echo recovered" } }),
-		]);
 	});
 });
