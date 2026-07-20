@@ -19,11 +19,13 @@ import {
 	parseInitializeParams,
 } from "./connection.ts";
 import { type AppServerModelRegistry, registerAppServerModelMethods } from "./models.ts";
+import { registerAppServerSkillMethods } from "./skills.ts";
 
 export interface ServerCoreOptions {
 	readonly registry?: MethodRegistry;
 	readonly modelRegistry?: AppServerModelRegistry;
 	readonly codexHome?: string;
+	readonly serverCwd?: string;
 	readonly version?: string;
 	readonly now?: () => number;
 }
@@ -52,6 +54,10 @@ export class ServerCore {
 		registerAppServerModelMethods(this.registry, {
 			modelRegistry: options.modelRegistry,
 			agentDir: this.codexHome,
+		});
+		registerAppServerSkillMethods(this.registry, {
+			agentDir: this.codexHome,
+			serverCwd: options.serverCwd,
 		});
 	}
 

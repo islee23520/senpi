@@ -20,6 +20,7 @@
       "thread/start",
       "thread/unarchive",
       "thread/unsubscribe",
+      "skills/list",
       "turn/interrupt",
       "turn/start",
       "turn/steer"
@@ -114,7 +115,6 @@
       "review/start",
       "skills/config/write",
       "skills/extraRoots/set",
-      "skills/list",
       "thread/approveGuardianDeniedAction",
       "thread/inject_items",
       "thread/rollback",

@@ -391,7 +391,7 @@ describe("app-server model methods", () => {
 		try {
 			const { core, sent, id } = createCoreWithConnection({ modelRegistry: harness.session.modelRegistry });
 			await initialize(core, id, true);
-			const implemented = new Set(["initialize", "model/list"]);
+			const implemented = new Set(["initialize", "model/list", "skills/list"]);
 			const unimplementedStableMethods = STABLE_CLIENT_REQUEST_METHODS.filter((method) => !implemented.has(method));
 
 			// When: every currently unimplemented stable method is dispatched.

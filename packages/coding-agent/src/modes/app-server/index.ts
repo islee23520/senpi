@@ -1,4 +1,5 @@
 import { ENV_SESSION_DIR, getAgentDir } from "../../config.ts";
+import { DefaultResourceLoader } from "../../core/resource-loader.ts";
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "../../core/sdk.ts";
 import {
 	APP_SERVER_LISTEN_USAGE,
@@ -16,6 +17,7 @@ import { createRegistry, type MethodRegistry } from "./rpc/registry.ts";
 import { ApprovalBridge, createAppServerUIContext } from "./server/approvals.ts";
 import { NotificationRouter } from "./server/notifications.ts";
 import type { ServerCore } from "./server/server-core.ts";
+import { registerAppServerSkillMethods } from "./server/skills.ts";
 import { registerThreadLifecycleHandlers, type ThreadLifecycleController } from "./threads/handlers.ts";
 import { ThreadNotFoundError, ThreadRegistry } from "./threads/registry.ts";
 import { TurnLog } from "./threads/turn-log.ts";
@@ -156,6 +158,16 @@ function createAppServerRuntime(requestShutdown: (reason: string) => void): AppS
 		agentDir: getAgentDir(),
 		sessionDir: process.env[ENV_SESSION_DIR],
 		createSession: (options) => createBoundAppServerSession(options, approvals, notifications, requestShutdown),
+	});
+	registerAppServerSkillMethods(registry, {
+		agentDir: getAgentDir(),
+		serverCwd: process.cwd(),
+		threads,
+		resourceLoaderFactory: async (cwd) => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir() });
+			await loader.reload();
+			return loader;
+		},
 	});
 	const turnLog = new TurnLog();
 	const turns = createTurnEngine({
