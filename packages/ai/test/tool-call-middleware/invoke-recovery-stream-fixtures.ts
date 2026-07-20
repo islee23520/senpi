@@ -125,7 +125,8 @@ export class NativeStreamHarness {
 		const block = this.partial.content[contentIndex];
 		if (block?.type !== "toolCall") throw new Error(`Expected tool call block at ${contentIndex}`);
 		const partialJson = "partialJson" in block && typeof block.partialJson === "string" ? block.partialJson : "";
-		this.partial.content[contentIndex] = { ...cloneToolCall(current), partialJson: partialJson + delta };
+		const updated: NativePartialToolCall = { ...cloneToolCall(current), partialJson: partialJson + delta };
+		this.partial.content[contentIndex] = updated;
 		this.inner.push({ type: "toolcall_delta", contentIndex, delta, partial: this.snapshot() });
 	}
 

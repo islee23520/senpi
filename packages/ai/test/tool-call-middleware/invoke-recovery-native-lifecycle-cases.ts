@@ -7,6 +7,11 @@ import { collectEvents, createAssistantMessage, NativeStreamHarness } from "./in
 type InvalidNativeKind = "delta-before-start" | "end-before-start";
 type RepeatedNativeKind = "repeated-start" | "delta-after-end" | "repeated-end";
 type IterationCounter = { count: number };
+type NativePartialToolCall = ToolCall & { partialJson: string };
+
+function partialNativeCall(toolCall: ToolCall): NativePartialToolCall {
+	return { ...toolCall, partialJson: "" };
+}
 
 function nativeCall(id = "toolu-invalid"): ToolCall {
 	return { type: "toolCall", id, name: "NativeInvalid", arguments: { command: "echo invalid" } };
@@ -18,7 +23,7 @@ function invalidPartial(): AssistantMessage {
 		subtype: "fixture",
 		raw: { index },
 	}));
-	return createAssistantMessage([...fillers, { ...nativeCall(), partialJson: "" }]);
+	return createAssistantMessage([...fillers, partialNativeCall(nativeCall())]);
 }
 
 async function collectInvalidBeforeStart(tool: Tool, kind: InvalidNativeKind) {

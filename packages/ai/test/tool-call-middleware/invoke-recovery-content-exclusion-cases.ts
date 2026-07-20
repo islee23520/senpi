@@ -183,12 +183,11 @@ export function registerInvokeRecoveryContentExclusionCases(tool: Tool): void {
 
 	it("synchronizes unannounced provider-native blocks before later indexed events", async () => {
 		const { events } = await runAllMetadataScenario(tool);
-		const redactedStart = events.find(
-			(event) =>
-				event.type === "thinking_start" &&
-				event.partial.content[event.contentIndex]?.type === "thinking" &&
-				event.partial.content[event.contentIndex]?.redacted === true,
-		);
+		const redactedStart = events.find((event) => {
+			if (event.type !== "thinking_start") return false;
+			const block = event.partial.content[event.contentIndex];
+			return block?.type === "thinking" && block.redacted === true;
+		});
 
 		expect(redactedStart).toMatchObject({ type: "thinking_start", contentIndex: 5 });
 		if (redactedStart?.type !== "thinking_start") throw new Error("Expected redacted thinking start");

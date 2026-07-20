@@ -1,6 +1,6 @@
 import {
 	type AssistantMessage,
-	AssistantMessageEventStream,
+	createAssistantMessageEventStream,
 	type Message,
 	type Model,
 	wrapStreamWithInvokeRecovery,
@@ -17,7 +17,10 @@ const danglingInvoke = '<invoke name="Bash"><parameter name="command">echo parti
 
 type Scenario = "abort-before" | "abort-start" | "abort-complete" | "dangling-error" | "complete-error";
 
-function assistant(content: AssistantMessage["content"] = [], stopReason: AssistantMessage["stopReason"] = "stop") {
+function assistant(
+	content: AssistantMessage["content"] = [],
+	stopReason: AssistantMessage["stopReason"] = "stop",
+): AssistantMessage {
 	return {
 		role: "assistant" as const,
 		api: "anthropic-messages" as const,
@@ -53,7 +56,7 @@ function model(): Model<"anthropic-messages"> {
 }
 
 function recoveredStream(scenario: Scenario) {
-	const inner = new AssistantMessageEventStream();
+	const inner = createAssistantMessageEventStream();
 	const wrapped = wrapStreamWithInvokeRecovery(inner, [recoveryTool]);
 	if (scenario === "abort-before") {
 		const aborted = assistant([], "aborted");
@@ -79,7 +82,7 @@ function recoveredStream(scenario: Scenario) {
 }
 
 function finalStream() {
-	const stream = new AssistantMessageEventStream();
+	const stream = createAssistantMessageEventStream();
 	stream.push({ type: "done", reason: "stop", message: assistant([{ type: "text", text: "done" }]) });
 	return stream;
 }

@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { wrapStreamWithInvokeRecovery } from "../../src/index.ts";
 import type { AssistantMessage, AssistantMessageEvent, Tool } from "../../src/types.ts";
+import type { AssistantMessageDiagnostic } from "../../src/utils/diagnostics.ts";
 import { AssistantMessageEventStream as EventStream } from "../../src/utils/event-stream.ts";
 import { nextEvent } from "./invoke-recovery-stream-fixtures.ts";
 import { completeInvoke, danglingInvoke, pushText, source } from "./invoke-recovery-termination-cases.ts";
@@ -20,7 +21,9 @@ function deferred<T>(): Deferred<T> {
 
 type SharedNode = { value: number };
 type CyclicNode = { label: string; shared: SharedNode; self?: CyclicNode };
+type SnapshotDiagnostic = AssistantMessageDiagnostic & { message: string };
 type SnapshotMessage = AssistantMessage & {
+	diagnostics: SnapshotDiagnostic[];
 	custom: {
 		nested: { value: number };
 		items: Array<{ value: number }>;
@@ -34,22 +37,33 @@ function snapshotMessage(): SnapshotMessage {
 	const shared = { value: 3 };
 	const cycle: CyclicNode = { label: "cycle", shared };
 	cycle.self = cycle;
-	const message = source("", 1) as SnapshotMessage;
-	message.diagnostics = [
-		{
-			type: "existing_diagnostic",
-			timestamp: 1,
-			details: { nested: { value: 4 }, items: [{ value: 5 }] },
-			message: "original diagnostic",
-		} as AssistantMessage["diagnostics"] extends Array<infer Diagnostic> ? Diagnostic : never,
-	];
-	message.custom = {
-		nested: { value: 1 },
-		items: [{ value: 2 }],
-		sharedA: shared,
-		sharedB: shared,
-		cycle,
+	return {
+		...source("", 1),
+		diagnostics: [
+			{
+				type: "existing_diagnostic",
+				timestamp: 1,
+				details: { nested: { value: 4 }, items: [{ value: 5 }] },
+				message: "original diagnostic",
+			},
+		],
+		custom: {
+			nested: { value: 1 },
+			items: [{ value: 2 }],
+			sharedA: shared,
+			sharedB: shared,
+			cycle,
+		},
 	};
+}
+
+function isSnapshotMessage(message: AssistantMessage): message is SnapshotMessage {
+	const diagnostic = message.diagnostics?.[0];
+	return "custom" in message && diagnostic !== undefined && "message" in diagnostic;
+}
+
+function requireSnapshotMessage(message: AssistantMessage): SnapshotMessage {
+	if (!isSnapshotMessage(message)) throw new Error("Expected snapshot fixture metadata");
 	return message;
 }
 
@@ -118,12 +132,8 @@ export function registerInvokeRecoverySnapshotCancelCases(tool: Tool): void {
 
 		const capture = async (): Promise<void> => {
 			const event = await nextEvent(iterator);
-			const message = eventMessage(event) as SnapshotMessage;
-			const diagnostic = message.diagnostics?.[0] as
-				| (NonNullable<AssistantMessage["diagnostics"]>[number] & {
-						message: string;
-				  })
-				| undefined;
+			const message = requireSnapshotMessage(eventMessage(event));
+			const diagnostic = message.diagnostics[0];
 			snapshots.push({
 				message,
 				nested: message.custom.nested.value,
@@ -148,11 +158,7 @@ export function registerInvokeRecoverySnapshotCancelCases(tool: Tool): void {
 			sourceMessage.usage.input += 10;
 			sourceMessage.usage.cost.input += 10;
 			sourceMessage.responseId = `mutated-response-${snapshots.length}`;
-			const sourceDiagnostic = sourceMessage.diagnostics?.[0] as
-				| (NonNullable<AssistantMessage["diagnostics"]>[number] & {
-						message: string;
-				  })
-				| undefined;
+			const sourceDiagnostic = sourceMessage.diagnostics[0];
 			if (sourceDiagnostic) sourceDiagnostic.message = `mutated-${snapshots.length}`;
 			for (const snapshot of snapshots) {
 				expect(snapshot.message.custom.nested.value).toBe(snapshot.nested);
@@ -161,9 +167,7 @@ export function registerInvokeRecoverySnapshotCancelCases(tool: Tool): void {
 				expect(snapshot.message.usage.input).toBe(snapshot.usageInput);
 				expect(snapshot.message.usage.cost.input).toBe(snapshot.costInput);
 				expect(snapshot.message.responseId).toBe(snapshot.responseId);
-				const priorDiagnostic = snapshot.message.diagnostics?.[0] as
-					| (NonNullable<AssistantMessage["diagnostics"]>[number] & { message: string })
-					| undefined;
+				const priorDiagnostic = snapshot.message.diagnostics[0];
 				expect(priorDiagnostic?.message).toBe(snapshot.diagnostic);
 			}
 		};
@@ -182,7 +186,7 @@ export function registerInvokeRecoverySnapshotCancelCases(tool: Tool): void {
 		done.stopReason = "stop";
 		inner.push({ type: "done", reason: "stop", message: done });
 		await capture();
-		const result = (await wrapped.result()) as SnapshotMessage;
+		const result = requireSnapshotMessage(await wrapped.result());
 		const resultNested = result.custom.nested.value;
 		sourceMessage.custom.nested.value += 100;
 		expect(result.custom.nested.value).toBe(resultNested);

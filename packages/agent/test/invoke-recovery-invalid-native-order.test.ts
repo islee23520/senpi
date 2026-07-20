@@ -1,8 +1,9 @@
 import {
 	type AssistantMessage,
-	AssistantMessageEventStream,
+	createAssistantMessageEventStream,
 	type Message,
 	type Model,
+	type ToolCall,
 	wrapStreamWithInvokeRecovery,
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
@@ -32,7 +33,16 @@ function usage(): AssistantMessage["usage"] {
 	};
 }
 
-function assistant(content: AssistantMessage["content"] = [], stopReason: AssistantMessage["stopReason"] = "stop") {
+type NativePartialToolCall = ToolCall & { partialJson: string };
+
+function partialNativeCall(toolCall: ToolCall): NativePartialToolCall {
+	return { ...toolCall, partialJson: "" };
+}
+
+function assistant(
+	content: AssistantMessage["content"] = [],
+	stopReason: AssistantMessage["stopReason"] = "stop",
+): AssistantMessage {
 	return {
 		role: "assistant" as const,
 		api: "anthropic-messages" as const,
@@ -50,7 +60,7 @@ function nativeCall(id = "toolu-invalid") {
 }
 
 function createInvalidStream(scenario: Scenario) {
-	const inner = new AssistantMessageEventStream();
+	const inner = createAssistantMessageEventStream();
 	const wrapped = wrapStreamWithInvokeRecovery(inner, [recoveryTool]);
 	const source = assistant([]);
 	inner.push({ type: "start", partial: structuredClone(source) });
@@ -63,7 +73,7 @@ function createInvalidStream(scenario: Scenario) {
 				raw: { index },
 			})),
 		);
-		source.content.push({ ...nativeCall(), partialJson: "" });
+		source.content.push(partialNativeCall(nativeCall()));
 		if (scenario === "delta-before-start") {
 			inner.push({ type: "toolcall_delta", contentIndex: 7, delta: "{}", partial: structuredClone(source) });
 		} else {
@@ -81,10 +91,10 @@ function createInvalidStream(scenario: Scenario) {
 		source.content[0] = { type: "text", text: xml };
 		inner.push({ type: "text_delta", contentIndex: 0, delta: xml, partial: structuredClone(source) });
 		inner.push({ type: "text_end", contentIndex: 0, content: xml, partial: structuredClone(source) });
-		source.content.push({ ...nativeCall("recovered-antml-0"), partialJson: "" });
+		source.content.push(partialNativeCall(nativeCall("recovered-antml-0")));
 		inner.push({ type: "toolcall_start", contentIndex: 1, partial: structuredClone(source) });
 	} else {
-		source.content.push({ ...nativeCall(), arguments: {}, partialJson: "" });
+		source.content.push(partialNativeCall({ ...nativeCall(), arguments: {} }));
 		inner.push({ type: "toolcall_start", contentIndex: 0, partial: structuredClone(source) });
 		if (scenario === "repeated-start") {
 			inner.push({ type: "toolcall_start", contentIndex: 0, partial: structuredClone(source) });

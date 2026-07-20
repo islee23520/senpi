@@ -1,6 +1,6 @@
 import {
 	type AssistantMessage,
-	AssistantMessageEventStream,
+	createAssistantMessageEventStream,
 	type Message,
 	type Model,
 	wrapStreamWithInvokeRecovery,
@@ -34,7 +34,7 @@ function assistant(): AssistantMessage {
 }
 
 function invalidIndexStream(contentIndex: number) {
-	const inner = new AssistantMessageEventStream();
+	const inner = createAssistantMessageEventStream();
 	const wrapped = wrapStreamWithInvokeRecovery(inner, [recoveryTool]);
 	const partial = assistant();
 	inner.push({ type: "start", partial });
