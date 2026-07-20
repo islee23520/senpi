@@ -157,7 +157,8 @@ async function main(): Promise<void> {
 		const unarchivedThread = recordField(unarchivedResult, "thread");
 		const unarchivedStatus = recordField(unarchivedThread, "status");
 		assert.equal(unarchivedStatus.type, "notLoaded");
-		assert.ok(numberField(unarchivedThread, "updatedAt") > archivedUpdatedAt);
+		const unarchivedUpdatedAt = numberField(unarchivedThread, "updatedAt");
+		assert.ok(unarchivedUpdatedAt > archivedUpdatedAt);
 		const responseIndex = client.frames.indexOf(unarchived);
 		assert.ok(responseIndex >= 0);
 		await client.waitForFrame(
@@ -170,6 +171,9 @@ async function main(): Promise<void> {
 				recordField(frame, "params").threadId === threadId,
 		);
 		assert.ok(broadcastIndex > responseIndex);
+		const coldList = resultRecord(await client.request("thread/list", {}), "thread/list");
+		const coldThread = findThread(arrayField(coldList, "data"), threadId);
+		assert.ok(numberField(coldThread, "updatedAt") >= unarchivedUpdatedAt);
 
 		const loaded = resultRecord(await client.request("thread/loaded/list"), "thread/loaded/list");
 		assert.equal(
@@ -190,6 +194,7 @@ async function main(): Promise<void> {
 		console.log("RESUME_AFTER=1");
 		console.log("UNKNOWN_ID_INVALID=1");
 		console.log("DOUBLE_UNARCHIVE_INVALID=1");
+		console.log("TIMESTAMP_PERSISTED=1");
 		console.log("EXIT=0");
 	} finally {
 		await Promise.all(sockets.map((socket) => socket.close()));

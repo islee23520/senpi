@@ -251,7 +251,7 @@ class ThreadLifecycleHandlers {
 
 		void entry.session.compact().then(
 			() => this.completeCompaction(threadId, turnId, item),
-			() => this.completeCompaction(threadId, turnId, item),
+			() => this.turnLog.completeTurn(threadId, turnId, "failed"),
 		);
 		return {};
 	}
@@ -303,7 +303,6 @@ class ThreadLifecycleHandlers {
 		const wireThread = {
 			...archivedThread,
 			status: { type: "notLoaded" } as const,
-			updatedAt: bumpedUpdatedAt(archivedThread.updatedAt),
 		};
 		const thread = await buildWireThread(wireThread, this.turnLog, false);
 		const notify = (): void => {
@@ -435,11 +434,4 @@ class ThreadLifecycleHandlers {
 		clearTimeout(timer);
 		this.idleTimers.delete(threadId);
 	}
-}
-
-function bumpedUpdatedAt(previous: string): string {
-	const previousMs = Date.parse(previous);
-	const nowMs = Date.now();
-	const nextMs = Number.isFinite(previousMs) ? Math.max(nowMs, previousMs + 1) : nowMs;
-	return new Date(nextMs).toISOString();
 }

@@ -1,4 +1,4 @@
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm, stat, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { enqueueThreadMutation, writeSidecarFileAtomic } from "./metadata-state.ts";
 import type { WireThread } from "./registry.ts";
@@ -54,8 +54,9 @@ export class ThreadArchiveState {
 			if (!thread) {
 				return undefined;
 			}
+			const updatedAt = await touchThreadSession(thread);
 			await rm(sidecarPathForThread(thread), { force: true });
-			return thread;
+			return { ...thread, updatedAt };
 		});
 	}
 
@@ -97,6 +98,17 @@ export class ThreadArchiveState {
 		}
 		return threads;
 	}
+}
+
+async function touchThreadSession(thread: WireThread): Promise<string> {
+	if (!thread.sessionPath) {
+		throw new Error(`Thread ${thread.id} has no session path to unarchive`);
+	}
+	const sessionStat = await stat(thread.sessionPath);
+	const previousMs = Date.parse(thread.updatedAt);
+	const nextMs = Math.max(Date.now(), sessionStat.mtimeMs + 1, Number.isFinite(previousMs) ? previousMs + 1 : 0);
+	await utimes(thread.sessionPath, sessionStat.atime, new Date(nextMs));
+	return new Date(nextMs).toISOString();
 }
 
 function sidecarPathForThread(thread: WireThread): string {

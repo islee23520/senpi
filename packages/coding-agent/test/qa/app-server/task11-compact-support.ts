@@ -46,22 +46,22 @@ export class StdioClient {
 	}
 
 	notify(method: string, params: unknown = {}): void {
-		this.child.stdin.write(JSON.stringify({ method, params }) + "\n");
+		this.child.stdin.write(`${JSON.stringify({ method, params })}\n`);
 	}
 
 	async request(method: string, params: unknown = {}): Promise<Observation> {
 		const observation = await this.rawRequest(method, params);
 		if ("error" in observation.message) {
-			throw new Error(method + " failed: " + JSON.stringify(observation.message.error));
+			throw new Error(`${method} failed: ${JSON.stringify(observation.message.error)}`);
 		}
 		return observation;
 	}
 
 	async rawRequest(method: string, params: unknown = {}): Promise<Observation> {
-		const id = "task11-" + this.nextId;
+		const id = `task11-${this.nextId}`;
 		this.nextId += 1;
 		const fromIndex = this.mark();
-		this.child.stdin.write(JSON.stringify({ id, method, params }) + "\n");
+		this.child.stdin.write(`${JSON.stringify({ id, method, params })}\n`);
 		return this.waitForMessage((message) => message.id === id && typeof message.method !== "string", fromIndex);
 	}
 
@@ -141,7 +141,7 @@ export function spawnAppServer(root: string, agentDir: string, sessionDir: strin
 }
 
 export async function writeMockModels(agentDir: string, port: number): Promise<void> {
-	const baseUrl = "http://127.0.0.1:" + port + "/v1";
+	const baseUrl = `http://127.0.0.1:${port}/v1`;
 	await writeFile(
 		join(agentDir, "models.json"),
 		JSON.stringify({
@@ -155,7 +155,7 @@ export async function writeMockModels(agentDir: string, port: number): Promise<v
 							id: "mock-model",
 							baseUrl,
 							api: "openai-completions",
-							contextWindow: 128000,
+							contextWindow: 1_000_000,
 							maxTokens: 4096,
 						},
 					],
@@ -166,7 +166,7 @@ export async function writeMockModels(agentDir: string, port: number): Promise<v
 }
 
 export function longTranscript(): string {
-	return Array.from({ length: 12_000 }, (_, index) => "fixture-" + index + " alpha beta gamma delta").join(" ");
+	return Array.from({ length: 3_000 }, (_, index) => `fixture-${index} alpha beta gamma delta`).join(" ");
 }
 
 export type FakeModel = { readonly port: number; readonly stop: () => Promise<void> };
@@ -228,7 +228,7 @@ function writeSse(response: ServerResponse): void {
 	const base = { id: "local-qa", object: "chat.completion.chunk", created: 0, model: "mock-model" };
 	const send = (delta: WireRecord, finishReason: string | null = null): void => {
 		const chunk = { ...base, choices: [{ index: 0, delta, finish_reason: finishReason }] };
-		response.write("data: " + JSON.stringify(chunk) + "\n\n");
+		response.write(`data: ${JSON.stringify(chunk)}\n\n`);
 	};
 	send({ role: "assistant", content: "" });
 	send({ content: "local compaction summary" });
@@ -239,13 +239,13 @@ function writeSse(response: ServerResponse): void {
 
 export function recordAt(value: WireRecord, key: string): WireRecord {
 	const child = value[key];
-	if (!isRecord(child)) throw new Error("expected object field " + key);
+	if (!isRecord(child)) throw new Error(`expected object field ${key}`);
 	return child;
 }
 
 export function stringAt(value: WireRecord, key: string): string {
 	const child = value[key];
-	if (typeof child !== "string") throw new Error("expected string field " + key);
+	if (typeof child !== "string") throw new Error(`expected string field ${key}`);
 	return child;
 }
 

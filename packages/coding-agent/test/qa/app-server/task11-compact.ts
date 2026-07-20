@@ -35,15 +35,18 @@ async function main(): Promise<void> {
 			approvalPolicy: "never",
 		});
 		const threadId = stringAt(recordAt(recordAt(started.message, "result"), "thread"), "id");
-		const turnStart = await client.request("turn/start", {
-			threadId,
-			input: [{ type: "text", text: longTranscript() }],
-		});
-		await client.waitForMessage(
-			(message) =>
-				message.method === "turn/completed" && stringAtOrNull(recordAt(message, "params"), "threadId") === threadId,
-			turnStart.index,
-		);
+		for (let turnIndex = 0; turnIndex < 2; turnIndex += 1) {
+			const turnStart = await client.request("turn/start", {
+				threadId,
+				input: [{ type: "text", text: `seed-${turnIndex} ${longTranscript()}` }],
+			});
+			await client.waitForMessage(
+				(message) =>
+					message.method === "turn/completed" &&
+					stringAtOrNull(recordAt(message, "params"), "threadId") === threadId,
+				turnStart.index,
+			);
+		}
 
 		const compactMark = client.mark();
 		const responsePromise = client.rawRequest("thread/compact/start", { threadId });
@@ -87,10 +90,10 @@ async function main(): Promise<void> {
 				? 1
 				: 0;
 
-		console.log("ACK_IMMEDIATE=" + ackImmediate);
-		console.log("COMPACTION_ITEM_SEEN=" + compactionItemSeen);
-		console.log("THREAD_COMPACTED_FRAMES=" + threadCompactedFrames);
-		console.log("UNLOADED_ERROR=" + unloadedError);
+		console.log(`ACK_IMMEDIATE=${ackImmediate}`);
+		console.log(`COMPACTION_ITEM_SEEN=${compactionItemSeen}`);
+		console.log(`THREAD_COMPACTED_FRAMES=${threadCompactedFrames}`);
+		console.log(`UNLOADED_ERROR=${unloadedError}`);
 		if (ackImmediate !== 1 || compactionItemSeen !== 1 || threadCompactedFrames !== 0 || unloadedError !== 1) {
 			throw new Error("task11 compact assertions failed");
 		}

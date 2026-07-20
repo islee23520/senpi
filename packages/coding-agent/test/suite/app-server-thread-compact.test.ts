@@ -89,16 +89,44 @@ describe("app-server thread/compact/start", () => {
 			error: { code: -32600, message: expect.stringContaining("thread not found") },
 		});
 	});
+
+	it("marks a rejected compaction failed without emitting a completed item", async () => {
+		// Given: a loaded thread whose compaction promise rejects after acknowledgement.
+		const { connection, registry, root, threads, turnLog } = await createHarness();
+		const started = await registry.dispatch(connection, { id: 6, method: "thread/start", params: { cwd: root } });
+		const threadId = stringAt(responseResult(started).thread, "id");
+		const entry = threads.getLoadedThread(threadId);
+		const deferred = createDeferred<CompactionResult>();
+		vi.spyOn(entry.session, "compact").mockReturnValue(deferred.promise);
+		connection.received.length = 0;
+
+		// When: the compact request is accepted and the background operation fails.
+		await expect(
+			registry.dispatch(connection, { id: 7, method: "thread/compact/start", params: { threadId } }),
+		).resolves.toEqual({ id: 7, result: {} });
+		deferred.reject(new Error("scripted compaction failure"));
+		await expect(deferred.promise).rejects.toThrow("scripted compaction failure");
+		await Promise.resolve();
+
+		// Then: the synthetic turn records failure and no success completion frame is fabricated.
+		expect(connection.received).toHaveLength(1);
+		expect(connection.received[0]?.method).toBe("item/started");
+		expect(connection.received.some((notification) => notification.method === "item/completed")).toBe(false);
+		expect(turnLog.readTurns(threadId)).toEqual([expect.objectContaining({ status: "failed", items: [] })]);
+	});
 });
 
 function createDeferred<T>(): {
 	readonly promise: Promise<T>;
 	readonly resolve: (value: T) => void;
+	readonly reject: (error: Error) => void;
 } {
 	let resolvePromise: ((value: T) => void) | undefined;
-	const promise = new Promise<T>((resolve) => {
+	let rejectPromise: ((error: Error) => void) | undefined;
+	const promise = new Promise<T>((resolve, reject) => {
 		resolvePromise = resolve;
+		rejectPromise = reject;
 	});
-	if (!resolvePromise) throw new Error("deferred resolver was not initialized");
-	return { promise, resolve: resolvePromise };
+	if (!resolvePromise || !rejectPromise) throw new Error("deferred handlers were not initialized");
+	return { promise, resolve: resolvePromise, reject: rejectPromise };
 }

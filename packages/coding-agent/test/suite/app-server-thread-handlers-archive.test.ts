@@ -195,7 +195,16 @@ describe("app-server thread archive lifecycle handlers", () => {
 		// Then: the response is notLoaded with a bumped timestamp, and the runtime remains cold.
 		const unarchivedThread = objectAt(responseResult(unarchived), "thread");
 		expect(unarchivedThread.status).toEqual({ type: "notLoaded" });
-		expect(unarchivedThread.updatedAt).toBeGreaterThan(archivedUpdatedAt);
+		const unarchivedUpdatedAt = unarchivedThread.updatedAt;
+		if (typeof unarchivedUpdatedAt !== "number") throw new Error("unarchived thread updatedAt must be numeric");
+		expect(unarchivedUpdatedAt).toBeGreaterThan(archivedUpdatedAt);
+		const coldList = await registry.dispatch(connection, { id: 37, method: "thread/list", params: {} });
+		const coldThread = dataArray(responseResult(coldList))
+			.map(objectValue)
+			.find((thread) => thread.id === threadId);
+		const coldUpdatedAt = coldThread?.updatedAt;
+		if (typeof coldUpdatedAt !== "number") throw new Error("cold thread updatedAt must be numeric");
+		expect(coldUpdatedAt).toBeGreaterThanOrEqual(unarchivedUpdatedAt);
 		expect(() => threads.getLoadedThread(threadId)).toThrow();
 		expect(connection.received).toEqual([]);
 		const deferredUnarchive = deferredActions[0];
