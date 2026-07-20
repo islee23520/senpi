@@ -888,6 +888,11 @@ export class SettingsManager {
 		};
 	}
 
+	/** Raw retry.fallbackChains value before sanitization, for startup validation warnings. */
+	getRawFallbackChains(): unknown {
+		return this.settings.retry?.fallbackChains;
+	}
+
 	getRetryFallbackSettings(): {
 		modelFallback: boolean;
 		chains: Readonly<Record<string, readonly string[]>>;

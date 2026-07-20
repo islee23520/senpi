@@ -515,7 +515,7 @@ export class AgentSession {
 		this._modelRegistry = config.modelRegistry ?? new ModelRegistry(modelRuntime);
 		const fallbackLogger = createFallbackLogger(config.agentDir ?? getAgentDir());
 		this._fallbackValidationWarnings = validateFallbackChains(
-			this.settingsManager.getRetryFallbackSettings().chains,
+			this.settingsManager.getRawFallbackChains(),
 			this._modelRegistry,
 		);
 		for (const warning of this._fallbackValidationWarnings) {

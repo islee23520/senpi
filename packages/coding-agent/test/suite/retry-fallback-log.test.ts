@@ -35,7 +35,7 @@ describe("retry fallback logger", () => {
 		).not.toThrow();
 
 		const logPath = join(agentDir, "logs", "fallback.log");
-		const entry = JSON.parse(readFileSync(logPath, "utf8")) as Record<string, unknown>;
+		const entry: Record<string, unknown> = JSON.parse(readFileSync(logPath, "utf8"));
 		expect(entry).toMatchObject({
 			level: "debug",
 			event: "candidate_skipped",
@@ -61,7 +61,7 @@ describe("retry fallback logger", () => {
 		});
 
 		const text = readFileSync(join(agentDir, "logs", "fallback.log"), "utf8");
-		const entry = JSON.parse(text) as Record<string, unknown>;
+		const entry: Record<string, unknown> = JSON.parse(text);
 		expect(entry.error).toBe(`${"x".repeat(197)}...`);
 		expect(entry.errorMessage).toBe("Authorization: Bearer [redacted]");
 		expect(text).not.toContain("should-not-appear");

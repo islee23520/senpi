@@ -123,7 +123,8 @@ function safeEntries(value: object): Array<[string, unknown]> {
 		const entries: Array<[string, unknown]> = [];
 		for (const key of Object.keys(value)) {
 			try {
-				entries.push([key, value[key as keyof typeof value]]);
+				const item: unknown = Reflect.get(value, key);
+				entries.push([key, item]);
 			} catch {
 				entries.push([key, "[Unreadable]"]);
 			}

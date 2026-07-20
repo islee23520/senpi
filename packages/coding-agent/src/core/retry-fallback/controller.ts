@@ -166,11 +166,18 @@ export class RetryFallbackController {
 		const chains = canonicalizeFallbackChains(settings.chains, this.deps.registry);
 		const chainKey = resolveChainKey(current.model, current.thinkingLevel, chains) ?? this.state?.chainKey;
 		const entries = chainKey ? chains[chainKey] : undefined;
-		if (!chainKey || !entries) return undefined;
+		if (!chainKey || !entries) {
+			if (reserve) this.deps.logger.debug("no_chain", { selector: formatSelector(current.model) });
+			return undefined;
+		}
 		for (const raw of candidatesAfter(entries, formatSelector(current.model, current.thinkingLevel))) {
 			const selector = parseFallbackSelector(raw, this.deps.registry);
 			if (!selector) {
 				this.skip(raw, "unknown");
+				continue;
+			}
+			if (selector.provider === current.model.provider && selector.id === current.model.id) {
+				this.skip(raw, "self");
 				continue;
 			}
 			const base = baseSelector(selector);
@@ -195,6 +202,7 @@ export class RetryFallbackController {
 			return { chainKey, selector, model };
 		}
 		this.lastExhaustedChainKey = chainKey;
+		if (reserve) this.deps.logger.info("candidates_exhausted", { chainKey });
 		return undefined;
 	}
 

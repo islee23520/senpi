@@ -35,6 +35,7 @@ type RunContext = {
 	options: Record<string, never>;
 	session: {
 		modelRuntime: { getError: () => string | undefined };
+		fallbackValidationWarnings: readonly string[];
 		prompt: (text: string, options?: unknown) => Promise<void>;
 	};
 	checkForPackageUpdates: () => Promise<string[]>;
