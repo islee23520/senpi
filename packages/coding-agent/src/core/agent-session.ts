@@ -234,6 +234,8 @@ export interface AgentSessionConfig {
 	cwd: string;
 	/** Directory containing runtime logs and global agent configuration. */
 	agentDir?: string;
+	/** Clock override for fallback selector cooldowns (tests only). */
+	fallbackNow?: () => number;
 	/** Global model narrowing for selectors and startup model choice (from --models / enabledModels) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
 	/** Favorite models to cycle through with Ctrl+P */
@@ -520,14 +522,14 @@ export class AgentSession {
 		this._retryFallback = new RetryFallbackController({
 			getSettings: () => this.settingsManager.getRetryFallbackSettings(),
 			registry: this._modelRegistry,
-			cooldowns: new SelectorCooldowns(() => Date.now()),
+			cooldowns: new SelectorCooldowns(config.fallbackNow ?? (() => Date.now())),
 			logger: fallbackLogger,
-			switchModel: async (model, thinking) => {
+			switchModel: async (model, thinking, reason) => {
 				await this._switchActiveModel(model, {
 					persistDefault: false,
 					appendSessionEntry: true,
-					entryReason: "fallback",
-					emitModelSelect: false,
+					entryReason: reason,
+					emitModelSelect: reason === "fallback-revert",
 					invalidateCompaction: false,
 					ephemeralThinkingLevel: thinking,
 				});
@@ -1631,6 +1633,11 @@ export class AgentSession {
 			throwIfCancelled();
 		}
 
+		// Turn boundary: restore the primary model if the fallback cooldown expired.
+		if (!this.isStreaming) {
+			await this._maybeRestoreFallbackPrimary();
+		}
+
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
 		const promptDisposition = options?.promptDisposition;
@@ -2240,12 +2247,29 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
+		// A manual model change abandons any active fallback window; if a fallback
+		// retry sleep is still pending, cancel it so no surprise continuation fires.
+		const hadActiveFallback = this._retryFallback.activeState !== undefined;
+		this._retryFallback.clearForManualModelChange(model);
+		if (hadActiveFallback && this._retryAbortController) {
+			this.abortRetry();
+		}
+
 		return await this._switchActiveModel(model, {
 			persistDefault: true,
 			appendSessionEntry: true,
 			emitModelSelect: true,
 			invalidateCompaction: true,
 		});
+	}
+
+	private async _maybeRestoreFallbackPrimary(): Promise<void> {
+		try {
+			await this._retryFallback.maybeRestorePrimary(this.settingsManager.getRetryFallbackSettings().revertPolicy);
+		} catch (error) {
+			this._retryFallback.clear();
+			console.error("fallback revert failed; cleared fallback state", error);
+		}
 	}
 
 	private async _switchActiveModel(
@@ -2330,6 +2354,7 @@ export class AgentSession {
 		if (invalidatesCompaction) {
 			this._invalidateCompactionForModelSelection();
 		}
+		this._retryFallback.clearForManualModelChange(next.model);
 		const thinkingLevel = this._getThinkingLevelForModelSwitch(next.thinkingLevel);
 
 		this.agent.state.model = next.model;
@@ -2368,6 +2393,9 @@ export class AgentSession {
 		// Only persist if actually changing
 		const previousLevel = this.agent.state.thinkingLevel;
 		const isChanging = effectiveLevel !== previousLevel;
+		if (isChanging) {
+			this._retryFallback.noteManualThinkingLevel();
+		}
 
 		this.agent.state.thinkingLevel = effectiveLevel;
 
@@ -3814,6 +3842,10 @@ export class AgentSession {
 			return false;
 		}
 		this._retryAbortController = undefined;
+
+		// Turn boundary: a suppression that expired during the backoff sleep lets
+		// the retry continue on the restored primary instead of the fallback model.
+		await this._maybeRestoreFallbackPrimary();
 
 		// Retry via continue() - use setTimeout to break out of event handler chain
 		setTimeout(() => {

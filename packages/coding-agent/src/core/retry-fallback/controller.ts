@@ -33,14 +33,18 @@ export interface RetryFallbackControllerDeps {
 	registry: { find(provider: string, id: string): Model<Api> | undefined; getAll(): Model<Api>[] };
 	cooldowns: SelectorCooldowns;
 	logger: FallbackLogger;
-	switchModel(model: Model<Api>, thinking: ThinkingLevel, reason: "fallback"): Promise<void>;
-	emit(event: {
-		type: "retry_fallback_applied";
-		from: string;
-		to: string;
-		chainKey: string;
-		reason: FallbackReason;
-	}): void;
+	switchModel(model: Model<Api>, thinking: ThinkingLevel, reason: "fallback" | "fallback-revert"): Promise<void>;
+	emit(
+		event:
+			| {
+					type: "retry_fallback_applied";
+					from: string;
+					to: string;
+					chainKey: string;
+					reason: FallbackReason;
+			  }
+			| { type: "retry_fallback_reverted"; from: string; to: string },
+	): void;
 	getCurrentSelector(): { model: Model<Api>; thinkingLevel?: ThinkingLevel } | undefined;
 	isAuthAvailable(provider: string): boolean;
 }
@@ -75,6 +79,53 @@ export class RetryFallbackController {
 
 	canTryFallback(): boolean {
 		return this.nextCandidate(false) !== undefined;
+	}
+
+	/**
+	 * Revert to the chain's original model at a turn boundary. Only fires for
+	 * unpinned state under the cooldown-expiry policy once the original selector
+	 * is no longer suppressed and is still usable; pinned (refusal) state and the
+	 * "never" policy always hold the fallback model.
+	 */
+	async maybeRestorePrimary(revertPolicy: "cooldown-expiry" | "never"): Promise<boolean> {
+		const state = this.state;
+		if (!state || state.pinned || revertPolicy !== "cooldown-expiry") return false;
+		if (this.deps.cooldowns.isSuppressed(state.originalSelector)) return false;
+		const selector = parseFallbackSelector(state.originalSelector, this.deps.registry);
+		if (!selector || !this.deps.isAuthAvailable(selector.provider)) return false;
+		const model = this.deps.registry.find(selector.provider, selector.id);
+		const current = this.deps.getCurrentSelector();
+		if (!model || !current) return false;
+		// User override wins: only restore the original thinking level when the
+		// current level still equals the level the fallback switch applied. A manual
+		// setThinkingLevel clears lastAppliedThinkingLevel (see noteManualThinkingLevel).
+		const thinking =
+			current.thinkingLevel === state.lastAppliedThinkingLevel
+				? (state.originalThinkingLevel ?? current.thinkingLevel ?? "off")
+				: (current.thinkingLevel ?? "off");
+		await this.deps.switchModel(model, thinking, "fallback-revert");
+		const from = formatSelector(current.model);
+		this.state = undefined;
+		this.deps.logger.info("fallback_reverted", { from, to: state.originalSelector });
+		this.deps.emit({ type: "retry_fallback_reverted", from, to: state.originalSelector });
+		return true;
+	}
+
+	/**
+	 * A user-driven setThinkingLevel makes the current level a deliberate choice,
+	 * so the revert restore-rule must no longer treat it as fallback-applied.
+	 */
+	noteManualThinkingLevel(): void {
+		if (this.state) this.state.lastAppliedThinkingLevel = undefined;
+	}
+
+	/** A user-driven model change abandons the fallback window entirely. */
+	clearForManualModelChange(model: Model<Api>): void {
+		if (this.state) {
+			this.deps.logger.info("fallback_cleared_manual", { selector: formatSelector(model) });
+		}
+		this.state = undefined;
+		this.deps.cooldowns.clear(formatSelector(model));
 	}
 
 	async tryFallback(

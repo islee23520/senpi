@@ -79,6 +79,7 @@ export interface HarnessOptions {
 	onPayload?: (payload: unknown) => void;
 	persistSession?: boolean;
 	autoTitleSessions?: boolean;
+	fallbackNow?: () => number;
 }
 
 export interface Harness {
@@ -211,6 +212,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		excludedToolNames: options.excludedToolNames,
 		extensionRunnerRef,
 		autoTitleSessions: options.autoTitleSessions,
+		fallbackNow: options.fallbackNow,
 	});
 
 	const events: AgentSessionEvent[] = [];
