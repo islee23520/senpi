@@ -10,6 +10,7 @@ import {
 import { alreadyInitializedError, invalidParamsError, invalidRequestError } from "../rpc/errors.ts";
 import { createRegistry, type MethodRegistration, type MethodRegistry } from "../rpc/registry.ts";
 import type { ThreadRegistry } from "../threads/registry.ts";
+import { registerAppServerAccountMethods } from "./account.ts";
 import { registerAppServerCatalogMethods } from "./catalogs.ts";
 import { registerAppServerConfigMethods } from "./config.ts";
 import {
@@ -69,6 +70,7 @@ export class ServerCore {
 			agentDir: this.codexHome,
 			serverCwd: options.serverCwd,
 		});
+		registerAppServerAccountMethods(this.registry, { agentDir: this.codexHome });
 		registerAppServerSkillMethods(this.registry, {
 			agentDir: this.codexHome,
 			serverCwd: options.serverCwd,
