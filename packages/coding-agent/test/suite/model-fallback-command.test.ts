@@ -189,9 +189,7 @@ describe("model fallback builtin command", () => {
 		const dir = await mkdtemp(join(tmpdir(), "senpi-fallback-command-"));
 		dirs.push(dir);
 		const notices: string[] = [];
-		await (await harness())
-			.get("fallback")
-			?.handler("bogus/model nope", await context(dir, notices));
+		await (await harness()).get("fallback")?.handler("bogus/model nope", await context(dir, notices));
 		expect(SettingsManager.create(dir).getRetryFallbackSettings().chains).toEqual({});
 		expect(notices.join("\n")).toContain("not a valid or known model selector");
 	});

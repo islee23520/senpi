@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
 import { createLocalEventEmitter } from "../../src/core/extensions/builtin/permission-system/events.ts";
 import { handleNoUI } from "../../src/core/extensions/builtin/permission-system/non-interactive.ts";
@@ -12,6 +11,7 @@ import {
 	type Ruleset,
 } from "../../src/core/extensions/builtin/permission-system/types.ts";
 import type { ExtensionContext, ExtensionUIContext } from "../../src/core/extensions/types.ts";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 
 // =============================================================================
 // Test Helpers

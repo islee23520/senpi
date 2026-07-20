@@ -93,7 +93,11 @@ describe("retry fallback classifier refusals", () => {
 			},
 		});
 		harnesses.push(harness);
-		harness.setResponses([refusal("primary refusal"), refusal("fallback refusal"), fauxAssistantMessage("next answer")]);
+		harness.setResponses([
+			refusal("primary refusal"),
+			refusal("fallback refusal"),
+			fauxAssistantMessage("next answer"),
+		]);
 
 		await harness.session.prompt("hello");
 
@@ -122,7 +126,12 @@ describe("retry fallback classifier refusals", () => {
 		);
 		const historyRefusals = harness.sessionManager
 			.getEntries()
-			.filter((entry) => entry.type === "message" && entry.message.role === "assistant" && entry.message.stopDetails?.type === "refusal");
+			.filter(
+				(entry) =>
+					entry.type === "message" &&
+					entry.message.role === "assistant" &&
+					entry.message.stopDetails?.type === "refusal",
+			);
 		expect(activeRefusals).toHaveLength(1);
 		expect(activeRefusals[0]).toMatchObject({ errorMessage: "misleading_success_output" });
 		expect(historyRefusals).toHaveLength(3);

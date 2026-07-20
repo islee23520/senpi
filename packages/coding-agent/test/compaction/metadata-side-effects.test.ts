@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { type CompactionPreparation, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
 import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import type {
@@ -11,6 +10,7 @@ import type {
 	SessionCompactEvent,
 } from "../../src/core/extensions/index.ts";
 import type { CompactionEntry, SessionEntry } from "../../src/core/session-manager.ts";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 
 const CHECKPOINT_CUSTOM_TYPE = "compaction.agent-checkpoint";
 const TODO_SNAPSHOT_CUSTOM_TYPE = "compaction.todo-snapshot";

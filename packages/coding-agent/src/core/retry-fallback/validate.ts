@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { getSupportedThinkingLevels } from "../thinking-levels.js";
-import { baseSelector, parseFallbackSelector } from "./chains.js";
+import { getSupportedThinkingLevels } from "../thinking-levels.ts";
+import { baseSelector, parseFallbackSelector } from "./chains.ts";
 
 export interface FallbackModelRegistry {
 	find(provider: string, id: string): Model<Api> | undefined;

@@ -21,7 +21,11 @@ describe("retry fallback revert-to-primary", () => {
 			settings: { retry: { enabled: true, baseDelayMs: 1, fallbackChains: { [primary]: [fallback] } } },
 		});
 		harnesses.push(harness);
-		harness.setResponses([overloaded(), fauxAssistantMessage("fallback answer"), fauxAssistantMessage("primary answer")]);
+		harness.setResponses([
+			overloaded(),
+			fauxAssistantMessage("fallback answer"),
+			fauxAssistantMessage("primary answer"),
+		]);
 
 		await harness.session.prompt("first");
 		expect(harness.session.model?.id).toBe("faux-2");
@@ -41,7 +45,9 @@ describe("retry fallback revert-to-primary", () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1" }, { id: "faux-2" }],
 			fallbackNow: () => now,
-			settings: { retry: { enabled: true, baseDelayMs: 200, maxRetries: 3, fallbackChains: { [primary]: [fallback] } } },
+			settings: {
+				retry: { enabled: true, baseDelayMs: 200, maxRetries: 3, fallbackChains: { [primary]: [fallback] } },
+			},
 		});
 		harnesses.push(harness);
 		harness.setResponses([overloaded(), overloaded(), fauxAssistantMessage("primary recovered")]);
@@ -90,17 +96,26 @@ describe("retry fallback revert-to-primary", () => {
 		expect(harness.faux.getCallLog()[2]?.modelId).toBe("faux-2");
 	});
 
-	it("(d) never auto-reverts when revertPolicy is \"never\"", async () => {
+	it('(d) never auto-reverts when revertPolicy is "never"', async () => {
 		let now = 0;
 		const harness = await createHarness({
 			models: [{ id: "faux-1" }, { id: "faux-2" }],
 			fallbackNow: () => now,
 			settings: {
-				retry: { enabled: true, baseDelayMs: 1, fallbackChains: { [primary]: [fallback] }, fallbackRevertPolicy: "never" },
+				retry: {
+					enabled: true,
+					baseDelayMs: 1,
+					fallbackChains: { [primary]: [fallback] },
+					fallbackRevertPolicy: "never",
+				},
 			},
 		});
 		harnesses.push(harness);
-		harness.setResponses([overloaded(), fauxAssistantMessage("fallback answer"), fauxAssistantMessage("fallback again")]);
+		harness.setResponses([
+			overloaded(),
+			fauxAssistantMessage("fallback answer"),
+			fauxAssistantMessage("fallback again"),
+		]);
 
 		await harness.session.prompt("first");
 		expect(harness.session.model?.id).toBe("faux-2");
@@ -123,7 +138,11 @@ describe("retry fallback revert-to-primary", () => {
 			settings: { retry: { enabled: true, baseDelayMs: 1, fallbackChains: { [primary]: [fallback] } } },
 		});
 		harnesses.push(harness);
-		harness.setResponses([overloaded(), fauxAssistantMessage("fallback answer"), fauxAssistantMessage("primary answer")]);
+		harness.setResponses([
+			overloaded(),
+			fauxAssistantMessage("fallback answer"),
+			fauxAssistantMessage("primary answer"),
+		]);
 
 		await harness.session.prompt("first");
 		expect(harness.session.model?.id).toBe("faux-2");
@@ -143,7 +162,9 @@ describe("retry fallback revert-to-primary", () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1" }, { id: "faux-2" }],
 			fallbackNow: () => now,
-			settings: { retry: { enabled: true, baseDelayMs: 200, maxRetries: 3, fallbackChains: { [primary]: [fallback] } } },
+			settings: {
+				retry: { enabled: true, baseDelayMs: 200, maxRetries: 3, fallbackChains: { [primary]: [fallback] } },
+			},
 		});
 		harnesses.push(harness);
 		harness.setResponses([overloaded(), overloaded(), fauxAssistantMessage("should never be requested")]);
@@ -176,7 +197,9 @@ describe("retry fallback revert-to-primary", () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1" }, { id: "faux-2" }],
 			fallbackNow: () => now,
-			settings: { retry: { enabled: true, baseDelayMs: 200, maxRetries: 3, fallbackChains: { [primary]: [fallback] } } },
+			settings: {
+				retry: { enabled: true, baseDelayMs: 200, maxRetries: 3, fallbackChains: { [primary]: [fallback] } },
+			},
 		});
 		harnesses.push(harness);
 		harness.setResponses([overloaded(), overloaded(), fauxAssistantMessage("recovered with steering")]);

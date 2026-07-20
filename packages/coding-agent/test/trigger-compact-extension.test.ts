@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
-import { createInMemoryExtensionSessionSettings } from "./helpers/extension-session-settings.ts";
 import triggerCompactExtension from "../examples/extensions/trigger-compact.ts";
 import { DEFAULT_COMPACTION_SETTINGS } from "../src/core/compaction/index.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../src/core/extensions/index.ts";
+import { createInMemoryExtensionSessionSettings } from "./helpers/extension-session-settings.ts";
 
 function createContext(tokens: number | null, compact = vi.fn()): ExtensionContext {
 	return {

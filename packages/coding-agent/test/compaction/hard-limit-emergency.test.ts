@@ -7,7 +7,6 @@ import {
 	type UserMessage,
 } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { estimateContextTokens } from "../../src/core/compaction/index.ts";
 import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import type {
@@ -20,6 +19,7 @@ import type {
 	ExtensionHandler,
 } from "../../src/core/extensions/index.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 
 const registrations: Array<{ unregister: () => void }> = [];
 

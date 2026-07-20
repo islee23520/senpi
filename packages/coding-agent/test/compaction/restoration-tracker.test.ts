@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { type CompactionSettings, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
 import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import {
@@ -20,6 +19,7 @@ import type {
 	ToolCallEventResult,
 } from "../../src/core/extensions/index.ts";
 import type { SessionEntry } from "../../src/core/session-manager.ts";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 
 interface RestorationGateHarness {
 	toolCall: ExtensionHandler<ToolCallEvent, ToolCallEventResult>;
