@@ -1,5 +1,5 @@
 import type { Goal, GoalStatus } from "../../../core/extensions/builtin/goal/types.ts";
-import type { ThreadGoal } from "../protocol/generated/v2/ThreadGoal.ts";
+import type { ThreadGoal } from "../protocol/index.ts";
 
 const GOAL_STATUS_TO_THREAD_STATUS = {
 	active: "active",

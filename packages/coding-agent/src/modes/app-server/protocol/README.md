@@ -56,10 +56,9 @@ The facade also records these deliberate projections:
   `CollaborationMode` projection used by Senpi. Its nested
   `reasoning_effort` member remains snake_case because that is the Codex wire
   contract.
-- Fuzzy-file results currently use the plan-authoritative `matchType` and
-  `fileName` members. The pinned Codex HEAD source/fixture uses `match_type` and
-  `file_name`; this known discrepancy is explicit here so the implementation
-  task resolves it deliberately rather than silently deriving a third shape.
+- Fuzzy-file results use the pinned Codex HEAD `match_type` and `file_name`
+  members. This common-protocol record intentionally remains snake_case even
+  though most v2 request and response members are camelCase.
 - Account usage and rate-limit counters that are bigint-like in Codex source
   are normalized to JSON-safe `number` values in the facade. JavaScript
   `bigint` cannot be serialized in an app-server JSON frame.

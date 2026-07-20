@@ -63,7 +63,11 @@ export type ThreadTurnsListResponse = {
 	readonly backwardsCursor: string | null;
 };
 
-export type ThreadItem = JsonValue;
+export type ThreadItem = {
+	readonly id: string;
+	readonly type: string;
+	readonly [key: string]: JsonValue | undefined;
+};
 export type ThreadItemEntry = { readonly turnId: string; readonly item: ThreadItem };
 export type ThreadItemsListParams = {
 	readonly threadId: string;

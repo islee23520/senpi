@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { GitInfo } from "../protocol/generated/v2/GitInfo.ts";
-import type { ThreadMetadataGitInfoUpdateParams } from "../protocol/generated/v2/ThreadMetadataGitInfoUpdateParams.ts";
+import type { GitInfo, ThreadMetadataGitInfoUpdateParams } from "../protocol/index.ts";
 import type { WireThread } from "./registry.ts";
 
 const METADATA_SUFFIX = ".metadata.json";

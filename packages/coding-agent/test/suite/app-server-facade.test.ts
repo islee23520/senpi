@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	buildSenpiCollaborationMode,
@@ -5,6 +7,7 @@ import {
 	SENPI_COLLABORATION_MODE,
 } from "../../src/modes/app-server/protocol/collaboration-mode.ts";
 import type { CollaborationMode as GeneratedCollaborationMode } from "../../src/modes/app-server/protocol/generated/CollaborationMode.ts";
+import type { FuzzyFileSearchResult as GeneratedFuzzyFileSearchResult } from "../../src/modes/app-server/protocol/generated/FuzzyFileSearchResult.ts";
 import type { ThreadGoalUpdatedNotification as GeneratedThreadGoalUpdatedNotification } from "../../src/modes/app-server/protocol/generated/v2/ThreadGoalUpdatedNotification.ts";
 import type {
 	AccountRateLimitsReadParams,
@@ -26,6 +29,7 @@ import type {
 	ExperimentalFeatureListResponse,
 	FuzzyFileSearchParams,
 	FuzzyFileSearchResponse,
+	FuzzyFileSearchResult,
 	FuzzyFileSearchSessionCompletedNotification,
 	FuzzyFileSearchSessionStartParams,
 	FuzzyFileSearchSessionStartResponse,
@@ -76,6 +80,8 @@ import type {
 	ThreadUnarchiveResponse,
 	TurnDiffUpdatedNotification,
 } from "../../src/modes/app-server/protocol/index.ts";
+
+const appServerSourceRoot = join(import.meta.dirname, "../../src/modes/app-server");
 
 const thread: Thread = {
 	id: "thread-1",
@@ -152,6 +158,17 @@ const requestParams = {
 	} satisfies FuzzyFileSearchSessionUpdateParams,
 	fuzzyFileSearchSessionStop: { sessionId: "search-1" } satisfies FuzzyFileSearchSessionStopParams,
 };
+
+const fuzzyFileSearchResult = {
+	root: "/tmp",
+	path: "/tmp/README.md",
+	match_type: "file" as const,
+	file_name: "README.md",
+	score: 1,
+	indices: [0],
+};
+const facadeFuzzyFileSearchResult: FuzzyFileSearchResult = fuzzyFileSearchResult;
+const generatedFuzzyFileSearchResult: GeneratedFuzzyFileSearchResult = fuzzyFileSearchResult;
 
 const requests: readonly ClientRequest[] = [
 	{ id: 1, method: "thread/search", params: requestParams.threadSearch },
@@ -276,16 +293,7 @@ const responses = {
 	permissionProfileList: { data: [], nextCursor: null } satisfies PermissionProfileListResponse,
 	experimentalFeatureList: { data: [], nextCursor: null } satisfies ExperimentalFeatureListResponse,
 	fuzzyFileSearch: {
-		files: [
-			{
-				root: "/tmp",
-				path: "/tmp/README.md",
-				matchType: "file",
-				fileName: "README.md",
-				score: 1,
-				indices: [0],
-			},
-		],
+		files: [facadeFuzzyFileSearchResult],
 	} satisfies FuzzyFileSearchResponse,
 	fuzzyFileSearchSessionStart: {} satisfies FuzzyFileSearchSessionStartResponse,
 	fuzzyFileSearchSessionUpdate: {} satisfies FuzzyFileSearchSessionUpdateResponse,
@@ -337,7 +345,19 @@ describe("app-server handwritten facade", () => {
 		expect(Object.keys(responses)).toHaveLength(28);
 		expect(Object.keys(notifications)).toHaveLength(8);
 		expect(compatibleThreadGoalUpdatedNotification).toEqual(notifications.threadGoalUpdated);
-		expect(responses.fuzzyFileSearch.files[0]).toMatchObject({ matchType: "file", fileName: "README.md" });
+		expect(generatedFuzzyFileSearchResult).toEqual(responses.fuzzyFileSearch.files[0]);
+		expect(responses.fuzzyFileSearch.files[0]).toMatchObject({ match_type: "file", file_name: "README.md" });
+	});
+
+	it("routes runtime protocol imports through the handwritten facade", () => {
+		const offenders = readdirSync(appServerSourceRoot, { recursive: true, encoding: "utf8" })
+			.filter((relativePath) => relativePath.endsWith(".ts") && !relativePath.startsWith("protocol/generated/"))
+			.filter((relativePath) => {
+				const source = readFileSync(join(appServerSourceRoot, relativePath), "utf8");
+				return /from\s+["'][^"']*(?:protocol\/generated|\.\/generated)/u.test(source);
+			});
+
+		expect(offenders).toEqual([]);
 	});
 
 	it("uses one schema-valid authoritative collaboration-mode projection", () => {

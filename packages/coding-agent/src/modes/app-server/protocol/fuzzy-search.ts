@@ -3,8 +3,8 @@ export type FuzzyFileSearchMatchType = "file" | "directory";
 export type FuzzyFileSearchResult = {
 	readonly root: string;
 	readonly path: string;
-	readonly matchType: FuzzyFileSearchMatchType;
-	readonly fileName: string;
+	readonly match_type: FuzzyFileSearchMatchType;
+	readonly file_name: string;
 	readonly score: number;
 	readonly indices: readonly number[] | null;
 };
