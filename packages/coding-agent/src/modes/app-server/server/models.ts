@@ -6,16 +6,12 @@ import type { Api, Model as PiModel } from "@earendil-works/pi-ai";
 import { getAgentDir } from "../../../config.ts";
 import { AuthStorage } from "../../../core/auth-storage.ts";
 import { ModelRegistry } from "../../../core/model-registry.ts";
-import { defaultModelPerProvider } from "../../../core/model-resolver.ts";
-import { getSupportedThinkingLevels } from "../../../core/thinking-levels.ts";
-import type {
-	ModelListParams,
-	ModelListResponse,
-	RemoteControlClientListParams,
-	Model as WireModel,
-} from "../protocol/index.ts";
+import type { ModelListParams, RemoteControlClientListParams } from "../protocol/index.ts";
 import { RpcHandlerError } from "../rpc/errors.ts";
 import type { MethodRegistry } from "../rpc/registry.ts";
+import { buildModelListResponse } from "./model-list.ts";
+
+export { buildModelListResponse, buildWireModel } from "./model-list.ts";
 
 export interface AppServerModelRegistry {
 	getAvailable(): PiModel<Api>[];
@@ -26,7 +22,6 @@ export interface RegisterAppServerModelMethodsOptions {
 	readonly agentDir?: string;
 }
 
-const DEFAULT_MODEL_IDS = new Map<string, string>(Object.entries(defaultModelPerProvider));
 const INSTALLATION_ID_PATH = ["app-server", "installation-id"] as const;
 const INSTALLATION_ID_LOCK_SUFFIX = ".lock";
 const INSTALLATION_ID_LOCK_MARKER_PREFIX = "owner-";
@@ -64,38 +59,6 @@ export function registerAppServerModelMethods(
 			throw new Error("remote control is unavailable for this app-server");
 		},
 	});
-}
-
-export function buildModelListResponse(models: readonly PiModel<Api>[], params: ModelListParams): ModelListResponse {
-	const data = models
-		.map((model) => buildWireModel(model))
-		.filter((model) => params.includeHidden === true || !model.hidden);
-	return { data, nextCursor: null };
-}
-
-export function buildWireModel(model: PiModel<Api>): WireModel {
-	return {
-		id: `${model.provider}/${model.id}`,
-		model: model.id,
-		upgrade: null,
-		upgradeInfo: null,
-		availabilityNux: null,
-		displayName: model.name ?? model.id,
-		description: "",
-		hidden: false,
-		supportedReasoningEfforts: model.reasoning
-			? getSupportedThinkingLevels(model)
-					.filter((level) => level !== "off")
-					.map((reasoningEffort) => ({ reasoningEffort, description: "" }))
-			: [],
-		defaultReasoningEffort: "medium",
-		inputModalities: ["text"],
-		supportsPersonality: false,
-		additionalSpeedTiers: [],
-		serviceTiers: [],
-		defaultServiceTier: null,
-		isDefault: DEFAULT_MODEL_IDS.get(model.provider) === model.id,
-	};
 }
 
 async function buildRemoteControlStatusReadResponse(agentDir: string) {
@@ -364,7 +327,19 @@ function parseModelListParams(params: unknown): ModelListParams {
 	if (!isRecord(params)) {
 		return {};
 	}
-	return { includeHidden: params.includeHidden === true };
+	const cursor = params.cursor;
+	if (cursor !== undefined && cursor !== null && typeof cursor !== "string") {
+		throw new RpcHandlerError({ code: -32600, message: "model/list received an invalid cursor" });
+	}
+	const limit = params.limit;
+	if (
+		limit !== undefined &&
+		limit !== null &&
+		(typeof limit !== "number" || !Number.isFinite(limit) || !Number.isInteger(limit))
+	) {
+		throw new RpcHandlerError({ code: -32600, message: "model/list received an invalid limit" });
+	}
+	return { cursor, limit, includeHidden: params.includeHidden === true };
 }
 
 function parseRemoteControlClientListParams(params: unknown): RemoteControlClientListParams {
