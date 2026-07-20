@@ -12,6 +12,7 @@ Extensions are TypeScript modules that extend pi's behavior. They can subscribe 
 - **User interaction** - Prompt users via `ctx.ui` (select, confirm, input, notify)
 - **Custom UI components** - Full TUI components with keyboard input via `ctx.ui.custom()` for complex interactions
 - **Custom commands** - Register commands like `/mycommand` via `pi.registerCommand()`
+- **Model fallback** - The bundled `/fallback` command manages global per-model retry chains. Use `/fallback <target> <fallback1> [fallback2 ...]` for scripts, or `/fallback` in the TUI to view and edit chains. `--no-model-fallback` and `SENPI_NO_FALLBACK=1` request a per-run escape hatch.
 - **Session persistence** - Store state that survives restarts via `pi.appendEntry()`
 - **Custom rendering** - Control how tool calls/results and messages appear in TUI
 

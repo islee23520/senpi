@@ -1948,6 +1948,7 @@ export class InteractiveMode {
 			},
 			getContextUsage: () => this.session.getContextUsage(),
 			getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
+			sessionSettings: extensionRunner.createContext().sessionSettings,
 			compact: (options) => {
 				void (async () => {
 					try {
