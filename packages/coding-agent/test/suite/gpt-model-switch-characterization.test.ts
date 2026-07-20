@@ -81,7 +81,7 @@ describe("GPT model-switch toolset characterization", () => {
 		expect(harness.session.getActiveToolNames()).toEqual(["read", "bash", "apply_patch"]);
 	});
 
-	it("s4 leaves a completions GPT on edit and write", async () => {
+	it("s4 exposes apply_patch as a JSON function tool for a completions GPT", async () => {
 		// Given
 		const harness = await createHarness({
 			api: "openai-completions",
@@ -95,7 +95,9 @@ describe("GPT model-switch toolset characterization", () => {
 		await harness.session.bindExtensions({});
 
 		// Then
-		// DEFECT: GPT models on completions expose no JSON apply_patch fallback.
-		expect(harness.session.getActiveToolNames()).toEqual(["read", "bash", "edit", "write"]);
+		expect(harness.session.getActiveToolNames()).toEqual(["read", "bash", "apply_patch"]);
+		// Chat Completions cannot carry freeform tools, so the registered variant
+		// must be the plain JSON function definition.
+		expect(harness.session.getToolDefinition("apply_patch")?.freeform).toBeUndefined();
 	});
 });

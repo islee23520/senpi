@@ -3,10 +3,11 @@ export {
 	APPLY_PATCH_FREEFORM_DESCRIPTION,
 	APPLY_PATCH_LARK_GRAMMAR,
 	APPLY_PATCH_PARAMS,
+	APPLY_PATCH_JSON_DESCRIPTION,
 	CODEX_APPLY_PATCH_DESCRIPTION,
 } from "./constants.ts";
 export { ApplyPatchError } from "./errors.ts";
-export { default, isOpenAIGptModel, registerApplyPatchExtension } from "./extension.ts";
+export { default, getApplyPatchWireMode, isOpenAIGptModel, registerApplyPatchExtension } from "./extension.ts";
 export { parsePatch } from "./parser.ts";
 export {
 	clearApplyPatchRenderState,
