@@ -361,6 +361,16 @@ export class AuthStorage implements CredentialStore {
 		if (this.runtimeOverrides.has(provider)) return { configured: true, source: "runtime", label: "--api-key" };
 		const envName = findEnvKeys(provider)?.[0];
 		if (envName && process.env[envName]) return { configured: true, source: "environment", label: envName };
+		const storageProvider = resolveOAuthStorageProvider(provider);
+		if (
+			this.credentialVault
+				?.metadataSnapshot()
+				.credentials.some(
+					(credential) => credential.pool.provider === storageProvider && credential.disabled === undefined,
+				)
+		) {
+			return { configured: true, source: "stored", label: "credential-pool" };
+		}
 		return { configured: false };
 	}
 
