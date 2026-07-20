@@ -110,6 +110,7 @@ describe("InteractiveMode startup input", () => {
 			options: {},
 			session: {
 				modelRuntime: { getError: vi.fn(() => undefined) },
+				fallbackValidationWarnings: [],
 				prompt,
 			},
 			checkForPackageUpdates: vi.fn(async (): Promise<string[]> => []),
