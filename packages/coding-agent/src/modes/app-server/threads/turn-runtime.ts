@@ -170,7 +170,9 @@ export function buildUserMessage(clientUserMessageId: string | null, content: re
 	};
 }
 
-export function wireItemToJson(item: WireItem): JsonValue {
+export type WireJsonObject = { readonly [key: string]: JsonValue | undefined };
+
+export function wireItemToJson(item: WireItem): WireJsonObject {
 	const jsonItem: { [key: string]: JsonValue | undefined } = {};
 	for (const [key, value] of Object.entries(item)) {
 		jsonItem[key] = unknownToJsonValue(value);

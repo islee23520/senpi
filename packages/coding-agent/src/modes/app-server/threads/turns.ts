@@ -225,7 +225,11 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		this.finalizeProjection(threadId);
 		const completedStatus = pending.interrupted && status === "completed" ? "interrupted" : status;
 		const completedAtMs = Date.now();
-		this.turnLog.completeTurn(threadId, pending.turnId, completedStatus);
+		this.turnLog.completeTurn(threadId, pending.turnId, {
+			status: completedStatus,
+			completedAt: new Date(completedAtMs).toISOString(),
+			error: message ?? null,
+		});
 		const turn = buildTurn(
 			pending.turnId,
 			completedStatus,

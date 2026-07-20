@@ -16,6 +16,37 @@ afterEach(async () => {
 });
 
 describe("app-server thread history retention", () => {
+	it("reads cold history without loading the thread", async () => {
+		// Given: a persisted thread with retained in-process turn history that has been unloaded.
+		const { connection, registry, root, threads, turnLog } = await createHarness();
+		const threadId = "54545454-5454-4545-8545-545454545454";
+		await writePersistedSession(root, threadId);
+		const entry = await threads.resumeThread(threadId);
+		recordTurn(turnLog, entry.id, 1, [
+			{ id: "user-cold", type: "userMessage", content: [] },
+			{ id: "agent-cold", type: "agentMessage", text: "answer" },
+		]);
+		expect(threads.unloadThread(entry.id)).toBe(true);
+		expect(threads.listLoaded()).toHaveLength(0);
+
+		// When: both history methods read the cold thread.
+		const turnsResponse = await registry.dispatch(connection, {
+			id: 14,
+			method: "thread/turns/list",
+			params: { threadId, itemsView: "full" },
+		});
+		const itemsResponse = await registry.dispatch(connection, {
+			id: 15,
+			method: "thread/items/list",
+			params: { threadId },
+		});
+
+		// Then: history is returned while loaded-thread state remains untouched.
+		expect(dataArray(responseResult(turnsResponse))).toHaveLength(1);
+		expect(itemIds(itemsResponse)).toEqual(["user-cold", "agent-cold"]);
+		expect(threads.listLoaded()).toHaveLength(0);
+	});
+
 	it("retains full history across same-process unload and resume, with scoped errors and gates", async () => {
 		const { connection, registry, root, threads, turnLog } = await createHarness();
 		const threadId = "55555555-5555-4555-8555-555555555555";

@@ -251,7 +251,12 @@ class ThreadLifecycleHandlers {
 
 		void entry.session.compact().then(
 			() => this.completeCompaction(threadId, turnId, item),
-			() => this.turnLog.completeTurn(threadId, turnId, "failed"),
+			(error: unknown) =>
+				this.turnLog.completeTurn(threadId, turnId, {
+					status: "failed",
+					completedAt: new Date().toISOString(),
+					error: error instanceof Error ? error.message : String(error),
+				}),
 		);
 		return {};
 	}
@@ -261,11 +266,15 @@ class ThreadLifecycleHandlers {
 		turnId: string,
 		item: { readonly type: "contextCompaction"; readonly id: string },
 	): void {
+		const completedAtMs = Date.now();
 		this.turnLog.appendItem(threadId, turnId, item);
-		this.turnLog.completeTurn(threadId, turnId, "completed");
+		this.turnLog.completeTurn(threadId, turnId, {
+			status: "completed",
+			completedAt: new Date(completedAtMs).toISOString(),
+		});
 		this.notifications.toThread(threadId, {
 			method: "item/completed",
-			params: { threadId, turnId, item, completedAtMs: Date.now() },
+			params: { threadId, turnId, item, completedAtMs },
 		});
 	}
 

@@ -3,6 +3,7 @@ import type { Thread, ThreadItem, ThreadStatus, Turn, TurnItemsView } from "../p
 import { ThreadMetadataState } from "./metadata-state.ts";
 import type { ThreadEntry, WireThread } from "./registry.ts";
 import type { LoggedTurn, TurnLog, WireItem } from "./turn-log.ts";
+import { wireItemToJson } from "./turn-runtime.ts";
 
 const ACTIVE_STATUS: ThreadStatus = { type: "active", activeFlags: [] };
 const IDLE_STATUS: ThreadStatus = { type: "idle" };
@@ -13,6 +14,12 @@ export interface BuildWireThreadOptions {
 	readonly forkedFromId?: string | null;
 	readonly recencyAt?: string | null;
 }
+
+export type ThreadHistorySource = {
+	readonly id: string;
+	readonly createdAt: string;
+	readonly userMessages: readonly { readonly entryId: string; readonly text: string }[];
+};
 
 export async function buildWireThread(
 	entry: ThreadEntry | WireThread,
@@ -70,21 +77,30 @@ export function loggedTurnToWireTurn(turn: LoggedTurn, itemsView: TurnItemsView 
 		items: itemsForView(items, itemsView),
 		itemsView,
 		status: turn.status === "running" ? "inProgress" : turn.status,
-		error: null,
+		error: turn.error === null ? null : { message: turn.error, codexErrorInfo: "other", additionalDetails: null },
 		startedAt: isoSeconds(turn.startedAt),
-		completedAt: null,
-		durationMs: null,
+		completedAt: turn.completedAt === null ? null : isoSeconds(turn.completedAt),
+		durationMs: turn.durationMs,
 	};
 }
 
-export function turnsForEntry(entry: ThreadEntry | WireThread, turnLog: TurnLog): LoggedTurn[] {
+export function turnsForEntry(entry: ThreadEntry | WireThread | ThreadHistorySource, turnLog: TurnLog): LoggedTurn[] {
 	const loggedTurns = turnLog.readTurns(entry.id);
-	if (loggedTurns.length > 0 || !("session" in entry)) {
+	if (loggedTurns.length > 0) {
 		return loggedTurns;
 	}
-	return entry.session.getUserMessagesForForking().map((message, index) => ({
+	const userMessages =
+		"session" in entry
+			? entry.session.getUserMessagesForForking()
+			: "userMessages" in entry
+				? entry.userMessages
+				: [];
+	return userMessages.map((message, index) => ({
 		turnId: `turn-${index + 1}`,
 		startedAt: entry.createdAt,
+		completedAt: null,
+		durationMs: null,
+		error: null,
 		status: "completed",
 		items: [{ id: message.entryId, type: "userMessage", content: [] }],
 	}));
@@ -97,21 +113,39 @@ function threadTurns(entry: ThreadEntry | WireThread, turnLog: TurnLog): Turn[] 
 export function wireItemToThreadItem(item: WireItem): ThreadItem {
 	const type = item.type;
 	const id = typeof item.id === "string" && item.id.length > 0 ? item.id : "item";
+	const jsonItem = wireItemToJson(item);
 	if (type === "userMessage") {
 		return {
+			...jsonItem,
 			type: "userMessage",
 			id,
 			clientId: typeof item.clientId === "string" ? item.clientId : null,
-			content: [],
+			content: Array.isArray(jsonItem.content) ? jsonItem.content : [],
 		};
 	}
 	if (type === "reasoning") {
-		return { type: "reasoning", id, summary: [], content: [stringField(item, "text")] };
+		return {
+			...jsonItem,
+			type: "reasoning",
+			id,
+			summary: Array.isArray(jsonItem.summary) ? jsonItem.summary : [],
+			content: Array.isArray(jsonItem.content) ? jsonItem.content : [stringField(item, "text")],
+		};
 	}
 	if (type === "plan") {
-		return { type: "plan", id, text: stringField(item, "text") };
+		return { ...jsonItem, type: "plan", id, text: stringField(item, "text") };
 	}
-	return { type: "agentMessage", id, text: stringField(item, "text"), phase: null, memoryCitation: null };
+	if (type === "agentMessage") {
+		return {
+			...jsonItem,
+			type: "agentMessage",
+			id,
+			text: stringField(item, "text"),
+			phase: jsonItem.phase ?? null,
+			memoryCitation: jsonItem.memoryCitation ?? null,
+		};
+	}
+	return { ...jsonItem, type: typeof type === "string" ? type : "agentMessage", id };
 }
 
 function itemsForView(items: ThreadItem[], itemsView: TurnItemsView): ThreadItem[] {

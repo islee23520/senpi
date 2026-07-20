@@ -9,6 +9,7 @@ import {
 	objectValue,
 	responseResult,
 	stringAt,
+	writePersistedSession,
 } from "../../suite/app-server-thread-handlers-harness.ts";
 
 type DispatchResponse = Awaited<ReturnType<MethodRegistry["dispatch"]>>;
@@ -87,6 +88,12 @@ async function main(): Promise<void> {
 			}),
 		);
 		assertEqual(itemIds(reverseItemPages), ["item-5", "item-4", "item-3", "item-2", "item-1"], "reverse item order");
+		const newestTurn = objectValue(dataArray(responseResult(firstForward))[0]);
+		const lifecyclePreserved =
+			typeof newestTurn.completedAt === "number" && newestTurn.durationMs === 500 && newestTurn.error === null
+				? 1
+				: 0;
+		const compactionVariantPreserved = itemTypes([firstReverseItems])[0] === "contextCompaction" ? 1 : 0;
 
 		const invalidCursor = await registry.dispatch(connection, {
 			id: 10,
@@ -111,17 +118,42 @@ async function main(): Promise<void> {
 			? 1
 			: 0;
 
+		const coldThreadId = "56565656-5656-4565-8565-565656565656";
+		await writePersistedSession(root, coldThreadId);
+		await threads.resumeThread(coldThreadId);
+		recordTurn(turnLog, coldThreadId, 6);
+		threads.unloadThread(coldThreadId);
+		const loadedBefore = threads.listLoaded().map((thread) => thread.id);
+		const coldHistory = await registry.dispatch(connection, {
+			id: 30,
+			method: "thread/turns/list",
+			params: { threadId: coldThreadId },
+		});
+		const loadedAfter = threads.listLoaded().map((thread) => thread.id);
+		const coldReadNonMutating =
+			turnIds([coldHistory])[0] === "turn-6" &&
+			loadedBefore.join("\u0000") === loadedAfter.join("\u0000") &&
+			!loadedAfter.includes(coldThreadId)
+				? 1
+				: 0;
+
 		console.log(`PAGES_FWD=${forwardPages.length}`);
 		console.log(`PAGES_REV=${reversePages.length}`);
 		console.log(`ANCHOR_REPLAYED=${anchorReplayed}`);
 		console.log(`INVALID_CURSOR_ERROR=${invalidCursorError}`);
 		console.log(`INVALID_LIMITS_REJECTED=${invalidLimitsRejected}`);
+		console.log(`LIFECYCLE_PRESERVED=${lifecyclePreserved}`);
+		console.log(`COMPACTION_VARIANT_PRESERVED=${compactionVariantPreserved}`);
+		console.log(`COLD_READ_NON_MUTATING=${coldReadNonMutating}`);
 		if (
 			forwardPages.length !== 3 ||
 			reversePages.length !== 3 ||
 			anchorReplayed !== 1 ||
 			invalidCursorError !== 1 ||
-			invalidLimitsRejected !== 1
+			invalidLimitsRejected !== 1 ||
+			lifecyclePreserved !== 1 ||
+			compactionVariantPreserved !== 1 ||
+			coldReadNonMutating !== 1
 		) {
 			throw new Error("task10 history pagination assertions failed");
 		}
@@ -139,10 +171,16 @@ function recordTurn(
 	turnLog.recordTurn(threadId, {
 		turnId,
 		startedAt: `2026-07-02T00:00:0${index}.000Z`,
-		status: "completed",
 	});
-	const item: WireItem = { id: `item-${index}`, type: "userMessage", content: [] };
+	const item: WireItem =
+		index === 5
+			? { id: `item-${index}`, type: "contextCompaction" }
+			: { id: `item-${index}`, type: "userMessage", content: [] };
 	turnLog.appendItem(threadId, turnId, item);
+	turnLog.completeTurn(threadId, turnId, {
+		status: "completed",
+		completedAt: `2026-07-02T00:00:0${index}.500Z`,
+	});
 }
 
 async function collectPages(
@@ -179,6 +217,12 @@ function turnIds(pages: readonly DispatchResponse[]): string[] {
 function itemIds(pages: readonly DispatchResponse[]): string[] {
 	return pages.flatMap((page) =>
 		dataArray(responseResult(page)).map((item) => stringAt(objectValue(item).item, "id")),
+	);
+}
+
+function itemTypes(pages: readonly DispatchResponse[]): string[] {
+	return pages.flatMap((page) =>
+		dataArray(responseResult(page)).map((item) => stringAt(objectValue(item).item, "type")),
 	);
 }
 
