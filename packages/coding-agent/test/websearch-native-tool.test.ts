@@ -1,5 +1,6 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createInMemoryExtensionSessionSettings } from "./helpers/extension-session-settings.ts";
 
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { DEFAULT_COMPACTION_SETTINGS } from "../src/core/compaction/index.ts";
@@ -53,6 +54,7 @@ function toolContext(model: Model<Api> | undefined, modelRegistry: ModelRegistry
 		shutdown: vi.fn(),
 		getContextUsage: () => undefined,
 		getCompactionSettings: () => DEFAULT_COMPACTION_SETTINGS,
+		sessionSettings: createInMemoryExtensionSessionSettings(),
 		compact: vi.fn(),
 		getMessageRevision: () => 0,
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),

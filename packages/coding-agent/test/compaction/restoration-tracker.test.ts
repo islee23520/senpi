@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { type CompactionSettings, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
 import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import {
@@ -90,6 +91,7 @@ function createGateExtensionContext(settings: CompactionSettings): ExtensionCont
 		shutdown: vi.fn(),
 		getContextUsage: () => undefined,
 		getCompactionSettings: () => settings,
+		sessionSettings: createInMemoryExtensionSessionSettings(),
 		compact: vi.fn(),
 		getMessageRevision: () => 1,
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),

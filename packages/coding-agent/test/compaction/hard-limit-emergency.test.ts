@@ -7,6 +7,7 @@ import {
 	type UserMessage,
 } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { estimateContextTokens } from "../../src/core/compaction/index.ts";
 import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import type {
@@ -107,6 +108,7 @@ function createContext(contextWindow: number, maxTokens = contextWindow, compact
 		shutdown: vi.fn(),
 		getContextUsage: () => ({ tokens: contextWindow + 1, contextWindow, percent: 1.01 }),
 		getCompactionSettings: () => ({ enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 }),
+		sessionSettings: createInMemoryExtensionSessionSettings(),
 		compact,
 		getMessageRevision: () => 0,
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
@@ -156,6 +158,7 @@ function createCompactionContext(): ExtensionContext {
 		shutdown: vi.fn(),
 		getContextUsage: () => ({ tokens: 9_950, contextWindow: 10_000, percent: 99.5 }),
 		getCompactionSettings: () => ({ enabled: true, reserveTokens: 100, keepRecentTokens: 2_000 }),
+		sessionSettings: createInMemoryExtensionSessionSettings(),
 		compact: vi.fn(),
 		getMessageRevision: () => 1,
 		applyCompaction,

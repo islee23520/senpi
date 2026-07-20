@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createInMemoryExtensionSessionSettings } from "../helpers/extension-session-settings.ts";
 import { type CompactionPreparation, DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.ts";
 import compactionExtension from "../../src/core/extensions/builtin/compaction/index.ts";
 import type {
@@ -81,6 +82,7 @@ function createExtensionContext(entries: SessionEntry[]): ExtensionContext {
 		shutdown: vi.fn(),
 		getContextUsage: () => undefined,
 		getCompactionSettings: () => DEFAULT_COMPACTION_SETTINGS,
+		sessionSettings: createInMemoryExtensionSessionSettings(),
 		compact: vi.fn(),
 		getMessageRevision: () => 1,
 		applyCompaction: async () => ({ applied: false, reason: "rejected" }),
