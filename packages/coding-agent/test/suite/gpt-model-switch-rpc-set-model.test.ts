@@ -8,7 +8,7 @@ import {
 	type RpcConnectionHandler,
 	type RpcConnectionSink,
 } from "../../src/modes/rpc/connection-handler.ts";
-import { createHarness, type Harness } from "./harness.ts";
+import { createHarness } from "./harness.ts";
 
 const GPT_PROVIDER = "gpt-proxy";
 

@@ -130,7 +130,7 @@ async function establishContinuation(
 	sessionId: string,
 	model: Model<"openai-codex-responses">,
 	tools: Tool[],
-	sentBodies: CodexRequestBody[],
+	_sentBodies: CodexRequestBody[],
 ): Promise<Context["messages"]> {
 	const firstContext: Context = {
 		systemPrompt: "You are a helpful assistant.",
@@ -177,7 +177,12 @@ describe("codex continuation state across model switches", () => {
 		const sentBodies: CodexRequestBody[] = [];
 		stubCodexWebSocket(sentBodies);
 		const sessionId = "switch-tools-session";
-		const history = await establishContinuation(sessionId, codexModel("gpt-5.1-codex"), [namedTool("edit")], sentBodies);
+		const history = await establishContinuation(
+			sessionId,
+			codexModel("gpt-5.1-codex"),
+			[namedTool("edit")],
+			sentBodies,
+		);
 
 		// When: the next request carries the post-switch tool set (apply_patch swapped in).
 		await sendFollowUp(sessionId, codexModel("gpt-5.1-codex"), [namedTool("apply_patch")], history);
@@ -197,7 +202,12 @@ describe("codex continuation state across model switches", () => {
 		const sentBodies: CodexRequestBody[] = [];
 		stubCodexWebSocket(sentBodies);
 		const sessionId = "switch-model-session";
-		const history = await establishContinuation(sessionId, codexModel("gpt-5.1-codex"), [namedTool("edit")], sentBodies);
+		const history = await establishContinuation(
+			sessionId,
+			codexModel("gpt-5.1-codex"),
+			[namedTool("edit")],
+			sentBodies,
+		);
 
 		// When: the next request targets a different model id on the same endpoint.
 		await sendFollowUp(sessionId, codexModel("gpt-5.2-codex"), [namedTool("edit")], history);
@@ -222,7 +232,12 @@ describe("codex continuation state across model switches", () => {
 		const sessionId = harness.session.sessionId;
 		const sentBodies: CodexRequestBody[] = [];
 		stubCodexWebSocket(sentBodies);
-		const history = await establishContinuation(sessionId, codexModel("gpt-5.1-codex"), [namedTool("edit")], sentBodies);
+		const history = await establishContinuation(
+			sessionId,
+			codexModel("gpt-5.1-codex"),
+			[namedTool("edit")],
+			sentBodies,
+		);
 		await sendFollowUp(sessionId, codexModel("gpt-5.1-codex"), [namedTool("edit")], history);
 		expect(getOpenAICodexWebSocketDebugStats(sessionId)).toMatchObject({
 			requests: 2,

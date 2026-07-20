@@ -4,8 +4,6 @@ vi.mock("@aws-sdk/client-bedrock-runtime", () => {
 	class BedrockRuntimeServiceException extends Error {}
 
 	class BedrockRuntimeClient {
-		constructor(_config: Record<string, unknown>) {}
-
 		send(): Promise<never> {
 			return Promise.reject(new Error("mock send"));
 		}
