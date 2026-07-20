@@ -1,6 +1,11 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { createApplyPatchTool } from "./tool.ts";
-import type { ApplyPatchExtensionAPI, ApplyPatchToolVariant, ApplyPatchToolsetState, ApplyPatchWireMode } from "./types.ts";
+import type {
+	ApplyPatchExtensionAPI,
+	ApplyPatchToolsetState,
+	ApplyPatchToolVariant,
+	ApplyPatchWireMode,
+} from "./types.ts";
 
 const APPLY_PATCH_FREEFORM_APIS = new Set<Api>([
 	"openai-responses",
@@ -12,7 +17,7 @@ const EDIT_TOOL_NAMES = new Set(["write", "edit"]);
 const APPLY_PATCH_NAME = "apply_patch";
 
 function isGptId(model: Pick<Model<string>, "api" | "id"> | undefined): model is Pick<Model<string>, "api" | "id"> {
-	return model !== undefined && model.id.startsWith("gpt-");
+	return model?.id.startsWith("gpt-") ?? false;
 }
 
 export function getApplyPatchWireMode(model: Pick<Model<string>, "api" | "id"> | undefined): ApplyPatchWireMode {
@@ -36,7 +41,9 @@ function withoutApplyPatch(toolNames: string[]): string[] {
 
 function replaceEditToolsWithApplyPatch(toolNames: string[]): string[] {
 	const hadApplyPatch = toolNames.includes(APPLY_PATCH_NAME);
-	const insertIndex = toolNames.findIndex((toolName) => EDIT_TOOL_NAMES.has(toolName) || toolName === APPLY_PATCH_NAME);
+	const insertIndex = toolNames.findIndex(
+		(toolName) => EDIT_TOOL_NAMES.has(toolName) || toolName === APPLY_PATCH_NAME,
+	);
 	const filteredToolNames = withoutApplyPatch(toolNames).filter((toolName) => !EDIT_TOOL_NAMES.has(toolName));
 	if (!hasEditTools(toolNames) && !hadApplyPatch) return filteredToolNames;
 	const at = insertIndex === -1 ? filteredToolNames.length : Math.min(insertIndex, filteredToolNames.length);
@@ -46,7 +53,7 @@ function replaceEditToolsWithApplyPatch(toolNames: string[]): string[] {
 function syncToolset(
 	pi: ApplyPatchExtensionAPI,
 	model: Model<string> | undefined,
-	state: ApplyPatchToolsetState,
+	state: ApplyPatchToolsetState & { activeVariant?: ApplyPatchToolVariant },
 	variants: Readonly<Record<ApplyPatchToolVariant, ReturnType<typeof createApplyPatchTool>>>,
 ): void {
 	const mode = getApplyPatchWireMode(model);

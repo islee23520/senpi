@@ -824,8 +824,11 @@ describe("gpt-apply-patch builtin extension", () => {
 -old
 +new
 *** End Patch`;
-		const jsonArgs = createApplyPatchTool("json").prepareArguments?.({ input: patch });
-		const freeformArgs = createApplyPatchTool("freeform").prepareArguments?.(patch);
+		const jsonTool = createApplyPatchTool("json");
+		const freeformTool = createApplyPatchTool("freeform");
+		if (!jsonTool.prepareArguments || !freeformTool.prepareArguments) throw new Error("prepareArguments missing");
+		const jsonArgs = jsonTool.prepareArguments({ input: patch });
+		const freeformArgs = freeformTool.prepareArguments(patch);
 		const expected = [{ permission: "edit", patterns: ["src/app.ts"], always: ["src/app.ts"] }];
 
 		expect(parserRegistry.parse("apply_patch", jsonArgs, "/tmp")).toEqual(expected);
