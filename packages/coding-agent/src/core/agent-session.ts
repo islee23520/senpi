@@ -49,6 +49,7 @@ import {
 	resetApiProviders,
 	streamSimple,
 } from "@earendil-works/pi-ai/compat";
+import { getAgentDir } from "../config.ts";
 import { getThemeByName, theme } from "../modes/interactive/theme/theme.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
@@ -114,6 +115,10 @@ import { getModelNarrowingPatterns, resolveModelScope } from "./model-resolver.t
 import type { ModelRuntime } from "./model-runtime.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
+import { RetryFallbackController } from "./retry-fallback/controller.ts";
+import { SelectorCooldowns } from "./retry-fallback/cooldown.ts";
+import { createFallbackLogger } from "./retry-fallback/log.ts";
+import { validateFallbackChains } from "./retry-fallback/validate.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
 import {
 	buildSessionContext,
@@ -191,6 +196,16 @@ export type AgentSessionEvent =
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| {
+			type: "retry_fallback_applied";
+			from: string;
+			to: string;
+			chainKey: string;
+			reason: "transient" | "refusal" | "hard-error";
+	  }
+	| { type: "retry_fallback_succeeded"; model: string; chainKey: string }
+	| { type: "retry_fallback_reverted"; from: string; to: string }
+	| { type: "retry_fallback_exhausted"; chainKey: string; lastError: string }
 	// Auth login flow (task 13) is additive with event-only completion. The
 	// login_start command responds immediately, then the OAuth URL and the
 	// terminal result arrive here, because an interactive browser round-trip
@@ -216,6 +231,8 @@ export interface AgentSessionConfig {
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
 	cwd: string;
+	/** Directory containing runtime logs and global agent configuration. */
+	agentDir?: string;
 	/** Global model narrowing for selectors and startup model choice (from --models / enabledModels) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
 	/** Favorite models to cycle through with Ctrl+P */
@@ -457,6 +474,7 @@ export class AgentSession {
 
 	private _modelRuntime: ModelRuntime;
 	private _modelRegistry: ModelRegistry;
+	private readonly _retryFallback: RetryFallbackController;
 
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
@@ -474,6 +492,12 @@ export class AgentSession {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
 		this.settingsManager = config.settingsManager;
+		const noModelFallback =
+			config.resourceLoader.getExtensions().runtime.flagValues.get("no-model-fallback") === true ||
+			process.env.SENPI_NO_FALLBACK === "1";
+		if (noModelFallback) {
+			this.settingsManager.applyOverrides({ retry: { modelFallback: false } });
+		}
 		this._scopedModels = config.scopedModels ?? [];
 		this._favoriteModels = config.favoriteModels ?? [];
 		this._resourceLoader = config.resourceLoader;
@@ -485,6 +509,32 @@ export class AgentSession {
 		}
 		this._modelRuntime = modelRuntime;
 		this._modelRegistry = config.modelRegistry ?? new ModelRegistry(modelRuntime);
+		const fallbackLogger = createFallbackLogger(config.agentDir ?? getAgentDir());
+		for (const warning of validateFallbackChains(
+			this.settingsManager.getRetryFallbackSettings().chains,
+			this._modelRegistry,
+		)) {
+			fallbackLogger.warn("validation_warning", { warning });
+		}
+		this._retryFallback = new RetryFallbackController({
+			getSettings: () => this.settingsManager.getRetryFallbackSettings(),
+			registry: this._modelRegistry,
+			cooldowns: new SelectorCooldowns(() => Date.now()),
+			logger: fallbackLogger,
+			switchModel: async (model, thinking) => {
+				await this._switchActiveModel(model, {
+					persistDefault: false,
+					appendSessionEntry: true,
+					entryReason: "fallback",
+					emitModelSelect: false,
+					invalidateCompaction: false,
+					ephemeralThinkingLevel: thinking,
+				});
+			},
+			emit: (event) => this._emit(event),
+			getCurrentSelector: () => (this.model ? { model: this.model, thinkingLevel: this.thinkingLevel } : undefined),
+			isAuthAvailable: (provider) => this._modelRuntime.hasConfiguredAuth(provider),
+		});
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;
@@ -867,7 +917,7 @@ export class AgentSession {
 		}
 
 		if (this._retryAttempt + 1 > settings.maxRetries) {
-			return false;
+			return this._retryFallback.canTryFallback();
 		}
 
 		const errorMessage = lastAssistant.errorMessage || "Unknown error";
@@ -884,6 +934,7 @@ export class AgentSession {
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
 			this._overflowRecoveryAttempted = false;
+			this._retryFallback.resetTurn();
 			const messageText = this._getUserMessageText(event.message);
 			if (messageText) {
 				// Check steering queue first
@@ -945,6 +996,14 @@ export class AgentSession {
 				// Reset retry counter immediately on successful assistant response
 				// This prevents accumulation across multiple LLM calls within a turn
 				if (assistantMsg.stopReason !== "error" && this._retryAttempt > 0) {
+					const fallback = this._retryFallback.activeState;
+					if (fallback) {
+						this._emit({
+							type: "retry_fallback_succeeded",
+							model: this.model ? `${this.model.provider}/${this.model.id}` : "",
+							chainKey: fallback.chainKey,
+						});
+					}
 					this._emit({
 						type: "auto_retry_end",
 						success: true,
@@ -2169,7 +2228,7 @@ export class AgentSession {
 	}
 
 	private async _switchActiveModel(
-		model: Model<any>,
+		model: Model<Api>,
 		opts: {
 			persistDefault: boolean;
 			appendSessionEntry: boolean;
@@ -3237,6 +3296,36 @@ export class AgentSession {
 				},
 				getContextUsage: () => this.getContextUsage(),
 				getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
+				sessionSettings: {
+					getRetryFallbackSettings: () => this.settingsManager.getRetryFallbackSettings(),
+					setFallbackChain: async (key, entries) => {
+						this.settingsManager.setFallbackChain(key, [...entries]);
+						await this.settingsManager.flush();
+					},
+					removeFallbackChain: async (key) => {
+						this.settingsManager.removeFallbackChain(key);
+						await this.settingsManager.flush();
+					},
+					setModelFallbackEnabled: async (enabled) => {
+						this.settingsManager.setModelFallbackEnabled(enabled);
+						await this.settingsManager.flush();
+					},
+					setFallbackRevertPolicy: async (policy) => {
+						this.settingsManager.setFallbackRevertPolicy(policy);
+						await this.settingsManager.flush();
+					},
+					reload: () => this.settingsManager.reload(),
+					getFallbackStatus: () => {
+						const active = this._retryFallback.activeState;
+						if (!active) return undefined;
+						return {
+							active: true,
+							currentModel: this.model ? `${this.model.provider}/${this.model.id}` : undefined,
+							originalSelector: active.originalSelector,
+							pinned: active.pinned,
+						};
+					},
+				},
 				compact: (options) => {
 					void (async () => {
 						this._disconnectFromAgent();
@@ -3571,21 +3660,33 @@ export class AgentSession {
 		}
 
 		this._retryAttempt++;
-
+		const errorMessage = message.errorMessage || "Unknown error";
+		let switchedFallback = false;
 		if (this._retryAttempt > settings.maxRetries) {
-			// Max retries exceeded, emit final failure and reset
-			this._emit({
-				type: "auto_retry_end",
-				success: false,
-				attempt: this._retryAttempt - 1,
-				finalError: message.errorMessage,
+			switchedFallback = await this._retryFallback.tryFallback("transient", {
+				errorMessage,
+				retryAfterMs: this._getProviderRetryDelayMs(errorMessage),
 			});
-			this._retryAttempt = 0;
-			this._resolveRetry(); // Resolve so waitForRetry() completes
-			return false;
+			if (switchedFallback) {
+				// The new model receives a fresh retry budget; the failed model does not.
+				this._retryAttempt = 1;
+			} else {
+				const exhaustedChainKey = this._retryFallback.exhaustedChainKey;
+				if (exhaustedChainKey) {
+					this._emit({ type: "retry_fallback_exhausted", chainKey: exhaustedChainKey, lastError: errorMessage });
+				}
+				this._emit({
+					type: "auto_retry_end",
+					success: false,
+					attempt: this._retryAttempt - 1,
+					finalError: message.errorMessage,
+				});
+				this._retryAttempt = 0;
+				this._resolveRetry();
+				return false;
+			}
 		}
 
-		const errorMessage = message.errorMessage || "Unknown error";
 		const providerDelayMs = this._getProviderRetryDelayMs(errorMessage);
 		const maxRetryDelayMs = this.settingsManager.getProviderRetrySettings().maxRetryDelayMs;
 		if (providerDelayMs !== undefined && providerDelayMs > maxRetryDelayMs) {
@@ -3600,7 +3701,13 @@ export class AgentSession {
 			return false;
 		}
 
-		const delayMs = providerDelayMs ?? settings.baseDelayMs * 2 ** (this._retryAttempt - 1);
+		if (!switchedFallback) {
+			switchedFallback = await this._retryFallback.tryFallback("transient", {
+				errorMessage,
+				retryAfterMs: providerDelayMs,
+			});
+		}
+		const delayMs = switchedFallback ? 0 : (providerDelayMs ?? settings.baseDelayMs * 2 ** (this._retryAttempt - 1));
 		// Prepare before auto_retry_start so an immediate Esc can cancel the retry sleep.
 		this._retryAbortController = new AbortController();
 
