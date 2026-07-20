@@ -1,5 +1,23 @@
 # changes
 
+## abbreviated footer token notation (2026-07-20)
+
+### What changed
+
+- `components/footer.ts`: `formatTokens` now renders oh-my-pi-style K/M/B abbreviations (e.g. `546K`, `1M`, `1.5M`)
+  instead of comma-grouped `toLocaleString` output. The footer context-usage display now reads
+  `546K/1M (54.6%)` instead of `545,661/1,000,000 (54.6%)`; the same notation applies to the ↑/↓/cache counters and
+  the `interactive-mode.ts` token readouts that reuse `formatTokens`.
+
+### Why
+
+- Comma-grouped raw counts are wide and hard to scan in the status line; abbreviated notation matches oh-my-pi's
+  status-line style and keeps the footer compact at narrow widths.
+
+### Why extension system couldn't handle this
+
+- Footer token formatting is a core display primitive, not an extension-registered status segment.
+
 ## paced streaming tool argument previews (2026-07-20)
 
 ### What changed
