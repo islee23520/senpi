@@ -59,14 +59,27 @@ export class StdioClient {
 		if (this.child.exitCode !== null || this.child.signalCode !== null) return;
 		await new Promise<void>((resolveClose) => {
 			const timer = setTimeout(() => {
-				this.child.kill("SIGKILL");
-				resolveClose();
+				this.killProcessGroup();
 			}, 5_000);
 			this.child.once("close", () => {
 				clearTimeout(timer);
 				resolveClose();
 			});
 		});
+	}
+
+	private killProcessGroup(): void {
+		const pid = this.child.pid;
+		if (pid !== undefined && process.platform !== "win32") {
+			try {
+				process.kill(-pid, "SIGKILL");
+				return;
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException | undefined)?.code;
+				if (code !== "ESRCH") throw error;
+			}
+		}
+		this.child.kill("SIGKILL");
 	}
 
 	private waitForId(id: string): Promise<WireRecord> {
@@ -128,7 +141,7 @@ export function spawnServer(
 			join(repoRoot, "packages", "coding-agent", "src", "cli.ts"),
 			"app-server",
 		],
-		{ cwd: root, env, stdio: ["pipe", "pipe", "pipe"] },
+		{ cwd: root, env, stdio: ["pipe", "pipe", "pipe"], detached: process.platform !== "win32" },
 	);
 }
 
