@@ -324,7 +324,13 @@ export class McpService {
 					raceMcpStartupConnect({
 						entry,
 						pi,
-						registerDirectTools: (targetPi) => this.#registerDirectTools(targetPi),
+						registerDirectTools: async (targetPi) => {
+							await this.#registerDirectTools(targetPi);
+							// A raced attach ran its history replay before this catalog
+							// existed; replay now so restored tools still land on the
+							// first turn's payload (idempotent: already-active names skip).
+							if (this.#sessionContext !== null) this.#rehydrateFromSessionHistory(this.#sessionContext);
+						},
 						serverConfig: server.config,
 						shouldRefreshTools: () => !this.#disposed && this.#toolRefreshGeneration === toolRefreshGeneration,
 						deadlineMs: resolveMcpStartupTimeoutMs(server.config.startupTimeoutMs),
