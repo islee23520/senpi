@@ -873,6 +873,12 @@ export class SessionManager {
 	private labelTimestampsById: Map<string, string> = new Map();
 	private leafId: string | null = null;
 	private residentStore = new ResidentStringStore();
+	// Monotonic counter bumped by every mutator; memoized materialized views are
+	// keyed on it so read hot paths (footer, RPC) never re-materialize unchanged sessions.
+	private mutationCount = 0;
+	private entriesCache: { mutation: number; entries: SessionEntry[] } | null = null;
+	private branchCache: { leafId: string | null; mutation: number; entries: SessionEntry[] } | null = null;
+	private sessionNameCache: string | undefined = undefined;
 
 	private constructor(
 		cwd: string,
@@ -925,6 +931,7 @@ export class SessionManager {
 
 			this.fileEntries = this.fileEntries.map((entry) => this.residentStore.externalize(entry));
 			this._buildIndex();
+			this.mutationCount++;
 			this.flushed = true;
 		} else {
 			const explicitPath = this.sessionFile;
@@ -953,6 +960,8 @@ export class SessionManager {
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
 		this.leafId = null;
+		this.sessionNameCache = undefined;
+		this.mutationCount++;
 		this.flushed = false;
 
 		if (this.persist) {
@@ -967,10 +976,15 @@ export class SessionManager {
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
 		this.leafId = null;
+		this.sessionNameCache = undefined;
 		for (const entry of this.fileEntries) {
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
 			this.leafId = entry.id;
+			if (entry.type === "session_info") {
+				// Empty names explicitly clear the session title.
+				this.sessionNameCache = entry.name?.trim() || undefined;
+			}
 			if (entry.type === "label") {
 				if (entry.label) {
 					this.labelsById.set(entry.targetId, entry.label);
@@ -1058,6 +1072,7 @@ export class SessionManager {
 		this.fileEntries.push(residentEntry);
 		this.byId.set(residentEntry.id, residentEntry);
 		this.leafId = residentEntry.id;
+		this.mutationCount++;
 		this._persist(residentEntry);
 	}
 
@@ -1162,22 +1177,17 @@ export class SessionManager {
 			timestamp: new Date().toISOString(),
 			name: sanitizedName,
 		};
+		this.sessionNameCache = sanitizedName || undefined;
 		this._appendEntry(entry);
 		return entry.id;
 	}
 
-	/** Get the current session name from the latest session_info entry, if any. */
+	/**
+	 * Get the current session name from the latest session_info entry, if any.
+	 * O(1): the value is maintained incrementally on appendSessionInfo() and index rebuilds.
+	 */
 	getSessionName(): string | undefined {
-		// Walk entries in reverse to find the latest session_info entry.
-		// Empty names explicitly clear the session title.
-		const entries = this.getEntries();
-		for (let i = entries.length - 1; i >= 0; i--) {
-			const entry = entries[i];
-			if (entry.type === "session_info") {
-				return entry.name?.trim() || undefined;
-			}
-		}
-		return undefined;
+		return this.sessionNameCache;
 	}
 
 	/**
@@ -1280,12 +1290,25 @@ export class SessionManager {
 	 * Use buildSessionContext() to get the resolved messages for the LLM.
 	 */
 	getBranch(fromId?: string): SessionEntry[] {
+		// No-arg reads (the common hot path) are memoized on (leafId, mutationCount);
+		// explicit fromId lookups bypass the cache.
+		if (
+			fromId === undefined &&
+			this.branchCache !== null &&
+			this.branchCache.leafId === this.leafId &&
+			this.branchCache.mutation === this.mutationCount
+		) {
+			return this.branchCache.entries;
+		}
 		const path: SessionEntry[] = [];
 		const startId = fromId ?? this.leafId;
 		let current = startId ? this.byId.get(startId) : undefined;
 		while (current) {
 			path.unshift(this.residentStore.materialize(current));
 			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+		}
+		if (fromId === undefined) {
+			this.branchCache = { leafId: this.leafId, mutation: this.mutationCount, entries: path };
 		}
 		return path;
 	}
@@ -1346,14 +1369,24 @@ export class SessionManager {
 	}
 
 	/**
-	 * Get all session entries (excludes header). Returns a shallow copy.
+	 * Get all session entries (excludes header).
 	 * The session is append-only: use appendXXX() to add entries, branch() to
 	 * change the leaf pointer. Entries cannot be modified or deleted.
+	 *
+	 * The result is memoized behind the session mutation counter: repeated calls
+	 * without an intervening mutation return the SAME shared array instance.
+	 * Callers must not mutate the returned array or its entries; copy first if
+	 * you need to filter/reorder.
 	 */
 	getEntries(): SessionEntry[] {
-		return this.fileEntries
+		if (this.entriesCache !== null && this.entriesCache.mutation === this.mutationCount) {
+			return this.entriesCache.entries;
+		}
+		const entries = this.fileEntries
 			.filter((e): e is SessionEntry => e.type !== "session")
 			.map((entry) => this.residentStore.materialize(entry));
+		this.entriesCache = { mutation: this.mutationCount, entries };
+		return entries;
 	}
 
 	/**
@@ -1416,6 +1449,7 @@ export class SessionManager {
 			throw new Error(`Entry ${branchFromId} not found`);
 		}
 		this.leafId = branchFromId;
+		this.mutationCount++;
 	}
 
 	/**
@@ -1425,6 +1459,7 @@ export class SessionManager {
 	 */
 	resetLeaf(): void {
 		this.leafId = null;
+		this.mutationCount++;
 	}
 
 	/**
@@ -1523,6 +1558,7 @@ export class SessionManager {
 			this.sessionId = newSessionId;
 			this.sessionFile = newSessionFile;
 			this._buildIndex();
+			this.mutationCount++;
 
 			// Only write the file now if it contains an assistant message.
 			// Otherwise defer to _persist(), which creates the file on the
@@ -1561,6 +1597,7 @@ export class SessionManager {
 		);
 		this.sessionId = newSessionId;
 		this._buildIndex();
+		this.mutationCount++;
 		return undefined;
 	}
 
