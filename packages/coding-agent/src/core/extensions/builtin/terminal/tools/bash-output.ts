@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { formatTerminalToolOutput } from "../output-format.ts";
 import type { TerminalRuntimeSession } from "../runtime-session.ts";
 import { DEFAULT_OUTPUT_WAIT_TIMEOUT_SECONDS, safeRegExp, TERMINAL_OUTPUT_TOOL } from "../shared.ts";
 import { errorResult, type TerminalToolContext, type TerminalToolResult, textResult } from "./context.ts";
@@ -78,9 +79,9 @@ export function createBashOutputTool(ctx: TerminalToolContext) {
 			}
 
 			const delta = runtime.readDelta();
-			const filtered = applyFilter(delta.text, input.filter).trimEnd();
+			const formatted = formatTerminalToolOutput(applyFilter(delta.text, input.filter));
 			const dropped = delta.droppedChars > 0 ? `[${delta.droppedChars} earlier chars dropped]\n` : "";
-			return textResult(`${statusLine(runtime)}\n${dropped}${filtered || "(no new output)"}`);
+			return textResult(`${statusLine(runtime)}\n${dropped}${formatted.text || "(no new output)"}`);
 		},
 	};
 }
