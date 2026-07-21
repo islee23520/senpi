@@ -470,11 +470,15 @@ function buildWatchTargets(options: {
 		const watchPath = nearestExistingDirectory(dirname(resourcePath));
 		const firstMissingSegment = relative(watchPath, resourcePath).split(sep)[0] || basename(resourcePath);
 		const createdPath = resolve(watchPath, firstMissingSegment);
-		addBuiltin(`${id}-presence`, {
-			kind: "dir",
-			path: watchPath,
-			allowList: [firstMissingSegment],
-		}, createdPath);
+		addBuiltin(
+			`${id}-presence`,
+			{
+				kind: "dir",
+				path: watchPath,
+				allowList: [firstMissingSegment],
+			},
+			createdPath,
+		);
 	};
 	const { cwd, agentDir, projectTrusted, settings } = options;
 	const projectDir = joinConfigDir(cwd);
