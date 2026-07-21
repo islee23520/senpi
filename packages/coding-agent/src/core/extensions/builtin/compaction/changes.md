@@ -1,5 +1,23 @@
 # Builtin compaction extension changes
 
+## Idle watchdog on local summarization streams (2026-07-21)
+
+- `speculative.ts` `generateSummaryMessage` now drives the summarization stream through a
+  request-local `AbortController` (linked to the caller's signal) and
+  `consumeStreamWithIdleTimeout()` (`core/compaction/stream-watchdog.ts`,
+  `DEFAULT_SUMMARIZATION_IDLE_TIMEOUT_MS` = 300s, matching the agent stream idle-timeout default).
+  A provider connection that goes silent mid-summary — previously an unbounded "Compacting…"
+  stall recoverable only by ESC — now tears the request down and throws `StreamIdleTimeoutError`,
+  which the existing failure paths surface as `compaction generator failed: Summarization stream
+  stalled …` (manual/blocking route) or reject the speculative job. Caller aborts still read as
+  the stream's own aborted result, unchanged from the pre-watchdog behavior.
+- This stays in the builtin extension because the summarization request lifecycle is
+  extension-owned; the shared helper and the core `compact()` route live in
+  `core/compaction/` (see `core/compaction/changes.md`).
+
+Expected upstream conflict zones: `builtin/compaction/speculative.ts` around
+`generateSummaryMessage`.
+
 ## Structured rejection reasons on session_before_compact (2026-07-20)
 
 - `index.ts` cancel paths now attach a structured `rejectionCause` plus a

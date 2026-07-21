@@ -16,6 +16,10 @@ import {
 	estimateTokens,
 	prepareCompaction,
 } from "../../../compaction/index.ts";
+import {
+	consumeStreamWithIdleTimeout,
+	DEFAULT_SUMMARIZATION_IDLE_TIMEOUT_MS,
+} from "../../../compaction/stream-watchdog.ts";
 import { convertToLlm } from "../../../messages.ts";
 import type { ModelRegistry } from "../../../model-registry.ts";
 import type { ReadonlySessionManager } from "../../../session-manager.ts";
@@ -101,34 +105,51 @@ async function generateSummaryMessage(options: {
 	// ("reverse engineering or duplicating model outputs"), while the same
 	// content as native blocks with the agent's system prompt and tools passes.
 	const conversationMessages = repairOrphanedToolResults(convertToLlm(options.messages));
-	const responseStream = stream(
-		options.snapshot.model,
-		{
-			systemPrompt: options.snapshot.systemPrompt ?? options.prompt.system,
-			messages: [
-				...conversationMessages,
-				{
-					role: "user",
-					content: [{ type: "text", text: options.prompt.user }],
-					timestamp: Date.now(),
-				},
-			],
-			...(options.snapshot.tools && options.snapshot.tools.length > 0 ? { tools: options.snapshot.tools } : {}),
-		},
-		{
-			apiKey: options.auth.apiKey,
-			headers: options.auth.headers,
-			extraBody: options.auth.extraBody,
-			maxTokens: MAX_SUMMARY_TOKENS,
-			signal: options.signal,
-		},
-	);
-	for await (const event of responseStream) {
-		if (event.type === "text_delta" && event.delta) {
-			options.onProgress?.(event.delta);
-		}
+	// Request-local controller: the idle watchdog must be able to tear down a
+	// stalled summarization request without aborting the caller's own signal.
+	const requestController = new AbortController();
+	const onCallerAbort = () => requestController.abort(options.signal?.reason);
+	if (options.signal) {
+		if (options.signal.aborted) onCallerAbort();
+		else options.signal.addEventListener("abort", onCallerAbort, { once: true });
 	}
-	return await responseStream.result();
+	try {
+		const responseStream = stream(
+			options.snapshot.model,
+			{
+				systemPrompt: options.snapshot.systemPrompt ?? options.prompt.system,
+				messages: [
+					...conversationMessages,
+					{
+						role: "user",
+						content: [{ type: "text", text: options.prompt.user }],
+						timestamp: Date.now(),
+					},
+				],
+				...(options.snapshot.tools && options.snapshot.tools.length > 0 ? { tools: options.snapshot.tools } : {}),
+			},
+			{
+				apiKey: options.auth.apiKey,
+				headers: options.auth.headers,
+				extraBody: options.auth.extraBody,
+				maxTokens: MAX_SUMMARY_TOKENS,
+				signal: requestController.signal,
+			},
+		);
+		await consumeStreamWithIdleTimeout(responseStream, {
+			idleTimeoutMs: DEFAULT_SUMMARIZATION_IDLE_TIMEOUT_MS,
+			abort: () => requestController.abort(),
+			signal: options.signal,
+			onEvent: (event) => {
+				if (event.type === "text_delta" && event.delta) {
+					options.onProgress?.(event.delta);
+				}
+			},
+		});
+		return await responseStream.result();
+	} finally {
+		if (options.signal) options.signal.removeEventListener("abort", onCallerAbort);
+	}
 }
 
 function pruneToolResults(messages: AgentMessage[], contextWindow: number): AgentMessage[] {

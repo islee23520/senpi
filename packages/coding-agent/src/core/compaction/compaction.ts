@@ -7,7 +7,7 @@
 
 import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai/compat";
-import { completeSimple } from "@earendil-works/pi-ai/compat";
+import { streamSimple } from "@earendil-works/pi-ai/compat";
 import { convertToLlm, filterContextExcludedMessages, isContextExcludedCustomMessage } from "../messages.ts";
 import {
 	buildSessionContext,
@@ -15,6 +15,7 @@ import {
 	type SessionEntry,
 	sessionEntryToContextMessages,
 } from "../session-manager.ts";
+import { consumeStreamWithIdleTimeout, DEFAULT_SUMMARIZATION_IDLE_TIMEOUT_MS } from "./stream-watchdog.ts";
 import {
 	computeFileLists,
 	createFileOps,
@@ -584,11 +585,29 @@ async function completeSummarization(
 	options: SimpleStreamOptions,
 	streamFn?: SummarizationStreamFn,
 ): Promise<AssistantMessage> {
-	if (!streamFn) {
-		return completeSimple(model, context, options);
+	// Request-local controller: the idle watchdog must be able to tear down a
+	// stalled summarization request without aborting the caller's own signal.
+	const requestController = new AbortController();
+	const callerSignal = options.signal;
+	const onCallerAbort = () => requestController.abort(callerSignal?.reason);
+	if (callerSignal) {
+		if (callerSignal.aborted) onCallerAbort();
+		else callerSignal.addEventListener("abort", onCallerAbort, { once: true });
 	}
-	const stream = await streamFn(model, context, options);
-	return stream.result();
+	try {
+		const requestOptions = { ...options, signal: requestController.signal };
+		const responseStream = streamFn
+			? await streamFn(model, context, requestOptions)
+			: streamSimple(model, context, requestOptions);
+		await consumeStreamWithIdleTimeout(responseStream, {
+			idleTimeoutMs: DEFAULT_SUMMARIZATION_IDLE_TIMEOUT_MS,
+			abort: () => requestController.abort(),
+			signal: callerSignal,
+		});
+		return await responseStream.result();
+	} finally {
+		if (callerSignal) callerSignal.removeEventListener("abort", onCallerAbort);
+	}
 }
 
 async function transformSummarySource(
