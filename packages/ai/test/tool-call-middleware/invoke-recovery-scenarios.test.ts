@@ -149,7 +149,18 @@ describe("invoke recovery Metis and Momus scenarios", () => {
 			"toolcall_end",
 		]);
 		expect(result.content).toEqual([expect.objectContaining({ type: "toolCall", arguments: {}, incomplete: true })]);
-		expect(JSON.stringify(result.diagnostics)).not.toContain("42");
+		expect(result.diagnostics).toEqual([
+			{
+				type: "text_tool_call_recovery",
+				timestamp: expect.any(Number),
+				details: {
+					protocol: "antml",
+					toolName: "Bash",
+					id: "recovered-antml-0",
+					status: "incomplete",
+				},
+			},
+		]);
 	});
 
 	it("preserves caller abort after start and completion", async () => {
