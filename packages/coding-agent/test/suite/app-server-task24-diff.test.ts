@@ -125,6 +125,45 @@ describe("app-server task 24 projection and routing", () => {
 		}
 	});
 
+	it("preserves provider-native web search results, including future fields", () => {
+		// Given: a provider that supplies structured results beyond today's known fields.
+		const results = [
+			{
+				type: "web_search_result",
+				title: "Senpi parity",
+				url: "https://example.test/parity",
+				futureProviderField: { score: 0.97, citations: ["future-citation"] },
+			},
+		];
+		const message = assistant([
+			{
+				type: "providerNative",
+				subtype: "web_search_call",
+				raw: {
+					type: "web_search_call",
+					id: "ws-2",
+					status: "completed",
+					action: { type: "search", query: "senpi parity", queries: null },
+					results,
+				},
+			},
+		]);
+		const projector = new EventProjector({ threadId: "thread-1", turnId: "turn-1", nowMs: () => 1234 });
+
+		// When: lifecycle items are projected.
+		const notifications = projector.project({ type: "message_end", message }).notifications;
+
+		// Then: results are an opaque passthrough rather than discarded by the projection.
+		for (const notification of notifications) {
+			expect(notification.params).toMatchObject({
+				item: {
+					type: "webSearch",
+					results,
+				},
+			});
+		}
+	});
+
 	it("emits two growing turn diffs only to subscribers with populated envelopes", () => {
 		// Given: three initialized clients, only two subscribed to the scripted turn.
 		const first = new CapturingConnection("first");

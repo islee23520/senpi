@@ -14,8 +14,13 @@ export function webSearchItem(id: string, content: ProviderNativeContent): WireI
 		id,
 		query: actionDetail(action),
 		action,
-		results: null,
+		results: readResults(content),
 	};
+}
+
+function readResults(content: ProviderNativeContent): readonly unknown[] | null {
+	if (!isRecord(content.raw) || !Array.isArray(content.raw.results)) return null;
+	return content.raw.results;
 }
 
 function readAction(content: ProviderNativeContent): WebSearchAction {
