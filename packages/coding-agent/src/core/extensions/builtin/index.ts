@@ -2,6 +2,7 @@ import type { ExtensionFactory } from "../types.ts";
 import anthropicBashExtension from "./anthropic-bash/index.ts";
 import anthropicWebSearchExtension from "./anthropic-web-search/index.ts";
 import bashTimeoutExtension from "./bash-timeout/index.ts";
+import btwExtension from "./btw/index.ts";
 import compactionExtension from "./compaction/index.ts";
 import diffExtension from "./diff.ts";
 import filesExtension from "./files.ts";
@@ -70,6 +71,7 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "nested-agents-md", factory: nestedAgentsMdExtension },
 	{ id: "rules", factory: piRulesExtension },
 	{ id: "goal", factory: goalExtension },
+	{ id: "btw", factory: btwExtension },
 	// Keep MCP last so its eventual provider-payload tap observes all co-resident builtin mutations.
 	{ id: "mcp", factory: mcpExtension },
 ];
