@@ -16,7 +16,7 @@ import {
 import { discoverAndLoadExtensions } from "../../src/core/extensions/loader.ts";
 import type { ExtensionAPI, ToolDefinition, ToolRenderContext } from "../../src/core/extensions/types.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
-import { initTheme, theme } from "../../src/modes/interactive/theme/theme.ts";
+import { initTheme, type Theme, theme } from "../../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../src/utils/ansi.ts";
 import { createTestResourceLoader, userMsg } from "../utilities.ts";
 import { createHarness, getAssistantTexts, type Harness } from "./harness.ts";
@@ -585,6 +585,213 @@ describe("todo extension", () => {
 		expect(rendered).toContain("II. Auth — 1/1 done");
 		expect(rendered).toContain("III. Verification");
 		expect(rendered).toContain("[ ] Run checks");
+	});
+
+	it("preserves the settled todo phase tree golden output", async () => {
+		const tool = await captureTodoTool();
+		if (!tool.renderResult) throw new Error("Expected todo result renderer");
+		const markerTheme = {
+			fg: (name: string, text: string) => `<fg:${name}>${text}</fg:${name}>`,
+			bold: (text: string) => text,
+			strikethrough: (text: string) => `<s>${text}</s>`,
+		} as Theme;
+		const context: ToolRenderContext<unknown, TodoParams> = {
+			args: { op: "done", task: "A" },
+			toolCallId: "todo-golden",
+			invalidate: () => {},
+			lastComponent: undefined,
+			state: undefined,
+			cwd: REPO_ROOT,
+			executionStarted: true,
+			argsComplete: true,
+			isPartial: false,
+			expanded: false,
+			showImages: false,
+			isError: false,
+			spinnerFrame: undefined,
+		};
+		const component = tool.renderResult(
+			{
+				content: [{ type: "text", text: "summary" }],
+				details: {
+					op: "done",
+					phases: [
+						{
+							name: "P",
+							tasks: [
+								{ content: "A", status: "completed" },
+								{ content: "B", status: "in_progress" },
+								{ content: "C", status: "abandoned" },
+								{ content: "D", status: "pending" },
+							],
+						},
+					],
+					storage: "memory",
+					completedTasks: [{ phase: "P", content: "A" }],
+				},
+			},
+			{ expanded: false, isPartial: false },
+			markerTheme,
+			context,
+		);
+
+		const settledGolden = [
+			"<fg:accent>I. P</fg:accent>".padEnd(160),
+			"  <fg:dim><s>[✓] A</s></fg:dim>".padEnd(160),
+			"  <fg:accent>[•] B</fg:accent>".padEnd(160),
+			"  <fg:dim>[×] C</fg:dim>".padEnd(160),
+			"  [ ] D".padEnd(160),
+		].join("\n");
+		expect(component.render(160).join("\n")).toBe(settledGolden);
+	});
+
+	async function renderCompletionFrame(
+		spinnerFrame: number | undefined,
+		options: { content?: string; isError?: boolean; theme?: Theme; width?: number; includeSecond?: boolean } = {},
+	): Promise<string> {
+		const tool = await captureTodoTool();
+		if (!tool.renderResult) throw new Error("Expected todo result renderer");
+		const markerTheme =
+			options.theme ??
+			({
+				fg: (name: string, text: string) => `<fg:${name}>${text}</fg:${name}>`,
+				bold: (text: string) => text,
+				strikethrough: (text: string) => `<s>${text}</s>`,
+			} as Theme);
+		const context: ToolRenderContext<unknown, TodoParams> = {
+			args: { op: "done", task: "A" },
+			toolCallId: "todo-frame",
+			invalidate: () => {},
+			lastComponent: undefined,
+			state: undefined,
+			cwd: REPO_ROOT,
+			executionStarted: true,
+			argsComplete: true,
+			isPartial: false,
+			expanded: false,
+			showImages: false,
+			isError: options.isError ?? false,
+			spinnerFrame,
+		};
+		const content = options.content ?? "A";
+		const tasks: TodoPhase["tasks"] = [
+			{ content, status: "completed" },
+			...(options.includeSecond === false ? [] : [{ content: "B", status: "completed" } as const]),
+			{ content: "C", status: "in_progress" },
+		];
+		return tool
+			.renderResult(
+				{
+					content: [{ type: "text", text: "error text" }],
+					details: {
+						op: "done",
+						phases: [
+							{
+								name: "P",
+								tasks,
+							},
+						],
+						storage: "memory",
+						completedTasks: [{ phase: "P", content }],
+					},
+				},
+				{ expanded: false, isPartial: false },
+				markerTheme,
+				context,
+			)
+			.render(options.width ?? 160)
+			.join("\n");
+	}
+
+	it("preserves byte-identical fully struck completion output without a spinner frame", async () => {
+		const rendered = await renderCompletionFrame(undefined);
+		expect(rendered).toContain("<fg:dim><s>[✓] A</s></fg:dim>");
+		expect(rendered).toContain("<fg:dim><s>[✓] B</s></fg:dim>");
+	});
+
+	it("holds the newly completed task unstruck through frames zero to two", async () => {
+		for (const frame of [0, 1, 2]) {
+			const rendered = await renderCompletionFrame(frame);
+			expect(rendered).toContain("<fg:dim>[✓] A</fg:dim>");
+			expect(rendered).toContain("<fg:dim><s>[✓] B</s></fg:dim>");
+			expect(rendered).not.toContain("<s>[✓] A</s>");
+		}
+	});
+
+	it("reveals exactly six twelfths of the sanitized full task line at frame eight", async () => {
+		const rendered = await renderCompletionFrame(8);
+		const line = "[✓] A";
+		const reveal = Math.ceil(([...line].length * 6) / 12);
+		expect(rendered).toContain(
+			`<fg:dim><s>${[...line].slice(0, reveal).join("")}</s>${[...line].slice(reveal).join("")}</fg:dim>`,
+		);
+		expect(rendered).toContain("<fg:dim><s>[✓] B</s></fg:dim>");
+	});
+
+	it("fully strikes the newly completed task at and after frame fourteen", async () => {
+		for (const frame of [14, 20]) {
+			expect(await renderCompletionFrame(frame)).toContain("<fg:dim><s>[✓] A</s></fg:dim>");
+		}
+	});
+
+	it("increases the reveal boundary monotonically between frames four, eight, and twelve", async () => {
+		const counts = await Promise.all(
+			[4, 8, 12].map(async (frame) => {
+				const matched = (await renderCompletionFrame(frame)).match(/<fg:dim><s>(.*?)<\/s>/);
+				if (!matched) throw new Error("Expected a partial strikethrough marker");
+				return [...matched[1]].length;
+			}),
+		);
+		expect(counts[0]).toBeLessThan(counts[1] ?? 0);
+		expect(counts[1]).toBeLessThan(counts[2] ?? 0);
+	});
+
+	it("keeps error results on the plain text renderer path", async () => {
+		const rendered = await renderCompletionFrame(8, { isError: true });
+		expect(rendered).not.toContain("<s>");
+		expect(rendered).toContain("error text");
+	});
+
+	it("preserves the reveal boundary across wrapped display lines", async () => {
+		const content = "x".repeat(60);
+		const ansiTheme = {
+			fg: (_name: string, text: string) => text,
+			bold: (text: string) => text,
+			strikethrough: (text: string) => `\u001b[9m${text}\u001b[29m`,
+		} as Theme;
+		const rendered = await renderCompletionFrame(8, { content, theme: ansiTheme, width: 24, includeSecond: false });
+		const expected = Math.ceil(([...`[✓] ${content}`].length * 6) / 12);
+		const physicalLines = rendered.split("\n").slice(1);
+		// The first source-space is carried into the SGR-9 padding after the marker by pi-tui's word wrapper.
+		const markerSpaceIsStruck = physicalLines[0]?.startsWith("  \u001b[9m[✓]") ?? false;
+		let struck = markerSpaceIsStruck ? 1 : 0;
+		let seenUnstruck = false;
+		for (const physicalLine of physicalLines) {
+			// SGR 9 may carry into padding at wraps (pre-existing pi-tui behavior); task glyphs only matter here.
+			const taskPart = physicalLine.replace(/^\s+/, "").replace(/\s+$/, "");
+			let active = false;
+			for (let index = 0; index < taskPart.length; ) {
+				if (taskPart.startsWith("\u001b[9m", index)) {
+					active = true;
+					index += 4;
+					continue;
+				}
+				if (taskPart.startsWith("\u001b[29m", index)) {
+					active = false;
+					index += 5;
+					continue;
+				}
+				const glyph = String.fromCodePoint(taskPart.codePointAt(index) ?? 0);
+				if (active) {
+					expect(seenUnstruck).toBe(false);
+					struck += 1;
+				} else if (glyph.trim() !== "") {
+					seenUnstruck = true;
+				}
+				index += glyph.length;
+			}
+		}
+		expect(struck).toBe(expected);
 	});
 
 	it("registers exactly one todo tool with the op schema", async () => {

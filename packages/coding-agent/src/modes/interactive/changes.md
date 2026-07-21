@@ -1,5 +1,67 @@
 # changes
 
+## todo completion strike reveal (2026-07-21)
+
+### What changed
+
+- `components/todo-strike.ts` (new): pure, zero-import module exporting the strike
+  reveal constants (`TODO_STRIKE_HOLD_FRAMES = 2`, `TODO_STRIKE_REVEAL_FRAMES = 12`,
+  `TODO_STRIKE_TOTAL_FRAMES = 14`, `TODO_STRIKE_FRAME_INTERVAL_MS = 65`),
+  `strikeRevealCount(text, frame)` (frame-to-visible-char-count math over code
+  points), `partialStrikethrough(text, visibleChars, strike)` (code-point-safe
+  splitter; strike styling comes ONLY from the injected `strike` callback — no
+  raw ANSI literals), and `hasCompletedTodoTasks(details)`. Purity keeps the
+  todotools extension free of interactive-runtime dependencies on non-interactive
+  load paths and keeps the interactive core free of built-in-extension imports.
+- `components/tool-execution.ts`: `updateResult()` also calls
+  `updateTodoStrikeAnimation()`, which starts an `unref`'d, self-terminating
+  `setInterval` (65ms, stops after `TODO_STRIKE_TOTAL_FRAMES`) when the result is
+  a final non-error `todo` result with non-empty `completedTasks` AND
+  `this.executionStarted` is set. Each tick advances `spinnerFrame`, busts the
+  render cache, repaints, and requests a render; the settle tick restores the
+  static full-strike rendering. `stopTodoStrikeAnimation()` clears the interval
+  and resets `spinnerFrame` only when no spinner is running.
+  `stopSpinnerAnimation()` leaves `spinnerFrame` to the strike owner while a
+  strike is in flight. `stopAnimation()` also stops the strike. New
+  `override dispose()` calls `stopAnimation()` before `super.dispose()` so pi-tui
+  `Container.clear()`/`Container.dispose()` child propagation kills a mid-flight
+  interval on chat teardown (also closes the pre-existing spinner teardown hole).
+- `interactive-mode.ts`: new private `stopChatToolAnimations()` iterates
+  `this.chatContainer.children` and calls `stopAnimation()` on every
+  `ToolExecutionComponent`; `stop()` calls it immediately after
+  `clearPendingTools()`. A completed mid-strike todo block has already left
+  `pendingTools` (deleted at `tool_execution_end`) and `ui.stop()` does not
+  dispose the component tree, so without this the interval would repaint a
+  stopped UI until self-termination.
+
+### Why
+
+- A completion checkmark should land visibly. Without an animation, a finished
+  task row silently switches from accent to dim+strikethrough and the user can
+  miss which item just completed. A bounded ~910ms left-to-right reveal (2 hold
+  frames + 12 sweep frames at 65ms/frame) makes the just-completed task
+  unmistakable, then settles to byte-identical pre-change rendering.
+
+### Why extension system couldn't handle this
+
+- The strike interval is component-scoped and drives `ToolExecutionComponent`'s
+  render-cache invalidation, `spinnerFrame` render signature, and lifecycle hooks
+  (`updateResult`, `stopAnimation`, `dispose`); extensions cannot own built-in
+  component private state or hook `Container.clear()`/`dispose()` propagation,
+  and the per-frame repaint must route through the host's `requestRender` to
+  respect the TUI FPS cap.
+- The `executionStarted` rebuild-replay suppressor is core-private state set
+  only on the live path (`renderSessionItems` rebuilds never call
+  `markExecutionStarted()`); an extension cannot gate historical replay this way.
+
+### Expected merge conflict zones
+
+- MEDIUM: `components/tool-execution.ts` around `updateResult`, `stopAnimation`,
+  `dispose`, and the `spinnerFrame`-reset guard in `stopSpinnerAnimation`.
+- LOW: `interactive-mode.ts` around `stop()` and the new `stopChatToolAnimations`
+  helper.
+- LOW: the fork-only `components/todo-strike.ts` module.
+
 ## model fallback lifecycle notices (2026-07-20)
 
 ### What changed

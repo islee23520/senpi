@@ -1,14 +1,20 @@
 import { join, resolve } from "node:path";
-import { Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, Text, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { getReadmePath } from "../src/config.ts";
-import type { ToolDefinition } from "../src/core/extensions/types.ts";
+import { registerTodoTool, type TODO_PARAMS_SCHEMA } from "../src/core/extensions/builtin/todotools/tools/todo.ts";
+import type { ExtensionAPI, ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
 import { renderToolDiff } from "../src/core/tools/diff-render.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
+import {
+	TODO_STRIKE_FRAME_INTERVAL_MS,
+	TODO_STRIKE_TOTAL_FRAMES,
+} from "../src/modes/interactive/components/todo-strike.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
+import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -692,4 +698,249 @@ describe("ToolExecutionComponent parity", () => {
 			expect(collapsed.indexOf(":120-329")).toBeLessThan(collapsed.indexOf("to expand"));
 		});
 	}
+});
+
+function completedTodoResult(isError = false) {
+	return {
+		content: [{ type: "text" as const, text: "ok" }],
+		details: {
+			op: "done",
+			phases: [{ name: "P", tasks: [{ content: "t", status: "completed" as const }] }],
+			storage: "memory" as const,
+			completedTasks: [{ phase: "P", content: "t" }],
+		},
+		isError,
+	};
+}
+
+function createTodoComponent(
+	requestRender = vi.fn(),
+	toolDefinition: ToolDefinition = createBaseToolDefinition("todo"),
+) {
+	return new ToolExecutionComponent(
+		"todo",
+		"todo-strike",
+		{},
+		{},
+		toolDefinition,
+		createFakeTuiWithRenderSpy(requestRender),
+		process.cwd(),
+	);
+}
+
+function captureTodoTool(): ToolDefinition<typeof TODO_PARAMS_SCHEMA> {
+	let capturedTool: ToolDefinition<typeof TODO_PARAMS_SCHEMA> | undefined;
+	const mockPi = {
+		registerTool(tool: ToolDefinition<typeof TODO_PARAMS_SCHEMA>) {
+			capturedTool = tool;
+		},
+		appendEntry() {},
+	} as Pick<ExtensionAPI, "registerTool" | "appendEntry"> as ExtensionAPI;
+
+	registerTodoTool(mockPi, {
+		getCurrentPhases: () => [],
+		setCurrentPhases: () => {},
+		syncWidget: () => {},
+	});
+	if (!capturedTool) throw new Error("Expected todo tool to be registered");
+	return capturedTool;
+}
+
+describe("ToolExecutionComponent todo completion strike animation", () => {
+	test("animates completed todo tasks through all strike frames and settles", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult());
+			const rendersBeforeFrame = requestRender.mock.calls.length;
+
+			vi.advanceTimersByTime(TODO_STRIKE_FRAME_INTERVAL_MS);
+			expect(requestRender.mock.calls.length).toBeGreaterThan(rendersBeforeFrame);
+
+			vi.advanceTimersByTime(TODO_STRIKE_FRAME_INTERVAL_MS * TODO_STRIKE_TOTAL_FRAMES);
+			const rendersAfterSettle = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(650);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterSettle);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("does not animate errored todo results", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult(true));
+			const rendersAfterResult = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterResult);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("does not animate todo results without completed tasks", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			const result = completedTodoResult();
+			result.details.completedTasks = [];
+			component.updateResult(result);
+			const rendersAfterResult = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterResult);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("does not animate partial todo results", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult(), true);
+			const rendersAfterResult = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterResult);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("stops todo strike animation through stopAnimation", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult());
+			component.stopAnimation();
+			const rendersAfterStop = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterStop);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("stops todo strike animation through dispose", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult());
+			component.dispose();
+			const rendersAfterDispose = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterDispose);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("does not replay todo strike animation for rebuilt historical results", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender, captureTodoTool());
+			component.updateResult(completedTodoResult());
+			const rendersAfterResult = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterResult);
+			expect(component.render(120).join("\n")).toContain(theme.strikethrough("[✓] t"));
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("stops completed todo strike animations when interactive mode stops", () => {
+		vi.useFakeTimers();
+		try {
+			const requestRender = vi.fn();
+			const component = createTodoComponent(requestRender);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult());
+			vi.advanceTimersByTime(TODO_STRIKE_FRAME_INTERVAL_MS);
+			const chatContainer = new Container();
+			chatContainer.addChild(component);
+			const proto = InteractiveMode.prototype as unknown as {
+				stopChatToolAnimations(this: { chatContainer: Container }): void;
+			};
+			proto.stopChatToolAnimations.call({ chatContainer });
+			const rendersAfterStop = requestRender.mock.calls.length;
+			vi.advanceTimersByTime(2000);
+			expect(requestRender.mock.calls.length).toBe(rendersAfterStop);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test("wires stop to stop completed todo strike animations", () => {
+		const stopChatToolAnimations = vi.fn();
+		const proto = InteractiveMode.prototype as unknown as {
+			stop(this: {
+				streamingReveal: { stop(): void };
+				toolResultReveal: { stop(): void };
+				settingsManager: { getShowTerminalProgress(): boolean };
+				clearStatusIndicator(): void;
+				clearPendingTools(): void;
+				stopChatToolAnimations(): void;
+				clearActiveToolExecutionStatus(): void;
+				clearToolHookStatuses(): void;
+				themeController: { disableAutoSync(): void };
+				clearExtensionTerminalInputListeners(): void;
+				footer: { dispose(): void };
+				footerDataProvider: { dispose(): void };
+				unsubscribe: undefined;
+				isInitialized: false;
+				unregisterSignalHandlers(): void;
+			}): void;
+		};
+		proto.stop.call({
+			streamingReveal: { stop() {} },
+			toolResultReveal: { stop() {} },
+			settingsManager: { getShowTerminalProgress: () => false },
+			clearStatusIndicator() {},
+			clearPendingTools() {},
+			stopChatToolAnimations,
+			clearActiveToolExecutionStatus() {},
+			clearToolHookStatuses() {},
+			themeController: { disableAutoSync() {} },
+			clearExtensionTerminalInputListeners() {},
+			footer: { dispose() {} },
+			footerDataProvider: { dispose() {} },
+			unsubscribe: undefined,
+			isInitialized: false,
+			unregisterSignalHandlers() {},
+		});
+		expect(stopChatToolAnimations).toHaveBeenCalledTimes(1);
+	});
+
+	test("renders consecutive todo strike frames differently", () => {
+		vi.useFakeTimers();
+		try {
+			const toolDefinition: ToolDefinition = {
+				...createBaseToolDefinition("todo"),
+				renderResult: (_result, _options, _theme, context) => new Text(`frame:${context.spinnerFrame}`, 0, 0),
+			};
+			const component = createTodoComponent(vi.fn(), toolDefinition);
+			component.markExecutionStarted();
+			component.updateResult(completedTodoResult());
+			const firstFrame = component.render(120).join("\n");
+			vi.advanceTimersByTime(TODO_STRIKE_FRAME_INTERVAL_MS);
+			const secondFrame = component.render(120).join("\n");
+			expect(secondFrame).not.toBe(firstFrame);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
