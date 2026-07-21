@@ -57,6 +57,7 @@ export function normalizeTranscript(records, options = {}) {
 			return mapStable(timestamps, value, "timestamp");
 		}
 		if (typeof value === "string") {
+			if (key === "userAgent") return "<server-user-agent>";
 			if (SERVER_ID_KEYS.has(key) || (key === "id" && depth > 1 && GENERATED_ID_PATTERN.test(value))) {
 				return mapStable(serverIds, value, "server-id");
 			}

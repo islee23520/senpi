@@ -150,6 +150,31 @@ describe("app-server differential transcript normalization", () => {
 			},
 		});
 	});
+
+	it("normalizes truthful server identity without reordering or suppressing a frame", () => {
+		// Given: different product/version strings from the two honest servers.
+		const transcript: TranscriptRecord[] = [
+			{
+				seq: 1,
+				direction: "server->client",
+				target: "senpi",
+				frame: { id: "initialize", result: { userAgent: "senpi/1.0" } },
+			},
+		];
+
+		// When: the handshake frame is normalized.
+		const normalized = normalizeTranscript(transcript);
+
+		// Then: identity is canonicalized while the frame remains present and paired.
+		expect(normalized).toEqual([
+			{
+				seq: 1,
+				direction: "server->client",
+				target: "senpi",
+				frame: { id: "initialize", result: { userAgent: "<server-user-agent>" } },
+			},
+		]);
+	});
 });
 
 describe("app-server differential classification", () => {
