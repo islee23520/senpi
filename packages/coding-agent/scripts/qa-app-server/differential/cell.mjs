@@ -17,7 +17,7 @@ class CellSetupError extends Error {
 	name = "CellSetupError";
 }
 
-export function createCell() {
+export function createCell({ codexApprovalPolicy = "never", senpiPermissionPreset } = {}) {
 	const dir = mkdtempSync(CELL_PREFIX);
 	let active = true;
 	try {
@@ -34,11 +34,17 @@ export function createCell() {
 		const tokenPath = join(dir, "ws-token");
 		writeFileSync(tokenPath, `${token}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
 		chmodSync(tokenPath, 0o600);
-		writeFileSync(join(codexHome, "config.toml"), codexConfig(), { encoding: "utf8", mode: 0o600 });
+		writeFileSync(join(codexHome, "config.toml"), codexConfig(codexApprovalPolicy), { encoding: "utf8", mode: 0o600 });
 		writeFileSync(join(senpiAgentDir, "models.json"), `${JSON.stringify(senpiModels(), null, 2)}\n`, {
 			encoding: "utf8",
 			mode: 0o600,
 		});
+		if (senpiPermissionPreset !== undefined) {
+			writeFileSync(join(senpiAgentDir, "settings.json"), `${JSON.stringify({ permissionPreset: senpiPermissionPreset })}\n`, {
+				encoding: "utf8",
+				mode: 0o600,
+			});
+		}
 
 		return Object.freeze({
 			dir,
@@ -118,10 +124,10 @@ export function senpiLaunch(cell) {
 	});
 }
 
-function codexConfig() {
+function codexConfig(approvalPolicy) {
 	return `model = "mock-model"
 model_provider = "mock_provider"
-approval_policy = "never"
+approval_policy = "${approvalPolicy}"
 sandbox_mode = "read-only"
 
 [features]
