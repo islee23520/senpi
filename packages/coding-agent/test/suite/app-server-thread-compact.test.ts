@@ -24,6 +24,9 @@ describe("app-server thread/compact/start", () => {
 		});
 		const started = await registry.dispatch(connection, { id: 1, method: "thread/start", params: { cwd: root } });
 		const threadId = stringAt(responseResult(started).thread, "id");
+		const threadStarted = deferredActions.shift();
+		if (!threadStarted) throw new Error("thread start was not deferred until after acknowledgement");
+		await threadStarted();
 		const entry = threads.getLoadedThread(threadId);
 		const deferred = createDeferred<CompactionResult>();
 		const compact = vi.spyOn(entry.session, "compact").mockReturnValue(deferred.promise);
@@ -40,7 +43,7 @@ describe("app-server thread/compact/start", () => {
 		expect(response).toEqual({ id: 2, result: {} });
 		expect(compact).not.toHaveBeenCalled();
 		expect(connection.received).toEqual([]);
-		const deferredStart = deferredActions[0];
+		const deferredStart = deferredActions.shift();
 		if (!deferredStart) throw new Error("compact start was not deferred until after acknowledgement");
 
 		// When: the server releases post-response work after writing the acknowledgement.

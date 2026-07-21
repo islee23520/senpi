@@ -9,6 +9,11 @@ import { ServerCore } from "../../src/modes/app-server/server/server-core.ts";
 import { createHarness } from "./harness.ts";
 
 type SentMessage = RpcEnvelope;
+type CapabilityManifest = {
+	readonly implemented: {
+		readonly stable: readonly string[];
+	};
+};
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 function request(id: string | number, method: string, params?: unknown) {
@@ -95,6 +100,13 @@ function expectModel(value: unknown): asserts value is WireModel {
 			"upgradeInfo",
 		].sort(),
 	);
+}
+
+async function readImplementedStableMethods(): Promise<ReadonlySet<string>> {
+	const manifest = JSON.parse(
+		await readFile(new URL("../qa/app-server/capability-manifest.json", import.meta.url), "utf8"),
+	) as CapabilityManifest;
+	return new Set(manifest.implemented.stable);
 }
 
 function withTwoSecondTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -385,38 +397,55 @@ describe("app-server model methods", () => {
 		}
 	});
 
-	it("returns clean method-not-found responses for unimplemented stable client methods within two seconds", async () => {
-		// Given: an initialized connection and the generated stable client method inventory.
+	it("uses the capability manifest for unimplemented stable methods and returns honest account errors", async () => {
+		// Given: an initialized connection, the generated stable inventory, and the manifest-backed implementation set.
 		const harness = await createHarness();
 		try {
 			const { core, sent, id } = createCoreWithConnection({ modelRegistry: harness.session.modelRegistry });
 			await initialize(core, id, true);
-			const implemented = new Set([
-				"initialize",
-				"model/list",
-				"skills/list",
-				"collaborationMode/list",
-				"permissionProfile/list",
-				"experimentalFeature/list",
-			]);
-			const unimplementedStableMethods = STABLE_CLIENT_REQUEST_METHODS.filter((method) => !implemented.has(method));
+			const implementedStableMethods = await readImplementedStableMethods();
+			const honestAccountReads = ["account/rateLimits/read", "account/usage/read"] as const;
+			for (const method of honestAccountReads) {
+				expect(implementedStableMethods.has(method)).toBe(true);
+			}
+			const unimplementedStableMethods = STABLE_CLIENT_REQUEST_METHODS.filter(
+				(method) => !implementedStableMethods.has(method),
+			);
+			const methodsToDispatch = [...unimplementedStableMethods, ...honestAccountReads];
 
-			// When: every currently unimplemented stable method is dispatched.
+			// When: every manifest-declared OUT method and both implemented, gated account reads are dispatched.
 			await withTwoSecondTimeout(
 				Promise.all(
-					unimplementedStableMethods.map((method, index) => core.receive(id, request(index + 10, method, {}))),
+					methodsToDispatch.map((method, index) => core.receive(id, request(index + 10, method, {}))),
 				).then(() => undefined),
 			);
 
-			// Then: every response is well-formed -32601 and no request hangs or crashes the server.
+			// Then: OUT methods are clean -32601 responses, while account reads return their honest gated error contract.
 			const responses = sent.slice(1);
-			expect(responses).toHaveLength(unimplementedStableMethods.length);
+			expect(responses).toHaveLength(methodsToDispatch.length);
 			for (const [index, method] of unimplementedStableMethods.entries()) {
 				expect(responses[index]).toEqual({
 					id: index + 10,
 					error: { code: -32601, message: `Method not found: ${method}` },
 				});
 			}
+			const accountRequestId = unimplementedStableMethods.length + 10;
+			expect(responses.slice(unimplementedStableMethods.length)).toEqual([
+				{
+					id: accountRequestId,
+					error: {
+						code: -32600,
+						message: "codex account authentication required to read rate limits",
+					},
+				},
+				{
+					id: accountRequestId + 1,
+					error: {
+						code: -32600,
+						message: "codex account authentication required to read token usage",
+					},
+				},
+			]);
 		} finally {
 			harness.cleanup();
 		}

@@ -46,16 +46,17 @@ describe("app-server failed turn terminal contract", () => {
 		// Then: HEAD's terminal error pair is emitted in order, with no invented turn/failed method.
 		const methods = notifications.map((notification) => notification.method);
 		expect(methods).toEqual([
+			"thread/status/changed",
 			"turn/started",
 			"item/started",
 			"item/completed",
+			"thread/status/changed",
 			"error",
 			"turn/completed",
-			"thread/status/changed",
 		]);
 		expect(methods).not.toContain("turn/failed");
-		const error = notifications[3];
-		const completed = notifications[4];
+		const error = notifications[5];
+		const completed = notifications[6];
 		expect(error).toMatchObject({
 			method: "error",
 			params: {

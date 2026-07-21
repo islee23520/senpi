@@ -66,11 +66,11 @@ describe("app-server turn parity characterization pin", () => {
 			const responseForAssertion = mutation === "turn-shape" ? { ...response, unexpected: true } : response;
 			expect(responseForAssertion).toEqual({ id: 4, result: { turn: inProgressTurn } });
 			if (mutation !== "turn-terminal") session.emitAgentEnd();
-			const itemStartedParams = objectAt(notificationAt(notifications, 1, "item/started"), "params");
+			const itemStartedParams = objectAt(notificationAt(notifications, 2, "item/started"), "params");
 			const item = objectAt(itemStartedParams, "item");
 			const itemId = stringAt(item, "id");
 			const itemStartedAtMs = numberAt(itemStartedParams, "startedAtMs");
-			const completedParams = objectAt(notificationAt(notifications, 3, "turn/completed"), "params");
+			const completedParams = objectAt(notificationAt(notifications, 5, "turn/completed"), "params");
 			const completedTurn = objectAt(completedParams, "turn");
 			const completedAt = numberAt(completedTurn, "completedAt");
 			const durationMs = numberAt(completedTurn, "durationMs");
@@ -81,6 +81,10 @@ describe("app-server turn parity characterization pin", () => {
 				content: [{ type: "text", text: "pin this turn", text_elements: [] }],
 			};
 			expect(notifications).toEqual([
+				{
+					method: "thread/status/changed",
+					params: { threadId: entry.id, status: { type: "active", activeFlags: [] } },
+				},
 				{ method: "turn/started", params: { threadId: entry.id, turn: inProgressTurn } },
 				{
 					method: "item/started",
@@ -90,6 +94,7 @@ describe("app-server turn parity characterization pin", () => {
 					method: "item/completed",
 					params: { threadId: entry.id, turnId, item: userItem, completedAtMs: itemStartedAtMs },
 				},
+				{ method: "thread/status/changed", params: { threadId: entry.id, status: { type: "idle" } } },
 				{
 					method: "turn/completed",
 					params: {
@@ -103,7 +108,6 @@ describe("app-server turn parity characterization pin", () => {
 						},
 					},
 				},
-				{ method: "thread/status/changed", params: { threadId: entry.id, status: { type: "idle" } } },
 			]);
 		} finally {
 			engine.completeTurn(entry.id);

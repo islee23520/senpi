@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { test } from "node:test";
+import { test } from "vitest";
 import { StdioClient } from "./task8-thread-search-support.ts";
 
 test("StdioClient.close kills the whole process group and resolves only after close", {

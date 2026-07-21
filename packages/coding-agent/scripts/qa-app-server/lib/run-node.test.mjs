@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { test } from "vitest";
 import { terminateScenario } from "./run-node.mjs";
 
 const fixturePath = fileURLToPath(new URL("./run-node-fixture.mjs", import.meta.url));
