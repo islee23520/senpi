@@ -1,5 +1,17 @@
 # changes
 
+## Parallel side questions via `/btw` (2026-07-21)
+
+### What changed
+
+- New builtin extension `core/extensions/builtin/btw/` adds `/btw <question>`: a read-only side LLM query against a synchronously captured snapshot of the current conversation, running in parallel with any in-flight main turn without writing to session history. Details in `core/extensions/builtin/btw/changes.md`.
+- TUI: the answer streams into a dismissable widget above the editor; Escape dismisses the side panel without touching main-turn Escape behavior. Non-TUI modes deliver the answer via `ctx.ui.notify`.
+- `core/extensions/builtin/index.ts` registers the extension between `goal` and `mcp`.
+
+### Why
+
+- Asking a question about the ongoing session previously required waiting for the main turn and polluting its context. `/btw` answers immediately, in parallel, and leaves the main session untouched.
+
 ## Claude text tool-call recovery (2026-07-20)
 
 ### What changed
