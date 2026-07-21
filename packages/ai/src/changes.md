@@ -1,5 +1,23 @@
 # AI Source Changes
 
+## 2026-07-22 - Omit non-"fc" item ids when replaying tool calls as function_call
+
+- `api/openai-responses-shared.ts` `convertResponsesMessages()`: a `function_call` input
+  item's `id` is now emitted only when it begins with "fc" — the Responses API rejects
+  anything else (`Invalid 'input[N].id': 'custom'. Expected an ID that begins with 'fc'.`).
+  Custom tool calls are stored with the `<call_id>|custom` sentinel (a `custom_tool_call`
+  output carries no server-issued item id), so replaying them without their freeform tool
+  registered — compaction summarization strips `freeform` from its tool list — previously
+  sent `id: "custom"` and hard-failed the whole request, tripping the compaction circuit
+  breaker. Omitting mirrors the existing different-model pairing-validation skip;
+  server-issued `fc_…` ids still replay unchanged.
+- `../test/openai-responses-custom-tools.test.ts`: sentinel omission plus a pin that
+  genuine `fc` ids survive same-model replay.
+
+### Expected merge conflict zones
+
+- LOW: `convertResponsesMessages` function_call emission branch.
+
 ## 2026-07-20 - Typed classifier stop details
 
 - Added optional typed refusal/sensitive stop details to assistant messages, preserving Anthropic classifier outcomes through streaming and faux provider errors.
