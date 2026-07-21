@@ -1,9 +1,11 @@
 import { type Static, Type } from "typebox";
+import { formatTerminalToolOutput } from "../output-format.ts";
 import type { TerminalRuntimeSession } from "../runtime-session.ts";
 import {
 	BACKGROUND_START_GRACE_MS,
 	DEFAULT_COLS,
 	DEFAULT_ROWS,
+	FOREGROUND_ENV_OVERRIDES,
 	KILLED_SESSION_EXIT_GRACE_MS,
 	TERMINAL_BASH_TOOL,
 } from "../shared.ts";
@@ -100,7 +102,14 @@ async function runForeground(
 ): Promise<TerminalToolResult> {
 	if (signal?.aborted) return errorResult("Command aborted");
 	const timeoutMs = input.timeout !== undefined ? Math.trunc(input.timeout * 1000) : undefined;
-	const { id, runtime } = await spawnCommandSession(ctx, { command: input.command, cols, rows, timeoutMs, cwd });
+	const { id, runtime } = await spawnCommandSession(ctx, {
+		command: input.command,
+		cols,
+		rows,
+		timeoutMs,
+		cwd,
+		envOverrides: FOREGROUND_ENV_OVERRIDES,
+	});
 	// Interrupt means "stop now": SIGKILL the whole process group in one shot.
 	// kill() is one-shot idempotent, so a gentle SIGTERM first would block any
 	// escalation, and a SIGTERM-ignoring command would pin the agent forever.
@@ -121,7 +130,8 @@ async function runForeground(
 		// `stopping`, so later /exit teardown cannot hang on its exit wait.
 		void ctx.manager.stop(id).catch(() => {});
 	}
-	const output = runtime.fullOutput().trimEnd();
+	const formatted = formatTerminalToolOutput(runtime.fullOutput());
+	const output = formatted.text;
 	// Aborted runs report "Command aborted" (core bash parity) whether the exit
 	// settled normally or the kill grace released the wait. `outcome` matters
 	// beyond that only for the timeout grace, where exitResult is still null.
@@ -136,7 +146,12 @@ async function runForeground(
 	if (exit && exit.exitCode !== 0 && exit.exitCode !== null) {
 		return errorResult(`${output ? `${output}\n\n` : ""}Command exited with code ${exit.exitCode}`);
 	}
-	return textResult(output || "(no output)", { details: { status } });
+	return textResult(output || "(no output)", {
+		details: {
+			status,
+			...(formatted.truncated ? { truncation: formatted.truncation } : {}),
+		},
+	});
 }
 
 async function runBackground(
@@ -153,7 +168,7 @@ async function runBackground(
 
 	// Capture any output the command emits within a short grace window (or its exit).
 	await Promise.race([delay(BACKGROUND_START_GRACE_MS), runtime.session.waitExit()]);
-	const early = runtime.readDelta().text.trimEnd();
+	const early = formatTerminalToolOutput(runtime.readDelta().text).text;
 	const header = `Command running in background with ID: ${id}`;
 	const backendNote =
 		runtime.backend === "pipe-fallback"
