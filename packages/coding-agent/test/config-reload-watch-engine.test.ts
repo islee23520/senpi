@@ -276,31 +276,48 @@ describe("config reload watch engine", () => {
 	it("uses the production fs.watch adapter for recursive directory events", async () => {
 		tempDir = mkdtempSync(join(tmpdir(), "senpi-config-reload-watch-"));
 		const settingsPath = join(tempDir, "settings.json");
+		const watchReadyPath = join(tempDir, "watch-ready.txt");
 		writeFileSync(settingsPath, "before");
-		let resolveChange: ((change: { readonly changedPaths: readonly string[] }) => void) | undefined;
-		const changed = new Promise<{ readonly changedPaths: readonly string[] }>((resolve) => {
-			resolveChange = resolve;
+		writeFileSync(watchReadyPath, "before");
+		let resolveReady: (() => void) | undefined;
+		let resolveSettingsChange: ((change: { readonly changedPaths: readonly string[] }) => void) | undefined;
+		const watcherReady = new Promise<void>((resolve) => {
+			resolveReady = resolve;
+		});
+		const settingsChanged = new Promise<{ readonly changedPaths: readonly string[] }>((resolve) => {
+			resolveSettingsChange = resolve;
 		});
 		createEngine({
-			targets: [{ id: "settings", kind: "dir-recursive", path: tempDir, allowList: ["settings.json"] }],
+			targets: [
+				{ id: "settings", kind: "dir-recursive", path: tempDir, allowList: ["settings.json", "watch-ready.txt"] },
+			],
 			subscribe: createFsWatchEventSource(),
-			onRealChange: (change) => resolveChange?.(change),
+			onRealChange: (change) => {
+				if (change.changedPaths.includes(watchReadyPath)) resolveReady?.();
+				if (change.changedPaths.includes(settingsPath)) resolveSettingsChange?.(change);
+			},
 		});
 
-		writeFileSync(settingsPath, "after");
-		let timeout: ReturnType<typeof setTimeout> | undefined;
-		try {
-			const result = await Promise.race([
-				changed,
-				new Promise<never>((_resolve, reject) => {
-					timeout = setTimeout(() => reject(new Error("fs.watch change was not delivered")), 2_000);
-				}),
-			]);
-			expect(result.changedPaths).toEqual([settingsPath]);
-		} finally {
-			if (timeout) {
-				clearTimeout(timeout);
+		const awaitChange = async <T>(change: Promise<T>, label: string): Promise<T> => {
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+			try {
+				return await Promise.race([
+					change,
+					new Promise<never>((_resolve, reject) => {
+						timeout = setTimeout(() => reject(new Error(`fs.watch ${label} was not delivered`)), 2_000);
+					}),
+				]);
+			} finally {
+				if (timeout) clearTimeout(timeout);
 			}
-		}
+		};
+
+		// Wait for an event from this exact engine watcher before making the assertion write.
+		writeFileSync(watchReadyPath, "armed");
+		await awaitChange(watcherReady, "readiness event");
+		writeFileSync(settingsPath, "after");
+		const result = await awaitChange(settingsChanged, "settings.json change");
+
+		expect(result.changedPaths).toEqual([settingsPath]);
 	});
 });

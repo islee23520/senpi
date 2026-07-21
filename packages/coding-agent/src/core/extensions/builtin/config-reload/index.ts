@@ -556,7 +556,9 @@ function externalTargetToWatchTarget(
 
 function literalFilterNames(filterGlobs: readonly string[] | undefined): string[] | undefined {
 	if (!filterGlobs) return undefined;
-	const literalNames = filterGlobs.filter((filterGlob) => !filterGlob.includes("*") && !filterGlob.includes("/") && !filterGlob.includes("\\\\"));
+	const literalNames = filterGlobs.filter(
+		(filterGlob) => !filterGlob.includes("*") && !filterGlob.includes("/") && !filterGlob.includes("\\\\"),
+	);
 	return literalNames.length > 0 ? literalNames : undefined;
 }
 
