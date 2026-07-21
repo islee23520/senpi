@@ -262,7 +262,8 @@ describe("/mcp command suite", () => {
 		runner.setUIContext(createUi(), "tui");
 		const ctx = runner.createCommandContext();
 
-		const { command } = await loadCommand();
+		const commandActiveTools: string[] = [];
+		const { command } = await loadCommand(commandActiveTools);
 		await command.handler("reconnect fixture", ctx);
 		await awaitMcpToolRegistration("fixture");
 
@@ -270,7 +271,9 @@ describe("/mcp command suite", () => {
 			.getServerSnapshots()
 			.find((s) => s.name === "fixture");
 		expect(snapshot?.source).toBe("extension");
-		expect(pi.activeTools).toContain("mcp_fixture_tool_1");
+		// Reconnect attaches through the /mcp command extension's API, not the
+		// fake API used to seed the service before the command runner exists.
+		expect(commandActiveTools).toContain("mcp_fixture_tool_1");
 	});
 
 	it("reports fixture test success with elapsed milliseconds", async () => {
@@ -326,21 +329,23 @@ function makeCommandRoot(slug: string): TestRoot {
 	return root;
 }
 
-async function loadCommand(): Promise<{
+async function loadCommand(activeTools?: string[]): Promise<{
 	command: NonNullable<Extension["commands"] extends Map<string, infer T> ? T : never>;
 	extension: Extension;
 }> {
-	const extension = await loadMcpExtension();
+	const extension = await loadMcpExtension(activeTools);
 	const command = extension.commands.get("mcp");
 	expect(command).toBeDefined();
 	if (!command) throw new Error("missing mcp command");
 	return { command, extension };
 }
 
-function loadMcpExtension(): Promise<Extension> {
+function loadMcpExtension(activeTools: string[] = []): Promise<Extension> {
 	const runtime = createExtensionRuntime();
-	runtime.getActiveTools = () => [];
-	runtime.setActiveTools = () => {};
+	runtime.getActiveTools = () => activeTools;
+	runtime.setActiveTools = (toolNames) => {
+		activeTools.splice(0, activeTools.length, ...toolNames);
+	};
 	return loadExtensionFromFactory(mcpExtension, process.cwd(), createEventBus(), runtime, "<mcp-command-test>");
 }
 

@@ -1,5 +1,28 @@
 # Core Extensions Changes
 
+## 2026-07-21 - Config-reload builtin registration
+
+### What changed
+
+- Registered the default-on `config-reload` builtin after settings-dependent builtins and before final `mcp` registration. It hash-gates configuration filesystem changes, validates parseable built-in surfaces before requesting the existing session reload flow, and publishes the `config-watch:*` in-process protocol for external registrations.
+
+### Why
+
+The reload-request context seam below lets the builtin reuse the host reload path without making reload a model tool. Keeping MCP last preserves its provider-payload observation ordering.
+
+
+## 2026-07-21 - Extension reload request seam
+
+### What changed
+
+- `ExtensionContext` now exposes optional `requestReload()` and `isCompacting()` accessors. The runner promotes a host-provided command reload action into event and tool contexts, coalescing concurrent requests; hosts without that action expose no reload method.
+- `AgentSession` binds `isCompacting()` to its unified auto/manual/branch-summary controller state. Interactive shortcut contexts expose the same pair.
+
+### Why
+
+Config-reload extensions need to request the existing host reload flow only when available and defer while compaction is active. A resolved interactive request is not proof of reload because the host deliberately warn-drops reloads while streaming or compacting.
+
+
 ## 2026-07-20 - recovery model config is public to provider extensions
 
 ### What changed

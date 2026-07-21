@@ -13,6 +13,7 @@ import {
 import { getMcpService, resetMcpServiceForTests } from "../../src/core/extensions/builtin/mcp/service.ts";
 import {
 	attach,
+	awaitMcpTool,
 	awaitMcpToolRegistration,
 	capturingPi,
 	mcpRoot as makeMcpRoot,
@@ -59,6 +60,7 @@ describe("mcp resources", () => {
 		const pi = capturingPi();
 		await attach(root, pi);
 		await awaitMcpToolRegistration("fx");
+		await awaitMcpTool(pi, "mcp_list_resources");
 
 		expect(pi.getActiveTools()).toContain("mcp_list_resources");
 		const list = await registeredTool(pi, "mcp_list_resources").execute(
@@ -99,6 +101,7 @@ describe("mcp resources", () => {
 		const pi = capturingPi();
 		await attach(root, pi);
 		await awaitMcpToolRegistration("fx");
+		await awaitMcpTool(pi, "mcp_list_resources");
 		const servers = () => getMcpService().getMcpResourceServers();
 
 		const ok = await expandMcpResourceMentions("Use @mcp:fx/fixture://resource/one please", servers);

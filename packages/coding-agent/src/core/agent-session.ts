@@ -3479,6 +3479,7 @@ export class AgentSession {
 					void this.abort();
 				},
 				hasPendingMessages: () => this.pendingMessageCount > 0,
+				isCompacting: () => this.isCompacting,
 				shutdown: () => {
 					this._extensionShutdownHandler?.();
 				},
