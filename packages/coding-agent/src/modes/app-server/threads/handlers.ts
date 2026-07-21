@@ -15,7 +15,7 @@ import { connectionId, objectValue, optionalString, requiredString } from "./han
 import { threadItemsListResponse, threadTurnsListResponse } from "./history.ts";
 import { listThreadsResponse, loadedThreadsResponse } from "./list-handlers.ts";
 import { registerThreadMetadataHandlers } from "./metadata-handlers.ts";
-import { type ThreadEntry, ThreadNotFoundError, type ThreadRegistry } from "./registry.ts";
+import { type ThreadEntry, ThreadNotFoundError, type ThreadRegistry, type WireThread } from "./registry.ts";
 import { threadSearchResponse } from "./search.ts";
 import { ThreadSearchCache } from "./search-cache.ts";
 import { threadSearchOccurrencesResponse } from "./search-occurrences.ts";
@@ -129,13 +129,13 @@ class ThreadLifecycleHandlers {
 				method: "thread/loaded/list",
 				handler: (context) => loadedThreadsResponse(context.request.params, this.threads),
 			},
-			{ method: "thread/name/set", handler: (context) => this.setName(context.request) },
-			{ method: "thread/archive", handler: (context) => this.archive(context.request) },
+			{ method: "thread/name/set", handler: (context) => this.setName(context.connection, context.request) },
+			{ method: "thread/archive", handler: (context) => this.archive(context.connection, context.request) },
 			{
 				method: "thread/unarchive",
 				handler: (context) => this.unarchive(context.connection, context.request),
 			},
-			{ method: "thread/delete", handler: (context) => this.delete(context.request) },
+			{ method: "thread/delete", handler: (context) => this.delete(context.connection, context.request) },
 			{
 				method: "thread/unsubscribe",
 				handler: (context) => this.unsubscribe(context.connection, context.request),
@@ -195,7 +195,9 @@ class ThreadLifecycleHandlers {
 		this.attachThread(entry);
 		this.subscribe(entry, connectionId(connection));
 		const response = await this.runtimeResponse(entry, false, { approvalPolicy: requestedApprovalPolicy(params) });
-		this.notifications.broadcast({ method: "thread/started", params: { thread: response.thread } });
+		this.deferOrRun(connection, () => {
+			this.notifications.broadcast({ method: "thread/started", params: { thread: response.thread } });
+		});
 		return response;
 	}
 
@@ -206,6 +208,10 @@ class ThreadLifecycleHandlers {
 			const entry = await this.threads.resumeThread(threadId);
 			this.attachThread(entry);
 			this.subscribe(entry, connectionId(connection));
+			this.notifications.broadcast({
+				method: "thread/status/changed",
+				params: { threadId, status: { type: "idle" } },
+			});
 			return {
 				...(await this.runtimeResponse(entry, true)),
 				initialTurnsPage: null,
@@ -225,7 +231,9 @@ class ThreadLifecycleHandlers {
 		this.attachThread(entry);
 		this.subscribe(entry, connectionId(connection));
 		const response = await this.runtimeResponse(entry, true, { forkedFromId: sourceThreadId });
-		this.notifications.broadcast({ method: "thread/started", params: { thread: response.thread } });
+		this.deferOrRun(connection, () => {
+			this.notifications.broadcast({ method: "thread/started", params: { thread: response.thread } });
+		});
 		return response;
 	}
 
@@ -237,13 +245,15 @@ class ThreadLifecycleHandlers {
 		return { thread: await buildWireThread(entry, this.turnLog, params.includeTurns === true) };
 	}
 
-	private async setName(request: RpcRequest): Promise<Record<string, never>> {
+	private async setName(connection: RegistryConnection, request: RpcRequest): Promise<Record<string, never>> {
 		const params = objectValue(request.params);
 		const threadId = requiredString(params.threadId, "threadId");
 		const name = requiredString(params.name, "name");
 		const entry = await this.threads.resumeThread(threadId);
 		entry.session.setSessionName(name);
-		this.notifications.broadcast({ method: "thread/name/updated", params: { threadId, threadName: name } });
+		this.deferOrRun(connection, () => {
+			this.notifications.broadcast({ method: "thread/name/updated", params: { threadId, threadName: name } });
+		});
 		return {};
 	}
 
@@ -307,26 +317,39 @@ class ThreadLifecycleHandlers {
 		});
 	}
 
-	private async archive(request: RpcRequest): Promise<Record<string, never>> {
+	private async archive(connection: RegistryConnection, request: RpcRequest): Promise<Record<string, never>> {
 		const params = objectValue(request.params);
 		const threadId = requiredString(params.threadId, "threadId");
 		const entry = await this.threads.resumeThread(threadId);
 		this.clearIdleTimer(threadId);
-		await this.archiveState.markArchived(this.threads.buildThread(entry));
+		const archivedStatus: WireThread["status"] = { type: "notLoaded" };
+		await this.archiveState.markArchived({ ...this.threads.buildThread(entry), status: archivedStatus });
 		this.threads.unloadThread(threadId);
 		this.notifications.removeThread(threadId);
-		this.notifications.broadcast({ method: "thread/archived", params: { threadId } });
+		this.notifications.broadcast({
+			method: "thread/status/changed",
+			params: { threadId, status: NOT_LOADED_STATUS },
+		});
+		this.deferOrRun(connection, () => {
+			this.notifications.broadcast({ method: "thread/archived", params: { threadId } });
+		});
 		return {};
 	}
 
-	private async delete(request: RpcRequest): Promise<Record<string, never>> {
+	private async delete(connection: RegistryConnection, request: RpcRequest): Promise<Record<string, never>> {
 		const params = objectValue(request.params);
 		const threadId = requiredString(params.threadId, "threadId");
 		this.clearIdleTimer(threadId);
 		await this.archiveState.clearArchived(threadId);
 		await this.threads.deleteThread(threadId);
 		this.notifications.removeThread(threadId);
-		this.notifications.broadcast({ method: "thread/deleted", params: { threadId } });
+		this.notifications.broadcast({
+			method: "thread/status/changed",
+			params: { threadId, status: NOT_LOADED_STATUS },
+		});
+		this.deferOrRun(connection, () => {
+			this.notifications.broadcast({ method: "thread/deleted", params: { threadId } });
+		});
 		return {};
 	}
 
@@ -350,6 +373,10 @@ class ThreadLifecycleHandlers {
 			notify();
 		}
 		return { thread };
+	}
+
+	private deferOrRun(connection: RegistryConnection, action: () => void): void {
+		if (this.deferUntilResponded?.(connectionId(connection), action) !== true) action();
 	}
 
 	private unsubscribe(connection: RegistryConnection, request: RpcRequest): ThreadUnsubscribeResponse {

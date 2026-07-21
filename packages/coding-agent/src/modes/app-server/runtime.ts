@@ -9,6 +9,7 @@ import { ApprovalBridge, createAppServerUIContext } from "./server/approvals.ts"
 import { NotificationRouter } from "./server/notifications.ts";
 import type { ServerCore } from "./server/server-core.ts";
 import { registerAppServerSkillMethods } from "./server/skills.ts";
+import { connectionId } from "./threads/handler-params.ts";
 import { registerThreadLifecycleHandlers, type ThreadLifecycleController } from "./threads/handlers.ts";
 import { createMcpWireStatusAdapter, createProcessMcpWireStatusAdapter } from "./threads/mcp-wire-status.ts";
 import { type AppServerSessionResult, ThreadNotFoundError, ThreadRegistry } from "./threads/registry.ts";
@@ -94,7 +95,7 @@ export function createAppServerRuntime(requestShutdown: (reason: string) => void
 		emitToThread: (threadId, notification) => notifications.toThread(threadId, notification),
 		broadcast: (notification) => notifications.broadcast(notification),
 	});
-	registerTurnHandlers(registry, turns);
+	registerTurnHandlers(registry, turns, core);
 
 	lifecycle = registerThreadLifecycleHandlers(registry, {
 		threads,
@@ -149,10 +150,23 @@ async function createBoundAppServerSession(
 	return { ...result, mcpWireStatusAdapter };
 }
 
-function registerTurnHandlers(registry: MethodRegistry, turns: TurnEngineApi): void {
+function registerTurnHandlers(registry: MethodRegistry, turns: TurnEngineApi, core: ServerCore): void {
+	const deferForResponse = async <T>(
+		connection: Parameters<MethodRegistry["dispatch"]>[0],
+		run: (defer: (action: () => void) => boolean) => Promise<T>,
+	): Promise<T> => {
+		const actions: Array<() => void> = [];
+		const result = await run((action) => {
+			actions.push(action);
+			return true;
+		});
+		for (const action of actions) core.deferUntilResponded(connectionId(connection), action);
+		return result;
+	};
 	registry.register("turn/start", {
 		scope: "thread",
-		handler: (context) => turns.startTurn(turnStartParams(context.request)),
+		handler: (context) =>
+			deferForResponse(context.connection, (defer) => turns.startTurn(turnStartParams(context.request), defer)),
 	});
 	registry.register("turn/steer", {
 		scope: "thread",
@@ -160,6 +174,9 @@ function registerTurnHandlers(registry: MethodRegistry, turns: TurnEngineApi): v
 	});
 	registry.register("turn/interrupt", {
 		scope: "thread",
-		handler: (context) => turns.interruptTurn(turnInterruptParams(context.request)),
+		handler: (context) =>
+			deferForResponse(context.connection, (defer) =>
+				turns.interruptTurn(turnInterruptParams(context.request), defer),
+			),
 	});
 }

@@ -27,6 +27,7 @@ import {
 	type TurnEngineSessionEvent,
 	type TurnEngineStore,
 	type TurnEngineThreadEntry,
+	type TurnNotificationDeferral,
 	type TurnWireStatus,
 	toTurnEngineError,
 	wireItemToJson,
@@ -70,7 +71,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		this.broadcast = options.broadcast;
 	}
 
-	startTurn(params: TurnStartParams): Promise<TurnStartResponse> {
+	startTurn(params: TurnStartParams, deferNotifications?: TurnNotificationDeferral): Promise<TurnStartResponse> {
 		this.getLoadedThreadOrThrow(params.threadId);
 
 		let didSettle = false;
@@ -94,11 +95,18 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 						startedAt,
 						status: "running" satisfies LoggedStartStatus,
 					});
-					this.emitToThread(params.threadId, {
-						method: "turn/started",
-						params: { threadId: params.threadId, turn },
-					});
-					this.emitUserMessage(params.threadId, turnId, startedAtMs, userMessage);
+					const emitInitialNotifications = (): void => {
+						this.broadcast({
+							method: "thread/status/changed",
+							params: { threadId: params.threadId, status: { type: "active", activeFlags: [] } },
+						});
+						this.emitToThread(params.threadId, {
+							method: "turn/started",
+							params: { threadId: params.threadId, turn },
+						});
+						this.emitUserMessage(params.threadId, turnId, startedAtMs, userMessage);
+					};
+					if (deferNotifications?.(emitInitialNotifications) !== true) emitInitialNotifications();
 
 					let pendingTurn: PendingTurn;
 					const completion = new Promise<void>((complete) => {
@@ -109,6 +117,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 							resolve: complete,
 							interrupted: false,
 							completed: false,
+							deferTerminalNotifications: undefined,
 						};
 						this.pendingByThreadId.set(params.threadId, pendingTurn);
 					});
@@ -187,7 +196,10 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		return { turnId: activeTurn.turnId };
 	}
 
-	async interruptTurn(params: TurnInterruptParams): Promise<TurnInterruptResponse> {
+	async interruptTurn(
+		params: TurnInterruptParams,
+		deferNotifications?: TurnNotificationDeferral,
+	): Promise<TurnInterruptResponse> {
 		const entry = this.getLoadedThreadOrThrow(params.threadId);
 		const activeTurn = entry.activeTurn;
 		if (!activeTurn) {
@@ -199,6 +211,7 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		const pending = this.pendingByThreadId.get(params.threadId);
 		if (pending?.turnId === params.turnId) {
 			pending.interrupted = true;
+			pending.deferTerminalNotifications = deferNotifications;
 		}
 		await entry.session.abort();
 		if (entry.activeTurn?.turnId === params.turnId) {
@@ -243,8 +256,11 @@ class TurnEngine<Entry extends TurnEngineThreadEntry> {
 		entry.status = "idle";
 		entry.updatedAt = new Date(completedAtMs).toISOString();
 		this.pendingByThreadId.delete(threadId);
-		emitTurnTerminalNotifications(threadId, turn, this.emitToThread);
-		this.broadcast({ method: "thread/status/changed", params: { threadId, status: { type: "idle" } } });
+		const emitTerminalNotifications = (): void => {
+			this.broadcast({ method: "thread/status/changed", params: { threadId, status: { type: "idle" } } });
+			emitTurnTerminalNotifications(threadId, turn, this.emitToThread);
+		};
+		if (pending.deferTerminalNotifications?.(emitTerminalNotifications) !== true) emitTerminalNotifications();
 		pending.resolve();
 	}
 

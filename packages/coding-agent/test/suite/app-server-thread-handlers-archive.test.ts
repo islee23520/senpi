@@ -103,6 +103,11 @@ describe("app-server thread archive lifecycle handlers", () => {
 
 		// Then: archive emits the typed notification, unloads the runtime, and list filters by archive state.
 		expect(connection.received).toEqual([
+			{
+				method: "thread/status/changed",
+				params: { threadId: archived, status: { type: "notLoaded" } },
+				emittedAtMs: expect.any(Number),
+			},
 			{ method: "thread/archived", params: { threadId: archived }, emittedAtMs: expect.any(Number) },
 		]);
 		expect(() => threads.getLoadedThread(archived)).toThrow();
@@ -128,6 +133,11 @@ describe("app-server thread archive lifecycle handlers", () => {
 
 		// Then: the delete notification is broadcast and the thread no longer appears.
 		expect(connection.received).toEqual([
+			{
+				method: "thread/status/changed",
+				params: { threadId, status: { type: "notLoaded" } },
+				emittedAtMs: expect.any(Number),
+			},
 			{ method: "thread/deleted", params: { threadId }, emittedAtMs: expect.any(Number) },
 		]);
 		expect(dataArray(responseResult(loaded))).not.toContain(threadId);
@@ -176,6 +186,9 @@ describe("app-server thread archive lifecycle handlers", () => {
 		const threadId = "55555555-5555-4555-8555-555555555555";
 		await writePersistedSession(root, threadId);
 		await registry.dispatch(connection, { id: 31, method: "thread/archive", params: { threadId } });
+		const deferredArchive = deferredActions.shift();
+		if (!deferredArchive) throw new Error("archive did not defer its broadcast");
+		await deferredArchive();
 		connection.received.length = 0;
 		const archived = await registry.dispatch(connection, {
 			id: 32,
