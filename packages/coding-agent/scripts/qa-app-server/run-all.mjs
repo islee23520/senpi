@@ -11,6 +11,7 @@ const scripts = Object.freeze([
 	["multiclient", "multiclient.mjs"],
 	["approval", "approval-roundtrip.mjs"],
 	["real-client", "real-client.mjs"],
+	["real-client-sweep", "real-client-sweep.mjs"],
 ]);
 const protectedLiveDaemonPort = 18000 + 789;
 

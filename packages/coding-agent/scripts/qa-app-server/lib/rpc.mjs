@@ -14,6 +14,7 @@ export class StdioRpcClient {
 		this.transcript = transcript;
 		this.label = label;
 		this.messages = [];
+		this.messageWaiters = new Set();
 		this.buffer = "";
 		child.stdout.on("data", (chunk) => this.readStdout(chunk.toString("utf8")));
 		child.stderr.on("data", (chunk) => this.transcript.push(`[${this.label} stderr] ${chunk.toString("utf8").trimEnd()}`));
@@ -49,6 +50,10 @@ export class StdioRpcClient {
 		this.child.stdin.end();
 	}
 
+	waitForMessageEvent(predicate, fromIndex = 0, timeoutMs = 20000) {
+		return waitForMessageEvent(this, predicate, fromIndex, timeoutMs);
+	}
+
 	readStdout(text) {
 		this.buffer += text;
 		for (;;) {
@@ -67,8 +72,10 @@ export class StdioRpcClient {
 	}
 
 	record(message) {
+		const index = this.messages.length;
 		this.messages.push(message);
 		this.transcript.push(`[${this.label} <<] ${JSON.stringify(message)}`);
+		notifyMessageWaiters(this, message, index);
 	}
 }
 
@@ -78,6 +85,7 @@ export class WebSocketRpcClient {
 		this.transcript = transcript;
 		this.label = label;
 		this.messages = [];
+		this.messageWaiters = new Set();
 		socket.on("message", (data, isBinary) => {
 			if (isBinary) {
 				this.record({ error: "binary websocket frame" });
@@ -124,6 +132,10 @@ export class WebSocketRpcClient {
 		return waitFor(() => this.messages.slice(fromIndex).find(predicate), timeoutMs, `${this.label} message`);
 	}
 
+	waitForMessageEvent(predicate, fromIndex = 0, timeoutMs = 20000) {
+		return waitForMessageEvent(this, predicate, fromIndex, timeoutMs);
+	}
+
 	close() {
 		this.socket.terminate();
 	}
@@ -134,8 +146,10 @@ export class WebSocketRpcClient {
 	}
 
 	record(message) {
+		const index = this.messages.length;
 		this.messages.push(message);
 		this.transcript.push(`[${this.label} <<] ${JSON.stringify(message)}`);
+		notifyMessageWaiters(this, message, index);
 	}
 }
 
@@ -201,6 +215,28 @@ export function upgradeStatus(port, headers = {}) {
 		req.once("error", rejectStatus);
 		req.end();
 	});
+}
+
+function waitForMessageEvent(client, predicate, fromIndex, timeoutMs) {
+	const existing = client.messages.slice(fromIndex).find(predicate);
+	if (existing !== undefined) return Promise.resolve(existing);
+	return new Promise((resolveWait, rejectWait) => {
+		const waiter = { predicate, fromIndex, resolveWait, rejectWait, timeout: undefined };
+		waiter.timeout = setTimeout(() => {
+			client.messageWaiters.delete(waiter);
+			rejectWait(new ProbeError(`Timed out waiting for ${client.label} message event`));
+		}, timeoutMs);
+		client.messageWaiters.add(waiter);
+	});
+}
+
+function notifyMessageWaiters(client, message, index) {
+	for (const waiter of [...client.messageWaiters]) {
+		if (index < waiter.fromIndex || !waiter.predicate(message)) continue;
+		clearTimeout(waiter.timeout);
+		client.messageWaiters.delete(waiter);
+		waiter.resolveWait(message);
+	}
 }
 
 export function waitFor(read, timeoutMs, label) {
