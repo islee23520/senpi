@@ -63,6 +63,7 @@ function makeHarness(
 		lifecycle: "lazy",
 		connectTimeoutMs: 4000,
 		requestTimeoutMs: 4000,
+		startupTimeoutMs: 250,
 		idleTimeoutMin: 10,
 		exposure: "auto",
 		logLevel: "info",

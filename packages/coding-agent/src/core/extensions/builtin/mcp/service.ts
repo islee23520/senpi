@@ -33,8 +33,8 @@ import type {
 } from "./service-types.ts";
 import {
 	connectAndRefreshMcpCatalog,
-	ignoreStartupNeedsAuth,
 	raceMcpStartupConnect,
+	resolveMcpStartupTimeoutMs,
 	shouldRaceMcpStartup,
 } from "./startup-race.ts";
 
@@ -313,7 +313,13 @@ export class McpService {
 			this.#connections.set(key, entry);
 			this.#connectionKeysByName.set(name, key);
 			this.#wireListChanged(entry);
-			if (shouldRaceMcpStartup(server.config.lifecycle)) {
+			// Every startup connect is bounded by the startup race and continues in
+			// the background past the deadline (eager/keep-alive always; a cold lazy
+			// server that has no cached catalog also races so a slow/wedged server
+			// never gates attachSession -> before_agent_start -> the first turn).
+			// A cached lazy server needs no startup connect: its tools come from the
+			// cache and it connects on demand at tool-call time.
+			if (shouldRaceMcpStartup(server.config.lifecycle) || cachedCatalog === undefined) {
 				connects.push(
 					raceMcpStartupConnect({
 						entry,
@@ -321,10 +327,9 @@ export class McpService {
 						registerDirectTools: (targetPi) => this.#registerDirectTools(targetPi),
 						serverConfig: server.config,
 						shouldRefreshTools: () => !this.#disposed && this.#toolRefreshGeneration === toolRefreshGeneration,
+						deadlineMs: resolveMcpStartupTimeoutMs(server.config.startupTimeoutMs),
 					}),
 				);
-			} else if (cachedCatalog === undefined) {
-				connects.push(ignoreStartupNeedsAuth(entry, connectAndRefreshMcpCatalog(entry, server.config)));
 			}
 		}
 		await Promise.all(connects);
