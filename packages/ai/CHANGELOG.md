@@ -6,6 +6,8 @@
 
 ### Added
 
+- Added Claude text tool-call recovery for leaked bare or `antml:` invokes, with code/thinking exclusions, eager streaming projection, native-call ordering, fail-closed collision and abort handling, bounded parsing, and native history replay support.
+
 ### Changed
 
 ### Fixed

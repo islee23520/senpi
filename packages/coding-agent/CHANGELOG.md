@@ -6,6 +6,8 @@
 
 ### Added
 
+- Added configurable Claude text tool-call recovery across both `ModelRuntime` streaming entry points, `models.json` definitions/overrides, persisted sessions, and isolated Anthropic/OpenAI mock-loop QA.
+
 ### Changed
 
 ### Fixed

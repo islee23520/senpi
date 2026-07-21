@@ -8,9 +8,11 @@ import type { OpenAICodexResponsesOptions } from "./api/openai-codex-responses.t
 import type { OpenAICompletionsOptions } from "./api/openai-completions.ts";
 import type { OpenAIResponsesOptions } from "./api/openai-responses.ts";
 import type { PiMessagesOptions } from "./api/pi-messages.ts";
+import type { Model } from "./model.ts";
 import type { AssistantMessageDiagnostic } from "./utils/diagnostics.ts";
 import type { AssistantMessageEventStream } from "./utils/event-stream.ts";
 
+export type { Model } from "./model.ts";
 export type { AssistantMessageEventStream } from "./utils/event-stream.ts";
 
 export type KnownApi =
@@ -801,36 +803,6 @@ export interface ModelCostTier extends ModelCostRates {
 export interface ModelCost extends ModelCostRates {
 	/** Request-wide pricing tiers. The highest matching input threshold applies to the full request. */
 	tiers?: ModelCostTier[];
-}
-
-// Model interface for the unified model system
-export interface Model<TApi extends Api> {
-	id: string;
-	name: string;
-	api: TApi;
-	provider: ProviderId;
-	baseUrl: string;
-	reasoning: boolean;
-	/**
-	 * Maps pi thinking levels to provider/model-specific values.
-	 * Missing keys use provider defaults. null marks a level as unsupported.
-	 */
-	thinkingLevelMap?: ThinkingLevelMap;
-	input: ("text" | "image" | "video")[];
-	cost: ModelCost;
-	contextWindow: number;
-	maxTokens: number;
-	headers?: Record<string, string>;
-	/** Default prompt-cache retention preference when the request omits one. */
-	cacheRetention?: CacheRetention;
-	/** Compatibility overrides for OpenAI-compatible APIs. If not set, auto-detected from baseUrl. */
-	compat?: TApi extends "openai-completions"
-		? OpenAICompletionsCompat
-		: TApi extends "openai-responses" | "openai-codex-responses"
-			? OpenAIResponsesCompat
-			: TApi extends "anthropic-messages"
-				? AnthropicMessagesCompat
-				: never;
 }
 
 export interface ImagesModel<TApi extends ImagesApi>
