@@ -338,7 +338,9 @@ describe("config reload builtin extension", () => {
 		const reload = vi.fn(async () => {});
 		const subscribe: ConfigReloadExtensionOptions["subscribe"] = (path, listener, options) => {
 			if (!existsSync(path)) throw Object.assign(new Error(`ENOENT: ${path}`), { code: "ENOENT" });
-			return watches.subscribe(path, listener, options);
+			const watch = watches.subscribe;
+			if (!watch) throw new Error("watch probe is not initialized");
+			return watch(path, listener, options);
 		};
 		configReloadExtension(extension.api, { agentDir, subscribe, logger });
 		const context = fakeContext({ cwd: agentDir, requestReload: reload });
