@@ -6,6 +6,7 @@
 
 ### Added
 
+- Documented the Codex HEAD app-server parity surface, protocol provenance, intentional `-32601` boundaries, and the source-oracle differential QA harness. The documentation now calls out deliberate behavior differences, including post-restart history reconstruction, aggregated turn diffs, partial thread settings, and honest account reads.
 - Added `antml` as a valid `compat.toolCallFormat` in custom `models.json` provider and model definitions: ANTML `<function_calls>`/`<invoke>` text-tool protocol with Claude-Code-style failure tolerance.
 - Added built-in llama.cpp router support with `/login` connection setup and `/llama` Hugging Face model search and downloads, explicit loading, unloading, and live progress. See [llama.cpp](docs/llama-cpp.md).
 - Added extension registration for complete pi-ai providers, including native authentication, model refresh, filtering, and streaming behavior.

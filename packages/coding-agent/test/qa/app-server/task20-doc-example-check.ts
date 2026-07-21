@@ -2,7 +2,6 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import {
 	type Exchange,
 	parseRecord,
@@ -81,6 +80,7 @@ const child = spawn("npx", ["tsx", "src/cli.ts", "app-server"], {
 		SENPI_CODING_AGENT_DIR: join(scratchRoot, "agent"),
 		SENPI_CODING_AGENT_SESSION_DIR: join(scratchRoot, "sessions"),
 	},
+	detached: process.platform !== "win32",
 	stdio: ["pipe", "pipe", "pipe"],
 });
 const reader = new LineReader(child);
@@ -127,6 +127,9 @@ try {
 	await sendDocumented({ id: 15, method: "thread/delete", params: { threadId: forkId } });
 	await sendDocumented({ id: 16, method: "thread/unsubscribe", params: { threadId } });
 	await sendDocumented({ id: 17, method: "thread/search", params: { searchTerm: "docs" } });
+	await sendDocumented({ id: 18, method: "thread/turns/list", params: { threadId } });
+	await sendDocumented({ id: 19, method: "thread/items/list", params: { threadId } });
+	await sendDocumented({ id: 20, method: "thread/compact/start", params: { threadId } });
 
 	if (!("result" in initialize.response)) {
 		throw new Error("initialize did not return a result");
@@ -142,10 +145,51 @@ try {
 	console.log(`EVIDENCE_PATH=${evidencePath}`);
 } finally {
 	child.stdin.end();
-	child.kill("SIGTERM");
-	await delay(100);
-	child.kill("SIGKILL");
+	await stopChild(child);
 	await rm(scratchRoot, { recursive: true, force: true });
+}
+
+async function stopChild(childProcess: ChildProcessWithoutNullStreams): Promise<void> {
+	if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
+	const closed = waitForChildClose(childProcess);
+	signalChildProcess(childProcess, "SIGTERM");
+	if (await settlesWithin(closed, 2_500)) return;
+	signalChildProcess(childProcess, "SIGKILL");
+	if (!(await settlesWithin(closed, 5_000))) {
+		throw new Error("documented app-server child did not exit during cleanup");
+	}
+}
+
+function waitForChildClose(childProcess: ChildProcessWithoutNullStreams): Promise<void> {
+	return new Promise((resolveClose, rejectClose) => {
+		childProcess.once("close", () => resolveClose());
+		childProcess.once("error", rejectClose);
+	});
+}
+
+function signalChildProcess(childProcess: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
+	if (childProcess.pid === undefined) return;
+	try {
+		process.kill(process.platform === "win32" ? childProcess.pid : -childProcess.pid, signal);
+	} catch (error: unknown) {
+		if (!(error instanceof Error) || !("code" in error) || error.code !== "ESRCH") throw error;
+	}
+}
+
+function settlesWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
+	return new Promise((resolveSettled) => {
+		const timer = setTimeout(() => resolveSettled(false), timeoutMs);
+		promise.then(
+			() => {
+				clearTimeout(timer);
+				resolveSettled(true);
+			},
+			() => {
+				clearTimeout(timer);
+				resolveSettled(true);
+			},
+		);
+	});
 }
 
 async function send(request: RpcRequest): Promise<Exchange> {
