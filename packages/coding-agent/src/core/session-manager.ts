@@ -1122,6 +1122,9 @@ export class SessionManager {
 	private _accumulateUsage(entry: SessionEntry): void {
 		if (entry.type !== "message" || entry.message.role !== "assistant") return;
 		const usage = entry.message.usage;
+		// Assistant messages persisted without usage (e.g. aborted/error turns in
+		// older session files) contribute nothing to the running totals.
+		if (!usage) return;
 		this.usageTotals.input += usage.input;
 		this.usageTotals.output += usage.output;
 		this.usageTotals.cacheRead += usage.cacheRead;
