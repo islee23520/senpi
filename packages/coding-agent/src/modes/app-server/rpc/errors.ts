@@ -131,11 +131,11 @@ export function overloadedError(): JsonRpcError {
 }
 
 export function notInitializedError(): JsonRpcError {
-	return { code: -32000, message: "Not initialized" };
+	return { code: -32600, message: "Not initialized" };
 }
 
 export function alreadyInitializedError(): JsonRpcError {
-	return { code: -32000, message: "Already initialized" };
+	return { code: -32600, message: "Already initialized" };
 }
 
 export function experimentalCapabilityError(method: string): JsonRpcError {
