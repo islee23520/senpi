@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -91,6 +91,71 @@ export function directNodeModulesPackageName(lockPath) {
 	return parts.length === 1 ? parts[0] : undefined;
 }
 
+export function listStagedPublishPackageNames(codingAgentNodeModules) {
+	const packageNames = [];
+	for (const entry of readdirSync(codingAgentNodeModules, { withFileTypes: true })) {
+		if (!entry.isDirectory() || entry.name.startsWith(".")) {
+			continue;
+		}
+		if (entry.name.startsWith("@")) {
+			const scopeDir = join(codingAgentNodeModules, entry.name);
+			for (const scoped of readdirSync(scopeDir, { withFileTypes: true })) {
+				if (scoped.isDirectory()) {
+					packageNames.push(`${entry.name}/${scoped.name}`);
+				}
+			}
+			continue;
+		}
+		packageNames.push(entry.name);
+	}
+	return packageNames.sort((a, b) => a.localeCompare(b));
+}
+
+// The publish tarball must be fully self-contained: every runtime dependency edge in
+// the coding-agent manifest (registry deps AND the 5 vendored workspace packages) is
+// staged into packages/coding-agent/node_modules, and bundleDependencies lists every
+// staged package. npm then never needs the registry at install time. The historical
+// partial bundle (only the 5 workspace packages + their closure) forced npm to fetch
+// the other runtime deps from the registry, where arborist nondeterministically tried
+// to resolve the registry-absent `^2026.x` workspace specs (ETARGET) and aborted reify
+// mid-flight, leaving arbitrary deps (cross-spawn, which, @modelcontextprotocol/sdk)
+// missing from the installed CLI (ERR_MODULE_NOT_FOUND).
+export function stagePublishManifest(repoRoot) {
+	const codingAgentDir = join(repoRoot, "packages/coding-agent");
+	const manifestPath = join(codingAgentDir, "package.json");
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	const stagedPackageNames = listStagedPublishPackageNames(join(codingAgentDir, "node_modules"));
+	const stagedSet = new Set(stagedPackageNames);
+
+	const runtimeDependencyFields = ["dependencies", "optionalDependencies"];
+	const missing = [];
+	for (const field of runtimeDependencyFields) {
+		for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+			if (/^(file|link|workspace):/.test(spec)) {
+				throw new Error(
+					`packages/coding-agent/package.json ${field}.${name} uses a local spec (${spec}); the published tarball must not reference local paths.`,
+				);
+			}
+			if (!stagedSet.has(name)) {
+				missing.push(name);
+			}
+		}
+	}
+	if (missing.length > 0) {
+		throw new Error(
+			`packages/coding-agent/node_modules is missing staged runtime dependencies: ${missing.join(", ")}. Run npm install before publishing.`,
+		);
+	}
+
+	manifest.bundleDependencies = stagedPackageNames;
+	// npm accepts both spellings; the checked-in manifest carries both, so keep them in sync.
+	if (manifest.bundledDependencies !== undefined) {
+		manifest.bundledDependencies = [...stagedPackageNames];
+	}
+	writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
+	return stagedPackageNames;
+}
+
 export function copyPublishDependencies(repoRoot) {
 	// Staging manifest for the bundled publish tree. NOT npm-shrinkwrap.json: shipping a
 	// file named npm-shrinkwrap.json breaks bundleDependencies installs (see the guard in
@@ -125,6 +190,23 @@ export function assertSenpiPackedWorkspaceFiles(packed, options = {}) {
 	const nativeTargets = options.nativePrebuildTargets ?? [nativePrebuildTarget()];
 	const prebuildFiles = new Set(nativeTargets.map(nativePrebuildFile));
 	const filePaths = new Set((packed.files ?? []).map((file) => file.path));
+
+	// Every runtime dependency of the publish manifest must be vendored in the tarball.
+	// npm only packs node_modules entries reachable from bundleDependencies, so a dep
+	// missing here means it would be fetched from the registry at install time — the
+	// exact failure mode (nondeterministic ERR_MODULE_NOT_FOUND) the full bundle removes.
+	const missingRuntimeDependencies = [];
+	for (const dependencyName of options.runtimeDependencies ?? []) {
+		const packageJsonPath = `node_modules/${dependencyName}/package.json`;
+		if (!filePaths.has(`package/${packageJsonPath}`) && !filePaths.has(packageJsonPath)) {
+			missingRuntimeDependencies.push(dependencyName);
+		}
+	}
+	if (missingRuntimeDependencies.length > 0) {
+		throw new Error(
+			`senpi package tarball is missing vendored runtime dependencies: ${missingRuntimeDependencies.join(", ")}. Run scripts/prepare-senpi-bundled-workspaces.mjs before packing.`,
+		);
+	}
 
 	// npm ALWAYS packs a file literally named npm-shrinkwrap.json (files[]/.npmignore
 	// cannot exclude it). Shipped alongside bundleDependencies it is fatal: npm treats
@@ -202,6 +284,14 @@ export function prepareSenpiBundledWorkspaces(repoRoot = root) {
 			filter: (sourcePath) => shouldCopyWorkspaceFile(sourceRoot, sourcePath, workspace.sourceOnly),
 		});
 	}
+
+	// Rewrite the publish manifest LAST: bundleDependencies must mirror the staged
+	// node_modules exactly (all registry runtime deps + the 5 workspace packages), so
+	// npm pack vendors the complete runtime closure into the tarball. This dirties
+	// packages/coding-agent/package.json in the working tree; restore it with
+	// `git checkout -- packages/coding-agent/package.json` after packing/publishing.
+	const stagedPackageNames = stagePublishManifest(repoRoot);
+	console.log(`Staged ${stagedPackageNames.length} bundled packages for @code-yeongyu/senpi publish.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

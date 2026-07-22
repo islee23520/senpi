@@ -54,6 +54,16 @@ Manages workspace packages embedded in the published `@code-yeongyu/senpi` tarba
 - Validates every `requiredFiles` entry exists before staging; aborts with a clear list on failure.
 - `@earendil-works/pi-pty` also requires `native/index.js` and a platform prebuild file.
 
+The publish tarball is fully self-contained: `copyPublishDependencies` stages the ENTIRE
+runtime closure from `publish-deps.lock.json` (all registry deps + transitives, not just the
+workspace closure) into `packages/coding-agent/node_modules`, and `stagePublishManifest`
+rewrites the publish manifest so `bundleDependencies` lists every staged package while all
+`dependencies` edges (including the registry-absent `^2026.x` workspace specs) stay intact.
+npm then needs no registry fetch at install time; the previous partial bundle let arborist
+abort reify mid-flight and drop arbitrary registry deps (ERR_MODULE_NOT_FOUND).
+Staging dirties `packages/coding-agent/package.json`; restore it with `git checkout --`
+after packing/publishing.
+
 ## check-mcp-docs.test.mjs
 
 Reads `config-schema.ts` as raw text and extracts object-literal keys rather than importing

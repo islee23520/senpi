@@ -1,5 +1,32 @@
 # Local fork changes
 
+## 2026-07-22 — Fully self-contained publish tarball (npm packaging MODULE_NOT_FOUND fix)
+
+- Changed:
+  - `scripts/prepare-senpi-bundled-workspaces.mjs`
+  - `scripts/prepare-senpi-bundled-workspaces.test.mjs`
+  - `scripts/prepare-senpi-bundled-workspaces.prepare.test.mjs`
+  - `scripts/publish.mjs`
+  - `scripts/AGENTS.md`
+- Why: fresh `npm i -g @code-yeongyu/senpi` (both 2026.7.20-2 and 2026.7.22) nondeterministically
+  dropped registry runtime deps (cross-spawn, which, @modelcontextprotocol/sdk), leaving the CLI
+  dead with ERR_MODULE_NOT_FOUND. The publish tarball vendored only the 5 bundled workspace
+  packages + their closure; npm arborist, forced to fetch the remaining 39 runtime deps from the
+  registry, could hit ETARGET on the registry-absent `^2026.x` workspace specs and abort reify
+  mid-flight, leaving a half-installed tree.
+- What changed: staging now vendors the ENTIRE runtime closure (all registry deps + transitives
+  from `publish-deps.lock.json`, as before via `copyPublishDependencies`) and
+  `stagePublishManifest` rewrites the publish manifest at staging time so `bundleDependencies`
+  (and the `bundledDependencies` alias) lists every staged package. All `dependencies` edges —
+  including the 5 `^2026.x` workspace specs — are preserved; with the complete bundle npm needs
+  no registry fetch at install time. `stagePublishManifest` also rejects `file:`/`link:`/
+  `workspace:` specs and any declared runtime dep missing from the staged node_modules.
+  `assertSenpiPackedWorkspaceFiles` gained a `runtimeDependencies` pack check (wired in
+  `scripts/publish.mjs`) so a tarball missing any vendored runtime dep fails before publish.
+  `publish-deps.lock.json` remains staging-only and is never shipped; no new lifecycle-script
+  dependencies were added.
+- Merge-conflict risk: low. Release tooling only; no runtime source touched.
+
 ## 2026-07-21 — Codex HEAD app-server parity documentation refresh
 
 - Changed:
