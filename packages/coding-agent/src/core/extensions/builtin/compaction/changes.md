@@ -1,5 +1,19 @@
 # Builtin compaction extension changes
 
+## Preserve the in-flight prompt in remote-compaction payload replay (2026-07-22)
+
+- `index.ts`, `openai-remote.ts`, `openai-remote-convert.ts`: the `before_provider_request` replay after a
+  remote compaction rebuilt the payload from the persisted branch only. The in-flight user prompt is not yet
+  persisted at that point, so the replayed payload silently dropped it — the model never saw the first message
+  after a remote compaction. The `context` handler now stashes the not-yet-persisted tail messages
+  (`pendingProviderMessages`) and the rewrite appends their conversion after the branch-derived items.
+  Pre-existing on main; surfaced by the mixed-history e2e QA scenario.
+- Tests: `test/compaction/openai-remote-compaction.test.ts` (pending-prompt rewrite case) and
+  `.agents/skills/senpi-qa/scripts/compaction-remote-qa.mjs` (asserts the post-compaction payload carries the prompt).
+
+Expected upstream conflict zones: `builtin/compaction/index.ts` context/provider-request handlers,
+`builtin/compaction/openai-remote.ts` payload rewrite.
+
 ## OpenAI remote compaction gated on provider capability, not history provenance (2026-07-22)
 
 - `openai-remote-convert.ts` (new, extracted from `openai-remote.ts`): the remote-compaction route no longer

@@ -1,3 +1,4 @@
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { CompactionResult } from "../../../compaction/index.ts";
@@ -13,6 +14,7 @@ import type {
 } from "./openai-remote-convert.ts";
 import {
 	convertBranchEntries,
+	convertPendingMessages,
 	getOpenAiRemoteCompactionDetails,
 	isOpenAiContextCompactionItem,
 	isOpenAiRemoteCompactionOutputItem,
@@ -716,7 +718,7 @@ function leadingPromptMessages(input: unknown): OpenAiRemoteInputItem[] {
 
 export function rewriteOpenAiPayloadWithRemoteCompaction(
 	payload: unknown,
-	options: { model: Model<Api> | undefined; branchEntries: SessionEntry[] },
+	options: { model: Model<Api> | undefined; branchEntries: SessionEntry[]; pendingMessages?: AgentMessage[] },
 	emit?: EmitCompactionEvent,
 ): unknown | undefined {
 	if (!isOpenAiResponsesModel(options.model) || !isRecord(payload)) return undefined;
@@ -724,8 +726,16 @@ export function rewriteOpenAiPayloadWithRemoteCompaction(
 	if (!remote) return undefined;
 
 	const postCompactionItems = convertBranchEntries(options.branchEntries.slice(remote.index + 1), options.model);
+	// The in-flight prompt is not yet persisted in the branch at provider-request
+	// time; append it so the replayed payload still carries the user's message.
+	const pendingItems = convertPendingMessages(options.pendingMessages ?? [], options.model);
 
-	const input = [...leadingPromptMessages(payload.input), ...remote.details.replacementInput, ...postCompactionItems];
+	const input = [
+		...leadingPromptMessages(payload.input),
+		...remote.details.replacementInput,
+		...postCompactionItems,
+		...pendingItems,
+	];
 	emit?.({
 		version: 1,
 		action: "remote_payload_rewritten",

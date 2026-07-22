@@ -245,6 +245,15 @@ function convertLlmMessage(message: Message, messageIndex: number, model: Model<
 	}
 }
 
+/**
+ * Convert messages that are not yet persisted in the session branch (the
+ * in-flight prompt) into input items, so payload replay can append them after
+ * the branch-derived items.
+ */
+export function convertPendingMessages(messages: AgentMessage[], model: Model<Api>): OpenAiRemoteInputItem[] {
+	return convertToLlm(messages).flatMap((message, index) => convertLlmMessage(message, index, model));
+}
+
 export function getOpenAiRemoteCompactionDetails(value: unknown): OpenAiRemoteCompactionDetails | undefined {
 	if (!isRecord(value)) return undefined;
 	if (value.schema !== OPENAI_REMOTE_COMPACTION_SCHEMA || value.mode !== "openai-remote") return undefined;

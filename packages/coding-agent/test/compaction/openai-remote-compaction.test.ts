@@ -890,6 +890,80 @@ describe("OpenAI remote compaction", () => {
 		]);
 	});
 
+	it("appends the pending prompt that is not yet persisted in the branch", () => {
+		const remoteResult = buildOpenAiRemoteCompactionResult({
+			model: OPENAI_MODEL,
+			firstKeptEntryId: "u2",
+			tokensBefore: 1234,
+			requestInputItemCount: 5,
+			response: {
+				id: "resp_compact",
+				created_at: 1_775_000_001,
+				object: "response.compaction",
+				output: [
+					{
+						type: "message",
+						id: "u1_remote",
+						role: "user",
+						content: [{ type: "input_text", text: "Please inspect the build." }],
+					},
+					{ type: "compaction", id: "cmp_1", encrypted_content: "encrypted-summary" },
+				],
+			},
+		});
+		const branchEndingAtCompaction: SessionEntry[] = [
+			...openAiBranch(),
+			{
+				type: "compaction",
+				id: "compact",
+				parentId: "u2",
+				timestamp: new Date(1_775_000_002_000).toISOString(),
+				summary: remoteResult.summary,
+				firstKeptEntryId: remoteResult.firstKeptEntryId,
+				tokensBefore: remoteResult.tokensBefore,
+				details: remoteResult.details,
+				fromHook: true,
+			},
+		];
+
+		const rewritten = rewriteOpenAiPayloadWithRemoteCompaction(
+			{
+				model: "gpt-5.4",
+				input: [
+					{ role: "developer", content: "current system prompt" },
+					{ role: "user", content: [{ type: "input_text", text: "fallback compact summary" }] },
+					{ role: "user", content: [{ type: "input_text", text: "Turn three: after compaction." }] },
+				],
+				stream: true,
+			},
+			{
+				model: OPENAI_MODEL,
+				branchEntries: branchEndingAtCompaction,
+				pendingMessages: [
+					{
+						role: "user",
+						content: [{ type: "text", text: "Turn three: after compaction." }],
+						timestamp: 7,
+					},
+				],
+			},
+		);
+
+		expect(rewritten).toMatchObject({
+			input: [
+				{ role: "developer", content: "current system prompt" },
+				{
+					type: "message",
+					id: "u1_remote",
+					role: "user",
+					content: [{ type: "input_text", text: "Please inspect the build." }],
+				},
+				{ type: "compaction", id: "cmp_1", encrypted_content: "encrypted-summary" },
+				{ role: "user", content: [{ type: "input_text", text: "Turn three: after compaction." }] },
+			],
+		});
+	});
+
 	it("rewrites provider payloads to replay native compacted history plus post-compact messages", () => {
 		const remoteResult = buildOpenAiRemoteCompactionResult({
 			model: OPENAI_MODEL,

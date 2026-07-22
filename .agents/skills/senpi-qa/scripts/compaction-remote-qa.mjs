@@ -296,6 +296,11 @@ async function selfTest(evidenceSlug) {
 		`responsesCalls=${responsesCalls.length} replayed=${replayed}`,
 	);
 
+	const promptPreserved = (postCompact?.body?.input ?? []).some((item) =>
+		JSON.stringify(item).includes("Turn three: after compaction."),
+	);
+	checks.ok("post-compaction /v1/responses payload still carries the user's new prompt", promptPreserved);
+
 	checkRealAuthUnchanged(checks, guard);
 
 	if (evidenceSlug) {
