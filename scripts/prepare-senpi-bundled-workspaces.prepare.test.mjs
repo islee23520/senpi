@@ -33,6 +33,24 @@ function writeShrinkwrap(root, packages) {
 	});
 }
 
+const BUNDLED_WORKSPACE_NAMES = [
+	"@earendil-works/pi-agent-core",
+	"@earendil-works/pi-ai",
+	"@earendil-works/pi-pty",
+	"@earendil-works/pi-tui",
+	"@code-yeongyu/senpi-codemode",
+];
+
+function writeCodingAgentManifest(root) {
+	writeJson(join(root, "packages", "coding-agent", "package.json"), {
+		name: "@code-yeongyu/senpi",
+		version: "2026.7.22",
+		dependencies: Object.fromEntries(BUNDLED_WORKSPACE_NAMES.map((name) => [name, "^2026.7.22"])),
+		bundleDependencies: [...BUNDLED_WORKSPACE_NAMES],
+		bundledDependencies: [...BUNDLED_WORKSPACE_NAMES],
+	});
+}
+
 function bundledWorkspaceFiles(workspace) {
 	if (workspace === "pty") {
 		return ["package.json", "dist/index.js", "native/index.js", nativePrebuildFile(nativePrebuildTarget())];
@@ -63,6 +81,7 @@ describe("prepareSenpiBundledWorkspaces", () => {
 		// Given
 		tempDir = mkdtempSync(join(tmpdir(), "senpi-bundle-workspaces-"));
 		writeShrinkwrap(tempDir, { "": { dependencies: {} } });
+		writeCodingAgentManifest(tempDir);
 		for (const workspace of ["agent", "ai", "pty", "tui", "senpi-codemode"]) {
 			writeBundledWorkspace(tempDir, workspace);
 		}
@@ -92,6 +111,7 @@ describe("prepareSenpiBundledWorkspaces", () => {
 		// Given: every loader-visible file present, but the host native prebuild absent.
 		tempDir = mkdtempSync(join(tmpdir(), "senpi-bundle-missing-pty-prebuild-"));
 		writeShrinkwrap(tempDir, { "": { dependencies: {} } });
+		writeCodingAgentManifest(tempDir);
 		for (const workspace of ["agent", "ai", "tui", "senpi-codemode"]) {
 			writeBundledWorkspace(tempDir, workspace);
 		}
@@ -124,10 +144,50 @@ describe("prepareSenpiBundledWorkspaces", () => {
 		);
 	});
 
+	it("rewrites the publish manifest so bundleDependencies covers every staged package", () => {
+		// Given: a registry runtime dep (cross-spawn) plus its hoisted transitive (which) are
+		// installed at the repo root and enumerated by the staging lock.
+		tempDir = mkdtempSync(join(tmpdir(), "senpi-bundle-manifest-"));
+		writeShrinkwrap(tempDir, {
+			"": { dependencies: { "cross-spawn": "7.0.6" } },
+			"node_modules/cross-spawn": { version: "7.0.6" },
+			"node_modules/which": { version: "2.0.2" },
+		});
+		writeCodingAgentManifest(tempDir);
+		for (const workspace of ["agent", "ai", "pty", "tui", "senpi-codemode"]) {
+			writeBundledWorkspace(tempDir, workspace);
+		}
+		for (const name of ["cross-spawn", "which"]) {
+			writeJson(join(tempDir, "node_modules", name, "package.json"), { name, version: "1.0.0" });
+		}
+
+		// When
+		prepareSenpiBundledWorkspaces(tempDir);
+
+		// Then: the registry dep AND its transitive are staged...
+		for (const name of ["cross-spawn", "which"]) {
+			assert.equal(
+				JSON.parse(
+					readFileSync(join(tempDir, "packages", "coding-agent", "node_modules", name, "package.json"), "utf8"),
+				).name,
+				name,
+			);
+		}
+		// ...and the manifest lists every staged package while preserving the ^2026.x edges.
+		const manifest = JSON.parse(readFileSync(join(tempDir, "packages", "coding-agent", "package.json"), "utf8"));
+		const expectedBundle = [...BUNDLED_WORKSPACE_NAMES, "cross-spawn", "which"].sort((a, b) => a.localeCompare(b));
+		assert.deepEqual(manifest.bundleDependencies, expectedBundle);
+		assert.deepEqual(manifest.bundledDependencies, expectedBundle);
+		for (const name of BUNDLED_WORKSPACE_NAMES) {
+			assert.equal(manifest.dependencies[name], "^2026.7.22");
+		}
+	});
+
 	it("fails before bundling pty when a loader-visible file is missing", () => {
 		// Given: the hard-required loader file native/index.js is absent.
 		tempDir = mkdtempSync(join(tmpdir(), "senpi-bundle-missing-pty-loader-"));
 		writeShrinkwrap(tempDir, { "": { dependencies: {} } });
+		writeCodingAgentManifest(tempDir);
 		for (const workspace of ["agent", "ai", "tui"]) {
 			writeBundledWorkspace(tempDir, workspace);
 		}
