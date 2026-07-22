@@ -44,11 +44,12 @@ describe("tool progress", () => {
 		expect(readToolProgress({ progress: { startedAt: "soon" } })).toBeUndefined();
 		expect(readToolProgress(null)).toBeUndefined();
 
-		expect(formatToolProgressLine({ startedAt: 1_000 }, 13_900)).toBe("⏵ working · 12s");
-		expect(formatToolProgressLine({ activity: "waiting", startedAt: 1_000 }, 68_000)).toBe("⏵ waiting · 1m 07s");
-		expect(formatToolProgressLine(progress, 13_900, 0)).toBe("⏵ waiting for /BUILD OK/ · 12s / max 5m 00s");
+		expect(formatToolProgressLine({ startedAt: 1_000 }, 13_900)).toBe("⠋ working · 12s");
+		expect(formatToolProgressLine({ activity: "waiting", startedAt: 1_000 }, 68_000)).toBe("⠋ waiting · 1m 07s");
+		expect(formatToolProgressLine(progress, 13_900, 0)).toBe("⠋ waiting for /BUILD OK/ · 12s / max 5m 00s");
+		expect(formatToolProgressLine(progress, 13_900, 4)).toBe("⠼ waiting for /BUILD OK/ · 12s / max 5m 00s");
 		expect(formatToolProgressLine({ activity: "waiting", startedAt: 1_000, maxWaitMs: 5_400_000 }, 3_662_000)).toBe(
-			"⏵ waiting · 1h 01m 01s / max 1h 30m 00s",
+			"⠋ waiting · 1h 01m 01s / max 1h 30m 00s",
 		);
 	});
 
@@ -67,7 +68,7 @@ describe("tool progress", () => {
 				process.cwd(),
 			);
 			fallback.updateResult({ content: [{ type: "text", text: "partial output" }], details, isError: false }, true);
-			expect(stripAnsi(fallback.render(120).join("\n"))).toContain("⏵ waiting for /BUILD OK/ · 12s / max 5m 00s");
+			expect(stripAnsi(fallback.render(120).join("\n"))).toContain("⠋ waiting for /BUILD OK/ · 12s / max 5m 00s");
 
 			const custom = new ToolExecutionComponent(
 				"progress_custom",
@@ -81,7 +82,7 @@ describe("tool progress", () => {
 			custom.updateResult({ content: [{ type: "text", text: "partial output" }], details, isError: false }, true);
 			const partial = stripAnsi(custom.render(120).join("\n"));
 			expect(partial).toContain("custom result");
-			expect(partial).toContain("⏵ waiting for /BUILD OK/ · 12s / max 5m 00s");
+			expect(partial).toContain("⠋ waiting for /BUILD OK/ · 12s / max 5m 00s");
 
 			custom.updateResult({ content: [{ type: "text", text: "complete" }], details, isError: false });
 			const final = stripAnsi(custom.render(120).join("\n"));
@@ -114,8 +115,11 @@ describe("tool progress", () => {
 				true,
 			);
 
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("⠋ waiting · 0s");
 			vi.advanceTimersByTime(80);
 			expect(requestRender).toHaveBeenCalledTimes(1);
+			vi.advanceTimersByTime(80);
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("⠙ waiting · 0s");
 
 			component.updateResult({ content: [], details: {}, isError: false });
 			requestRender.mockClear();
