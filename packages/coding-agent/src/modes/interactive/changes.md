@@ -28,6 +28,26 @@
 - LOW: `components/assistant-message.ts` around consecutive-thinking descriptor construction.
 - LOW: `changes.md` fork-entry prepend.
 
+## unified tool progress durations (2026-07-22)
+
+### What changed
+
+- `tool-progress.ts`: elapsed and maximum wait durations now share `formatWorkingElapsedSeconds()`, so progress rows use
+  one seconds/minutes/hours grammar (`4m 28s / max 5m 00s`) instead of mixing humanized elapsed time with raw maximum
+  seconds (`4m 28s / max 300s`).
+
+### Why
+
+- A single progress row should not force users to mentally convert the timeout while the elapsed side is already
+  human-readable.
+
+### Why extension system couldn't handle this
+
+- The progress suffix is composed by the built-in interactive tool renderer after extension result rendering.
+
+### Expected merge conflict zones
+
+- LOW: `tool-progress.ts` around the maximum-wait suffix.
 ## braille tool progress spinner (2026-07-22)
 
 ### What changed

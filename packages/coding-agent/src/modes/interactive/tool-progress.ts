@@ -26,7 +26,7 @@ export function formatToolProgressLine(progress: ToolProgressDetails, now: numbe
 	const activity = progress.activity || "working";
 	const elapsed = formatWorkingElapsedSeconds((now - progress.startedAt) / 1_000);
 	const maxWait =
-		progress.maxWaitMs === undefined ? "" : ` / max ${Math.max(0, Math.floor(progress.maxWaitMs / 1_000))}s`;
+		progress.maxWaitMs === undefined ? "" : ` / max ${formatWorkingElapsedSeconds(progress.maxWaitMs / 1_000)}`;
 	const spinner =
 		TOOL_PROGRESS_SPINNER_FRAMES[(spinnerFrame ?? 0) % TOOL_PROGRESS_SPINNER_FRAMES.length] ??
 		TOOL_PROGRESS_SPINNER_FRAMES[0];
