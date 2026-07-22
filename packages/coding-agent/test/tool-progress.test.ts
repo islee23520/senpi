@@ -46,7 +46,10 @@ describe("tool progress", () => {
 
 		expect(formatToolProgressLine({ startedAt: 1_000 }, 13_900)).toBe("⏵ working · 12s");
 		expect(formatToolProgressLine({ activity: "waiting", startedAt: 1_000 }, 68_000)).toBe("⏵ waiting · 1m 07s");
-		expect(formatToolProgressLine(progress, 13_900, 0)).toBe("⏵ waiting for /BUILD OK/ · 12s / max 300s");
+		expect(formatToolProgressLine(progress, 13_900, 0)).toBe("⏵ waiting for /BUILD OK/ · 12s / max 5m 00s");
+		expect(formatToolProgressLine({ activity: "waiting", startedAt: 1_000, maxWaitMs: 5_400_000 }, 3_662_000)).toBe(
+			"⏵ waiting · 1h 01m 01s / max 1h 30m 00s",
+		);
 	});
 
 	test("renders the progress line for fallback and custom renderer shells, then removes it on final result", () => {
@@ -64,7 +67,7 @@ describe("tool progress", () => {
 				process.cwd(),
 			);
 			fallback.updateResult({ content: [{ type: "text", text: "partial output" }], details, isError: false }, true);
-			expect(stripAnsi(fallback.render(120).join("\n"))).toContain("⏵ waiting for /BUILD OK/ · 12s / max 300s");
+			expect(stripAnsi(fallback.render(120).join("\n"))).toContain("⏵ waiting for /BUILD OK/ · 12s / max 5m 00s");
 
 			const custom = new ToolExecutionComponent(
 				"progress_custom",
@@ -78,7 +81,7 @@ describe("tool progress", () => {
 			custom.updateResult({ content: [{ type: "text", text: "partial output" }], details, isError: false }, true);
 			const partial = stripAnsi(custom.render(120).join("\n"));
 			expect(partial).toContain("custom result");
-			expect(partial).toContain("⏵ waiting for /BUILD OK/ · 12s / max 300s");
+			expect(partial).toContain("⏵ waiting for /BUILD OK/ · 12s / max 5m 00s");
 
 			custom.updateResult({ content: [{ type: "text", text: "complete" }], details, isError: false });
 			const final = stripAnsi(custom.render(120).join("\n"));
