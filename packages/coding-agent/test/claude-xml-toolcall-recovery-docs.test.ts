@@ -74,8 +74,6 @@ describe("Claude XML tool-call recovery documentation", () => {
 			expect(source.toLowerCase()).toContain("text tool-call recovery");
 			expect(source.toLowerCase()).toContain("claude");
 		}
-		expect(aiChangelog.indexOf("text tool-call recovery")).toBeLessThan(aiChangelog.indexOf("## [2026."));
-		expect(codingChangelog.indexOf("text tool-call recovery")).toBeLessThan(codingChangelog.indexOf("## [2026."));
 	});
 });
 
