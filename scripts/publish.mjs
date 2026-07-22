@@ -64,7 +64,12 @@ function validatePack(directory) {
 	const packed = JSON.parse(result.stdout)[0];
 	const packageJson = readPackageJson(directory);
 	if (directory === "packages/coding-agent") {
-		assertSenpiPackedWorkspaceFiles(packed);
+		assertSenpiPackedWorkspaceFiles(packed, {
+			runtimeDependencies: [
+				...Object.keys(packageJson.dependencies ?? {}),
+				...Object.keys(packageJson.optionalDependencies ?? {}),
+			],
+		});
 	}
 	if (sourceOnlyPackages.has(packageJson.name)) {
 		const filePaths = new Set((packed.files ?? []).map((file) => file.path));
