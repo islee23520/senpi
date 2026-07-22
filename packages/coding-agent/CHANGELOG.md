@@ -7,11 +7,19 @@
 ### Added
 
 - Added configurable Claude text tool-call recovery across both `ModelRuntime` streaming entry points, `models.json` definitions/overrides, persisted sessions, and isolated Anthropic/OpenAI mock-loop QA.
+- Added the `look_at` vision-delegation tool with model capability gating and configurable settings/context support.
+- Added hot reload for configuration resources, including a documented extension protocol, change events, hash-based self-write suppression, and safe lifecycle/mode handling.
+- Added `/btw` for parallel side questions, progressive web-fetch feedback, and incremental terminal rendering for tool activity and results.
+- Added Alibaba Cloud Model Studio Token Plan provider setup and model support.
 
 ### Changed
 
 ### Fixed
 - Fixed the interactive render hot path re-materializing the entire session every frame: `SessionManager.getEntries()`, no-arg `getBranch()`, and `getSessionName()` are now memoized behind a monotonic mutation counter, eliminating repeated deep copies of large sessions at frame rate.
+- Fixed OpenAI Responses replay to omit invalid custom tool-call item IDs.
+- Fixed compaction budgeting and diagnostics, including bounded summary streams and preservation of queued input after failures.
+- Fixed MCP lazy-start races so registered tools and instructions reliably rehydrate.
+- Fixed queued steering/follow-up delivery and tool-result reveal behavior across session rebinds.
 
 ### Removed
 
