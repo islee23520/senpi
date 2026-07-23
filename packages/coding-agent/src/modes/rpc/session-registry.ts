@@ -78,25 +78,33 @@ export class RpcSessionRegistry {
 		if (sessionPath && this.reservations.has(sessionPath)) throw new RpcSessionRegistryError("session_path_in_use");
 		if (sessionPath) this.reservations.add(sessionPath);
 
+		// Resume vs create parity (D1 + omo SenpiSessionRuntime.ts:198-200):
+		// --provider/--model map to creationModel and are applied ONLY on create.
+		// Resuming an existing file restores the session's own model, so the
+		// creationModel must not reach runtime construction on resume.
+		const isResume = sessionPath !== undefined && existsSync(sessionPath);
+		const storedProfile = frozenProfile({ ...profile, ...(sessionPath ? { sessionPath } : {}) });
+		const runtimeProfile = isResume ? frozenProfile({ ...storedProfile, creationModel: undefined }) : storedProfile;
+
 		const handle = `rpc-${++this.nextHandle}`;
 		const entry: RpcSessionEntry = {
 			state: "opening",
 			scope: new ProviderScope(),
-			profile: frozenProfile({ ...profile, ...(sessionPath ? { sessionPath } : {}) }),
+			profile: storedProfile,
 			sessionPath,
 			lifecycleMutex: Promise.resolve(),
 		};
 		this.entries.set(handle, entry);
 		try {
 			const manager = sessionPath
-				? SessionManager.open(sessionPath, undefined, entry.profile.cwd)
-				: SessionManager.create(entry.profile.cwd);
+				? SessionManager.open(sessionPath, undefined, storedProfile.cwd)
+				: SessionManager.create(storedProfile.cwd);
 			entry.runtime = await runWithProviderScope(entry.scope, () =>
 				createAgentSessionRuntime(this.options.createRuntime, {
 					cwd: manager.getCwd(),
 					agentDir: this.options.agentDir,
 					sessionManager: manager,
-					launchProfile: entry.profile,
+					launchProfile: runtimeProfile,
 				}),
 			);
 			entry.durableSessionId = manager.getSessionId();
