@@ -10,6 +10,8 @@ import {
 	type CreateAgentSessionRuntimeResult,
 } from "../src/core/agent-session-runtime.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
+import { SessionCommandRouter } from "../src/modes/rpc/session-command-router.ts";
+import { SessionEventWriter } from "../src/modes/rpc/session-event-writer.ts";
 import { type RpcSessionLaunchProfile, RpcSessionRegistry } from "../src/modes/rpc/session-registry.ts";
 
 const profile = (cwd: string, sessionPath: string): RpcSessionLaunchProfile => ({
@@ -32,6 +34,8 @@ function runtime(
 			abortBash: () => {},
 			waitForIdle: controls?.waitForIdle ?? (async () => {}),
 			dispose: () => {},
+			messages: [],
+			pendingMessageCount: 0,
 		},
 		services: { cwd: options.cwd, agentDir: options.agentDir },
 		diagnostics: [],
@@ -114,6 +118,79 @@ describe("RPC session registry", () => {
 		releaseIdle();
 		await closing;
 		expect(disposed).toBe(true);
+		await expect(registry.openSession(profile(dir, path))).resolves.toMatchObject({ sessionId: expect.any(String) });
+	});
+
+	test("marks closing before binding disposal so a concurrent command cannot enter its handler", async () => {
+		const { dir } = await createRegistry();
+		let releaseDispose!: () => void;
+		const disposing = new Promise<void>((resolve) => {
+			releaseDispose = resolve;
+		});
+		let routedCommands = 0;
+		const registry = new RpcSessionRegistry({
+			agentDir: dir,
+			createRuntime: async (options) => runtime(options),
+		});
+		const records: Array<Record<string, unknown>> = [];
+		const router = new SessionCommandRouter(
+			registry,
+			new SessionEventWriter(
+				(chunk) => records.push(JSON.parse(chunk) as Record<string, unknown>),
+				(flush) => flush(),
+			),
+			{ cwd: dir },
+			async () => ({
+				handle: async () => {
+					routedCommands += 1;
+				},
+				dispose: () => disposing,
+			}),
+		);
+
+		const openResponse = await router.handle({
+			id: "open",
+			type: "open_session",
+			cwd: dir,
+			sessionPath: join(dir, "race.jsonl"),
+		});
+		expect(openResponse).toBeUndefined();
+		const sessionId = records.find((record) => record.command === "open_session")?.sessionId;
+		expect(sessionId).toEqual(expect.any(String));
+		if (typeof sessionId !== "string") throw new Error("open_session did not emit a routing handle");
+
+		const closing = router.handle({ id: "close", type: "close_session", sessionId });
+		const prompt = await router.handle({ id: "prompt", type: "prompt", message: "must not route", sessionId });
+		expect(prompt).toMatchObject({ success: false, error: "session_closing" });
+		expect(routedCommands).toBe(0);
+		releaseDispose();
+		await closing;
+	});
+
+	test("rolls back runtime, scope, entry, and path reservation when binding construction fails", async () => {
+		const { dir } = await createRegistry();
+		let disposed = false;
+		const registry = new RpcSessionRegistry({
+			agentDir: dir,
+			createRuntime: async (options) => {
+				const result = runtime(options);
+				result.session.dispose = () => {
+					disposed = true;
+				};
+				return result;
+			},
+		});
+		const router = new SessionCommandRouter(registry, new SessionEventWriter(() => {}), { cwd: dir }, async () => {
+			throw new Error("binding construction failed");
+		});
+		const path = join(dir, "binding-failure.jsonl");
+
+		expect(await router.handle({ id: "open", type: "open_session", cwd: dir, sessionPath: path })).toMatchObject({
+			success: false,
+			error: expect.stringMatching(/^open_failed:/),
+		});
+		expect(disposed).toBe(true);
+		expect(registry.list()).toEqual([]);
 		await expect(registry.openSession(profile(dir, path))).resolves.toMatchObject({ sessionId: expect.any(String) });
 	});
 

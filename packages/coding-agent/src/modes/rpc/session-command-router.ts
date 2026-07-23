@@ -25,15 +25,18 @@ export class SessionCommandRouter {
 		RpcSessionLaunchProfile,
 		"cwd" | "permissionPreset" | "creationModel" | "initialThinkingLevel"
 	>;
+	private readonly createBinding: typeof createRpcSessionBinding;
 
 	constructor(
 		registry: RpcSessionRegistry,
 		writer: SessionEventWriter,
 		defaults: Pick<RpcSessionLaunchProfile, "cwd" | "permissionPreset" | "creationModel" | "initialThinkingLevel">,
+		createBinding: typeof createRpcSessionBinding = createRpcSessionBinding,
 	) {
 		this.registry = registry;
 		this.writer = writer;
 		this.defaults = defaults;
+		this.createBinding = createBinding;
 	}
 
 	async handle(command: RpcCommand): Promise<RpcResponse | undefined> {
@@ -70,11 +73,16 @@ export class SessionCommandRouter {
 	async dispose(): Promise<void> {
 		await Promise.all(
 			[...this.bindings.entries()].map(async ([sessionId, binding]) => {
-				await binding.dispose();
 				try {
-					await this.registry.close(sessionId);
+					this.registry.beginClose(sessionId);
 				} catch {
-					/* already closed */
+					return;
+				}
+				try {
+					await binding.dispose();
+				} finally {
+					this.bindings.delete(sessionId);
+					await this.registry.closeMarked(sessionId);
 				}
 			}),
 		);
@@ -82,8 +90,9 @@ export class SessionCommandRouter {
 	}
 
 	private async open(command: Extract<RpcCommand, { type: "open_session" }>): Promise<RpcResponse | undefined> {
+		let opened: { sessionId: string } | undefined;
 		try {
-			const opened = await this.registry.openSession({
+			opened = await this.registry.openSession({
 				cwd: command.cwd ?? this.defaults.cwd,
 				sessionPath: command.sessionPath,
 				permissionPreset: command.permissionPreset ?? this.defaults.permissionPreset,
@@ -93,14 +102,15 @@ export class SessionCommandRouter {
 						: this.defaults.creationModel,
 				initialThinkingLevel: command.thinkingLevel ?? this.defaults.initialThinkingLevel,
 			});
-			const entry = this.registry.getForCommand(opened.sessionId, "open_session");
+			const openedSession = opened;
+			const entry = this.registry.getForCommand(openedSession.sessionId, "open_session");
 			this.bindings.set(
-				opened.sessionId,
-				await createRpcSessionBinding(
-					opened.sessionId,
+				openedSession.sessionId,
+				await this.createBinding(
+					openedSession.sessionId,
 					entry,
 					this.writer,
-					() => void this.close({ type: "close_session", sessionId: opened.sessionId }),
+					() => void this.close({ type: "close_session", sessionId: openedSession.sessionId }),
 				),
 			);
 			const state = entry.runtime!.session;
@@ -129,15 +139,28 @@ export class SessionCommandRouter {
 			});
 			return undefined;
 		} catch (cause) {
+			if (opened) {
+				try {
+					await this.registry.close(opened.sessionId);
+				} catch {
+					/* The open rollback has already removed the entry. */
+				}
+			}
 			return error(command.id, "open_session", this.code(cause));
 		}
 	}
 
 	private async close(command: Extract<RpcCommand, { type: "close_session" }>): Promise<RpcResponse | undefined> {
 		try {
-			await this.bindings.get(command.sessionId)?.dispose();
-			this.bindings.delete(command.sessionId);
-			await this.registry.close(command.sessionId);
+			// This must be the first operation: binding.dispose() awaits teardown and
+			// otherwise leaves a window where commands can enter the old handler.
+			this.registry.beginClose(command.sessionId);
+			try {
+				await this.bindings.get(command.sessionId)?.dispose();
+			} finally {
+				this.bindings.delete(command.sessionId);
+				await this.registry.closeMarked(command.sessionId);
+			}
 			this.writer.closeSession(command.sessionId, {
 				id: command.id,
 				type: "response",

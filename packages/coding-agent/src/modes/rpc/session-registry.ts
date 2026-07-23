@@ -114,9 +114,22 @@ export class RpcSessionRegistry {
 			entry.state = "open";
 			return { sessionId: handle, durableSessionId: entry.durableSessionId, sessionPath: entry.sessionPath };
 		} catch (error) {
-			this.entries.delete(handle);
-			if (sessionPath) this.reservations.delete(sessionPath);
-			await entry.scope.close?.();
+			// Runtime construction may have started extensions, watchers, and provider
+			// registrations before it rejects. Keep the reservation and entry private
+			// until all of those resources have been torn down, then release them as
+			// one rollback so the path can immediately be opened again.
+			try {
+				await entry.runtime?.dispose();
+			} catch {
+				// The original construction error remains the externally visible cause.
+			} finally {
+				try {
+					await entry.scope.close?.();
+				} finally {
+					this.entries.delete(handle);
+					if (sessionPath) this.reservations.delete(sessionPath);
+				}
+			}
 			if (error instanceof RpcSessionRegistryError) throw error;
 			throw new RpcSessionRegistryError("open_failed");
 		}
@@ -132,10 +145,26 @@ export class RpcSessionRegistry {
 		return entry;
 	}
 
-	async close(handle: string): Promise<void> {
+	/**
+	 * Starts a close synchronously. Call this before disposing any session-owned
+	 * binding so a concurrent command cannot reach a half-disposed handler.
+	 */
+	beginClose(handle: string): RpcSessionEntry {
 		const entry = this.entries.get(handle);
 		if (entry?.state !== "open") throw new RpcSessionRegistryError("unknown_session");
 		entry.state = "closing";
+		return entry;
+	}
+
+	async close(handle: string): Promise<void> {
+		this.beginClose(handle);
+		return this.closeMarked(handle);
+	}
+
+	/** Completes a close previously made visible by beginClose(). */
+	async closeMarked(handle: string): Promise<void> {
+		const entry = this.entries.get(handle);
+		if (entry?.state !== "closing") throw new RpcSessionRegistryError("unknown_session");
 		entry.lifecycleMutex = (async () => {
 			try {
 				await entry.runtime?.session.abort();
