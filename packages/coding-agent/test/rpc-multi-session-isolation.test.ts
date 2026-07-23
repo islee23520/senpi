@@ -67,6 +67,24 @@ type RegisteredWatchProbe = {
 	emit(path: string, filename: string): void;
 };
 
+type Deferred = {
+	readonly promise: Promise<void>;
+	readonly resolve: () => void;
+};
+
+type PromptGate = {
+	readonly entered: Deferred;
+	readonly release: Deferred;
+};
+
+function deferred(): Deferred {
+	let resolve!: () => void;
+	const promise = new Promise<void>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
+
 function registeredWatchProbe(): RegisteredWatchProbe {
 	const listeners = new Map<string, Set<WatchEventListener>>();
 	return {
@@ -119,16 +137,22 @@ function hostFixture() {
 	const cwd = root();
 	const output: string[] = [];
 	const resolutions = new Map<string, string>();
+	const promptGates = new Map<string, PromptGate>();
+	const streaming = new Map<string, boolean>();
 	let nextOwner = 0;
 	const createRuntime: CreateAgentSessionRuntimeFactory = async (options) => {
 		const owner = `owner-${++nextOwner}`;
+		const durableSessionId = options.sessionManager.getSessionId();
+		streaming.set(durableSessionId, false);
 		registerApiProvider(provider("rpc-isolation-provider", owner));
 		return {
 			session: {
 				sessionManager: options.sessionManager,
 				model: undefined,
 				thinkingLevel: "off",
-				isStreaming: false,
+				get isStreaming() {
+					return streaming.get(durableSessionId) ?? false;
+				},
 				isCompacting: false,
 				steeringMode: "all",
 				followUpMode: "all",
@@ -157,10 +181,22 @@ function hostFixture() {
 		const binding: RpcSessionBinding = {
 			handle: async (command: { type?: string }) => {
 				if (command.type !== "prompt") return;
-				const owner = runWithProviderScope(entry.scope, () => resolvedProviderOwner("rpc-isolation-provider"));
-				resolutions.set(sessionId, owner);
-				eventWriter.enqueue(sessionId, { type: "message_update", text: `stream:${sessionId}` });
-				eventWriter.enqueue(sessionId, { type: "agent_end", text: `done:${sessionId}` });
+				const gate = promptGates.get(sessionId);
+				const durableSessionId = entry.runtime!.session.sessionId;
+				if (gate) {
+					streaming.set(durableSessionId, true);
+					eventWriter.enqueue(sessionId, { type: "message_update", text: `stream:${sessionId}` });
+					gate.entered.resolve();
+					await gate.release.promise;
+				}
+				try {
+					const owner = runWithProviderScope(entry.scope, () => resolvedProviderOwner("rpc-isolation-provider"));
+					resolutions.set(sessionId, owner);
+					if (!gate) eventWriter.enqueue(sessionId, { type: "message_update", text: `stream:${sessionId}` });
+					eventWriter.enqueue(sessionId, { type: "agent_end", text: `done:${sessionId}` });
+				} finally {
+					if (gate) streaming.set(durableSessionId, false);
+				}
 			},
 			dispose: async () => {},
 		};
@@ -170,7 +206,16 @@ function hostFixture() {
 		const response = await router.handle(JSON.parse(JSON.stringify(command)));
 		if (response) output.push(`${JSON.stringify(response)}\n`);
 	};
-	return { cwd, output, registry, resolutions, router, send };
+	const holdPrompt = (sessionId: string) => {
+		const gate: PromptGate = { entered: deferred(), release: deferred() };
+		promptGates.set(sessionId, gate);
+		return gate;
+	};
+	const isStreaming = (sessionId: string) => {
+		const entry = registry.getForCommand(sessionId, "prompt");
+		return entry.runtime!.session.isStreaming;
+	};
+	return { cwd, output, registry, resolutions, router, send, holdPrompt, isStreaming };
 }
 
 function openedHandle(output: readonly string[], id: string): string {
@@ -219,7 +264,7 @@ describe("multi-session RPC isolation battery", () => {
 		});
 	});
 
-	it("runs the registered config-reload watcher callback through AgentSession.reload without clearing B's overlay", async () => {
+	it("runs the registered config-reload watcher callback through AgentSession.reload while B remains mid-stream", async () => {
 		const host = hostFixture();
 		await host.send({ id: "open-a", type: "open_session", cwd: host.cwd, sessionPath: join(host.cwd, "a.jsonl") });
 		await host.send({ id: "open-b", type: "open_session", cwd: host.cwd, sessionPath: join(host.cwd, "b.jsonl") });
@@ -231,8 +276,6 @@ describe("multi-session RPC isolation battery", () => {
 		runWithProviderScope(alphaEntry.scope, () => registerApiProvider(provider(api, "reload-A")));
 		runWithProviderScope(bravoEntry.scope, () => registerApiProvider(provider(api, "reload-B")));
 		expect(host.registry.list().find((entry) => entry.sessionId === bravo)?.status).toBe("open");
-		await host.send({ id: "prompt-b-before-a-reload", type: "prompt", sessionId: bravo, message: "B is active" });
-		expect(host.resolutions.get(bravo)).toBe("owner-2");
 
 		// This is a real AgentSession. The callback below reaches its production
 		// reload() implementation, including agent-session.ts resetApiProviders().
@@ -280,6 +323,20 @@ describe("multi-session RPC isolation battery", () => {
 			sessionStart({ type: "session_start", reason: "startup" } satisfies SessionStartEvent, context),
 		);
 
+		// Subscribe before triggering B's prompt, then hold its handler after the
+		// first streamed update. This makes the reload overlap a live B turn rather
+		// than a completed prompt from an idle session.
+		const bTurnGate = host.holdPrompt(bravo);
+		const bTurn = host.send({
+			id: "prompt-b-during-a-reload",
+			type: "prompt",
+			sessionId: bravo,
+			message: "B streams through A reload",
+		});
+		await bTurnGate.entered.promise;
+		expect(host.isStreaming(bravo)).toBe(true);
+		expect(host.resolutions.get(bravo)).toBeUndefined();
+
 		writeFileSync(settingsPath, '{"theme":"light"}\n');
 		// fs.watch delivery is nondeterministic in a parallel test run, so invoke
 		// the callback registered by the production config-reload extension directly.
@@ -287,16 +344,20 @@ describe("multi-session RPC isolation battery", () => {
 		clock.flush();
 		await reloadStarted.promise;
 
+		// The production reload has reset only A's overlay while B's handler is
+		// still blocked mid-turn. The B sentinel is the discriminating oracle.
 		expect(reloadCount).toBe(1);
+		expect(host.isStreaming(bravo)).toBe(true);
 		expect(runWithProviderScope(alphaEntry.scope, () => getApiProvider(api))).toBeUndefined();
 		expect(runWithProviderScope(bravoEntry.scope, () => resolvedProviderOwner(api))).toBe("reload-B");
-		await host.send({
-			id: "prompt-b-after-a-reload",
-			type: "prompt",
-			sessionId: bravo,
-			message: "B survives A reload",
-		});
+
+		bTurnGate.release.resolve();
+		await bTurn;
+		expect(host.isStreaming(bravo)).toBe(false);
 		expect(host.resolutions.get(bravo)).toBe("owner-2");
+		expect(records(host.output).filter((line) => line.sessionId === bravo && line.type === "agent_end")).toHaveLength(
+			1,
+		);
 	});
 
 	it("opens eight host sessions and closes all of them without registry leakage", async () => {
