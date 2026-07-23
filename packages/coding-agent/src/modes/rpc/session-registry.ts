@@ -79,12 +79,14 @@ export class RpcSessionRegistry {
 		if (sessionPath) this.reservations.add(sessionPath);
 
 		// Resume vs create parity (D1 + omo SenpiSessionRuntime.ts:198-200):
-		// --provider/--model map to creationModel and are applied ONLY on create.
-		// Resuming an existing file restores the session's own model, so the
-		// creationModel must not reach runtime construction on resume.
+		// Create-only launch semantics mirror classic startup flags. A resumed
+		// session restores its persisted model and thinking level instead of being
+		// overridden by the new open_session request.
 		const isResume = sessionPath !== undefined && existsSync(sessionPath);
 		const storedProfile = frozenProfile({ ...profile, ...(sessionPath ? { sessionPath } : {}) });
-		const runtimeProfile = isResume ? frozenProfile({ ...storedProfile, creationModel: undefined }) : storedProfile;
+		const runtimeProfile = isResume
+			? frozenProfile({ ...storedProfile, creationModel: undefined, initialThinkingLevel: undefined })
+			: storedProfile;
 
 		const handle = `rpc-${++this.nextHandle}`;
 		const entry: RpcSessionEntry = {

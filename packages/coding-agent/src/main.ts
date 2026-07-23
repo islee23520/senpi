@@ -701,6 +701,7 @@ export async function main(args: string[], options?: MainOptions) {
 		sessionManager,
 		sessionStartEvent,
 		projectTrustContext,
+		launchProfile,
 	}) => {
 		const isInitialRuntime = sessionStartEvent === undefined;
 		const projectTrustDiagnostics: AgentSessionRuntimeDiagnostic[] = [];
@@ -770,11 +771,35 @@ export async function main(args: string[], options?: MainOptions) {
 		});
 		const scopedModels =
 			modelPatterns && modelPatterns.length > 0 ? await resolveModelScope(modelPatterns, modelRuntime) : [];
+		// Multi-session opens carry their per-session startup choices here rather
+		// than through process argv. This deliberately feeds the same resolver as
+		// --provider/--model/--thinking, preserving classic flag semantics.
+		const runtimeParsed: Args =
+			launchProfile === undefined
+				? parsed
+				: {
+						...parsed,
+						...(launchProfile.creationModel === undefined
+							? {}
+							: {
+									provider: launchProfile.creationModel.provider,
+									model: launchProfile.creationModel.modelId,
+								}),
+						...(launchProfile.initialThinkingLevel === undefined
+							? {}
+							: { thinking: launchProfile.initialThinkingLevel as Args["thinking"] }),
+					};
 		const {
 			options: sessionOptions,
 			cliThinkingFromModel,
 			diagnostics: sessionOptionDiagnostics,
-		} = buildSessionOptions(parsed, scopedModels, sessionManager.hasContextMessages(), modelRuntime, settingsManager);
+		} = buildSessionOptions(
+			runtimeParsed,
+			scopedModels,
+			sessionManager.hasContextMessages(),
+			modelRuntime,
+			settingsManager,
+		);
 		diagnostics.push(...sessionOptionDiagnostics);
 
 		if (parsed.apiKey) {
@@ -802,7 +827,7 @@ export async function main(args: string[], options?: MainOptions) {
 			customTools: sessionOptions.customTools,
 			autoTitleSessions: appMode === "interactive" && !sessionManager.hasContextMessages(),
 		});
-		const cliThinkingOverride = parsed.thinking !== undefined || cliThinkingFromModel;
+		const cliThinkingOverride = runtimeParsed.thinking !== undefined || cliThinkingFromModel;
 		if (created.session.model && cliThinkingOverride) {
 			created.session.setThinkingLevel(created.session.thinkingLevel);
 		}

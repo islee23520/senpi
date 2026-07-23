@@ -229,11 +229,16 @@ describe("open_session resume/create parity + close semantics", () => {
 		appendAssistant(calls[0].sessionManager);
 		await registry.close(created.sessionId);
 
-		// Resume pass: creationModel MUST NOT be applied (resume restores the
-		// session's own model — mirrors SenpiSessionRuntime.ts:198-200 gating
-		// --provider/--model on expectedSessionId === undefined).
-		const resumed = await registry.openSession(baseProfile(dir, sessionPath));
+		// Resume pass: create-only fields MUST NOT be applied. The persisted
+		// session restores its own model/thinking state rather than accepting a
+		// second open_session request as a model change.
+		const resumed = await registry.openSession({
+			...baseProfile(dir, sessionPath),
+			creationModel: { provider: "other", modelId: "ignored-on-resume" },
+			initialThinkingLevel: "low",
+		});
 		expect(calls[1].launchProfile?.creationModel).toBeUndefined();
+		expect(calls[1].launchProfile?.initialThinkingLevel).toBeUndefined();
 		await registry.close(resumed.sessionId);
 	});
 
