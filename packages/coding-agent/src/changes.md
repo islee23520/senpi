@@ -1,3 +1,21 @@
+## 2026-10-03 - Host startup thinking stays session-scoped
+
+### What changed
+
+- `packages/coding-agent/src/main.ts`: explicit reasoning on a host launch profile uses the session-only setter; classic CLI overrides retain persistent model-thinking preferences.
+
+### Why
+
+- A delegated worker's medium or xhigh startup overwrote the shared exact-model memory selected by the main user, even when the worker's effective level was unchanged. Later sessions then restored the worker's level.
+
+### Why an extension could not handle it
+
+- The CLI factory replays the startup level after session creation. A session-start hook cannot prevent that later persistent write; restoring shared settings afterward races with other sessions.
+
+### Expected merge conflict zones
+
+- `packages/coding-agent/src/main.ts`: the `cliThinkingOverride` replay after `createAgentSessionFromServices`.
+
 ## 2026-10-02 - Memory report trigger at startup (senpi#2561)
 
 ### What changed

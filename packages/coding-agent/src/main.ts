@@ -1049,7 +1049,12 @@ export function createCliRuntimeFactory(
 		markSwitch("createSession");
 		const cliThinkingOverride = runtimeParsed.thinking !== undefined || cliThinkingFromModel;
 		if (created.session.model && cliThinkingOverride) {
-			created.session.setThinkingLevel(created.session.thinkingLevel);
+			if (launchProfile !== undefined) {
+				// Host opens carry session choices, not a new shared model preference.
+				created.session.setSessionThinkingLevel(created.session.thinkingLevel);
+			} else {
+				created.session.setThinkingLevel(created.session.thinkingLevel);
+			}
 		}
 
 		return {

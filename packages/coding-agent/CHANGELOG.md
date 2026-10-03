@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- Host sessions opened with an explicit reasoning level no longer overwrite the user's remembered model reasoning. Delegated workers keep their own startup level, while classic CLI selections remain persistent.
 - A client attaching to a host built from the same plugin set installed under a different directory no longer logs a profile mismatch on every ensure, and a build that loads a proper superset of the host's extensions can take over from it: host launch profiles now compare the plugin's extensions by role instead of by absolute path.
 
 ### Removed
